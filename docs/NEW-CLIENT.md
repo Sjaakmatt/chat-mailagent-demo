@@ -107,6 +107,33 @@ naar een bestaande specialist wijst en een label heeft.
 
 ---
 
+## Stap 4b — domeingrens
+
+Open `packages/agent-core/src/domain-gate/index.ts` en beschrijf waar deze klant
+over gaat. Dit is de poort vóór de router: valt een bericht erbuiten, dan stopt
+de run — geen specialist, geen tool-call, geen gegenereerde tekst. De klant
+krijgt een **vaste** afwijzingstekst uit dezelfde config.
+
+Drie dingen invullen:
+
+- `description` — de sector en het soort vragen, niet de producten één voor één.
+- `inScope` / `outOfScope` — wees ruim in `inScope`: bij twijfel laat de poort
+  door, en dat is de bedoeling. `outOfScope` vul je met wat in de praktijk
+  geprobeerd wordt.
+- `rejectionText` — in de taal en toon van de klant. Deze tekst gaat letterlijk
+  naar de klant en wordt nooit door een model aangeraakt.
+
+Uitzetten kan met `DOMAIN_GATE=off` op de Worker; dan gaat elk bericht naar de
+router. Alleen doen als je weet waarom.
+
+**Controle:** `pnpm -r test` — de tests bewaken dat een afwijzing de lus
+daadwerkelijk stopt en dat er niets uit het klantbericht in het antwoord
+terechtkomt. Draai de adversariële lijst uit `domain-gate.test.ts` óók een keer
+tegen het echte model voordat je chat aanzet: die tests meten de mechaniek, niet
+het oordeel.
+
+---
+
 ## Stap 5 — branding
 
 1. `ui/lib/brand.ts` — naam, tagline, footer, eventueel een gesplitst logo.

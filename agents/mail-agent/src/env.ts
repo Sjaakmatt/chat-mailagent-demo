@@ -18,6 +18,13 @@ export interface Env {
    */
   CLIENT_NAME?: string;
 
+  /**
+   * Domeingrens. Standaard aan. Alleen de letterlijke waarde "off" zet 'm uit —
+   * dan gaat elk bericht naar de router, zoals vóór de poort bestond. Bewust
+   * opt-out en geen opt-in: een ontbrekende var mag de poort niet uitschakelen.
+   */
+  DOMAIN_GATE?: string;
+
   /** Klant-Supabase (waar Signal + ReviewItem leven). */
   AIOS_SUPABASE_URL: string;
   AIOS_SUPABASE_SERVICE_ROLE_KEY: string;

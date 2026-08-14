@@ -2,6 +2,7 @@ import {
   buildFewShotBlock,
   categoryToSpecialist,
   categoryLabel,
+  evaluateDomainGate,
   renderPrompt,
   CATEGORY_SLUGS,
   getIntentConfig,
@@ -536,6 +537,18 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
   const rag = ragEnabled ? createRag(env) : undefined;
 
   const steps: OrchestrationSteps = {
+    // Domeingrens — draait vóór classify. Valt het bericht buiten het domein,
+    // dan stopt de lus hier: geen specialist, geen tool-call, geen generatie.
+    // Uit te zetten met DOMAIN_GATE=off; dan gedraagt de agent zich als
+    // vóór de poort en gaat elk bericht naar de router.
+    async gate(signal) {
+      if (env.DOMAIN_GATE === 'off') return { inDomain: true, reason: 'poort uit' };
+      const payload = signal.payload as { subject?: string; bodyText?: string };
+      return evaluateDomainGate(
+        { subject: payload.subject, body: payload.bodyText ?? '' },
+        llm,
+      );
+    },
     async classify(signal) {
       const payload = signal.payload as { subject?: string; bodyText?: string; from?: string };
       const out = await llm.complete({

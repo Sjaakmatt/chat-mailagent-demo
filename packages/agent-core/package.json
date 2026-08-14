@@ -20,7 +20,8 @@
     "./signals": "./dist/signals/index.js",
     "./specialists": "./dist/specialists/index.js",
     "./taxonomy": "./dist/taxonomy/index.js",
-    "./channels": "./dist/channels/index.js"
+    "./channels": "./dist/channels/index.js",
+    "./domain-gate": "./dist/domain-gate/index.js"
   },
   "scripts": {
     "build": "tsc",

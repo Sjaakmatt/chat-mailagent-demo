@@ -64,6 +64,7 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 | Wil je…                        | Bewerk                                          |
 | ------------------------------ | ----------------------------------------------- |
 | Andere categorieën             | `packages/agent-core/src/taxonomy/index.ts`      |
+| Waar de agent wél/niet over gaat | `packages/agent-core/src/domain-gate/index.ts` |
 | Andere naam/kleuren/navigatie  | `ui/lib/brand.ts` + `ui/app/globals.css`         |
 | Een extra intent/specialist    | `packages/agent-core/src/specialists/`           |
 | Een side effect na goedkeuring | `agents/mail-agent/src/domain/index.ts`          |

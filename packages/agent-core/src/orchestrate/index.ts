@@ -27,10 +27,18 @@ import {
   type PlanClaim,
 } from '../grounding/index.js';
 import { getIntentConfig, type IntentConfig } from '../specialists/index.js';
+import { DOMAIN } from '../domain-gate/index.js';
 
 export interface Classification {
   /** Categorie/triage-label (klant-specifiek). */
   category: string;
+  /**
+   * Gezet door de domeingrens (`domain-gate`) als het bericht buiten het
+   * domein valt. Is dit gevuld, dan is de run gestopt vóór de router: er is
+   * geen specialist gekozen en er zijn geen tool-calls gedaan. De caller hoort
+   * `outOfDomainReviewItem()` te gebruiken in plaats van door te routeren.
+   */
+  outOfDomain?: { reason: string } | null;
   /** 0..1 vertrouwen van de classificatie. */
   confidence: number;
   /** Heeft deze casus de RAG/memory-stap nodig? */
@@ -177,6 +185,12 @@ export interface PlanInput {
 }
 
 export interface OrchestrationSteps {
+  /**
+   * Domeingrens — draait vóór classify. Ontbreekt deze stap, dan is er geen
+   * poort en gaat elk bericht door naar de router (het gedrag van vóór de
+   * poort). Zie `domain-gate/index.ts`.
+   */
+  gate?(signal: Signal): Promise<{ inDomain: boolean; reason: string }>;
   classify(signal: Signal): Promise<Classification>;
   resolve(signal: Signal, classification: Classification): Promise<ResolvedEntities>;
   /** Alleen aangeroepen als `classification.needsRag` true is. */
@@ -192,6 +206,11 @@ export interface OrchestrationDeps {
   steps: OrchestrationSteps;
   now?: () => string;
   newId?: () => string;
+  /**
+   * Vaste tekst voor een bericht buiten het domein. Default: de tekst uit
+   * `DOMAIN`. Wordt letterlijk gebruikt — nooit door een model aangeraakt.
+   */
+  rejectionText?: string;
 }
 
 export interface OrchestrationResult {
@@ -217,6 +236,46 @@ function adjustConfidence(base: number, ungroundedCount: number): number {
 }
 
 /**
+ * Bouwt het ReviewItem voor een bericht dat de domeingrens niet passeert.
+ *
+ * De body is **letterlijk** de vaste afwijzingstekst uit config. Er komt geen
+ * model aan te pas en er staat niets van het binnengekomen bericht in — dat is
+ * precies de garantie die de poort geeft. Er zijn ook geen tool-calls gedaan,
+ * dus er valt niets te gronden.
+ *
+ * Waarom tóch een ReviewItem en niet stilletjes weggooien: bij mail hoort de
+ * poort-uitkomst in de werkbak (bouwbriefing §3), zodat zichtbaar is wat de
+ * agent heeft afgewezen. Triage `simple` houdt het uit de aandachtsbak.
+ */
+export function outOfDomainReviewItem(
+  signal: Signal,
+  reason: string,
+  rejectionText: string,
+  opts: { kind?: ReviewItemKind; now?: () => string; newId?: () => string } = {},
+): ReviewItem {
+  const now = opts.now ?? (() => new Date().toISOString());
+  const newId = opts.newId ?? defaultId;
+  return {
+    id: newId(),
+    organizationId: signal.organizationId,
+    signalId: signal.id,
+    kind: opts.kind ?? 'draft_email',
+    summary: `Buiten domein — ${reason || 'geen toelichting'}`,
+    proposed: {
+      body: rejectionText,
+      original: signal.payload ?? {},
+      outOfDomain: { reason },
+      triage: { tier: 'simple', reason: 'buiten domein' } satisfies Triage,
+    },
+    // De poort is stellig: dit is geen onzekere inschatting van een antwoord.
+    confidence: 1,
+    grounding: null,
+    status: 'PENDING',
+    createdAt: now(),
+  };
+}
+
+/**
  * Fase 2: alleen classify. Producest de `Classification` die de
  * RouterWorkflow doorgeeft aan de SpecialistWorkflow. Zo blijft `runRoute`
  * puur een router-verantwoordelijkheid en kan de specialist onafhankelijk
@@ -226,6 +285,21 @@ export async function runRoute(
   signal: Signal,
   deps: OrchestrationDeps,
 ): Promise<Classification> {
+  // Poort eerst. Valt het bericht buiten het domein, dan stopt het hier:
+  // classify draait niet, en de caller hoort geen specialist te dispatchen
+  // maar `outOfDomainReviewItem()` weg te schrijven.
+  if (deps.steps.gate) {
+    const gate = await deps.steps.gate(signal);
+    if (!gate.inDomain) {
+      return {
+        category: 'buiten_domein',
+        outOfDomain: { reason: gate.reason },
+        confidence: 1,
+        needsRag: false,
+        extracted: {},
+      };
+    }
+  }
   return deps.steps.classify(signal);
 }
 
@@ -341,5 +415,19 @@ export async function orchestrate(
   deps: OrchestrationDeps,
 ): Promise<OrchestrationResult> {
   const classification = await runRoute(signal, deps);
+
+  // Buiten het domein: hier stopt de run. Geen resolve, geen retrieve, geen
+  // plan — dus geen specialisten, geen tool-calls en geen generatie op basis
+  // van het bericht. Alleen de vaste afwijzingstekst.
+  if (classification.outOfDomain) {
+    const reviewItem = outOfDomainReviewItem(
+      signal,
+      classification.outOfDomain.reason,
+      deps.rejectionText ?? DOMAIN.rejectionText,
+      { now: deps.now, newId: deps.newId },
+    );
+    return { reviewItem, classification, resolved: {}, ungrounded: [] };
+  }
+
   return runSpecialize(signal, classification, deps);
 }
