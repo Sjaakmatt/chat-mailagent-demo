@@ -1,0 +1,26 @@
+{
+  "name": "@factumai/aios-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@factumai/agent-core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260422.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0",
+    "wrangler": "^4.84.1"
+  }
+}

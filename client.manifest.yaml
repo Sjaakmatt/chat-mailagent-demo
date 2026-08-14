@@ -1,0 +1,88 @@
+# ============================================================================
+# CLIENT MANIFEST — vul dit als eerste in bij een nieuwe klant.
+# ============================================================================
+# Dit bestand is de bron voor het scaffolden: `docs/NEW-CLIENT.md` beschrijft
+# stap voor stap welke placeholders in de repo uit welk veld hieronder komen.
+# Businesslogica (beleidsregels, tone-of-voice) hoort NIET hier — die leeft in
+# de database en de cockpit, want die verschilt per klant en verandert continu.
+#
+# Alles met <...> is nog in te vullen.
+# ============================================================================
+
+client:
+  # Kleine letters + streepjes. Wordt gebruikt in Worker-namen en
+  # Workflow-namen (__CLIENT_SLUG__ in de wrangler-configs).
+  slug: "<klant-slug>"
+  # Naam zoals de agent 'm tegen eindklanten mag noemen (__CLIENT_NAME__,
+  # vult {{client}} in de specialist-prompts).
+  name: "<Klantnaam>"
+  # Datalocatie. 'eu' tenzij expliciet anders afgesproken.
+  residency: "eu"
+  # FactumAI org-id (cuid) — invullen ná het aanmaken van de tenant.
+  org_id: "<cuid>"
+  # Org-id van het test-tenant (staging). Leeg laten tot je 'm aanmaakt.
+  test_org_id: ""
+
+# Welke domein-MCP's deze agent mag aanroepen. Laat weg wat de klant niet heeft:
+# een ontbrekende MCP is geen fout, de agent valt fail-soft terug (CLAUDE.md).
+tools:
+  - domain: "mail"
+    vendor: "<outlook|gmail|...>"
+    mcp: "internal-mcp-mail"
+    auth: "oauth"
+    credentials_in_vault: true
+  # - domain: "erp"
+  #   vendor: "<snelstart|woocommerce|exact|...>"
+  #   mcp: "internal-mcp-erp"
+  #   auth: "oauth"
+  #   credentials_in_vault: true
+  # - domain: "crm"
+  #   vendor: "<...>"
+  #   mcp: "internal-mcp-crm"
+  #   auth: "bearer"
+  #   credentials_in_vault: true
+
+use_cases:
+  - name: "<Naam van de eerste use-case>"
+    description: >
+      <Wat komt er binnen, wat moet eruit komen, en waar haalt de agent de
+      feiten vandaan? Eén use-case per regel — begin met één, niet met vijf.>
+
+first_workflow:
+  trigger: "mail.received"
+  produces: "draft_email"
+  # REVIEW = elke uitgaande actie langs een mens. Dit is de default en de
+  # harde regel; AUTO alleen na expliciete afspraak met de klant.
+  autonomy: "REVIEW"
+
+ui:
+  werkbak: true # ReviewItem-werkbak (approve/edit/reject)
+  demo: true # demo-pagina aanzetten (DEMO_MODE=true op de cockpit-Worker)
+
+# Categorie-taxonomie: de slugs waarop de classifier kiest en het beleid matcht.
+# De code-versie staat in `packages/agent-core/src/taxonomy/index.ts` — houd die
+# twee gelijk. Begin met de startset en snoei/hernoem op basis van discovery.
+taxonomy:
+  source: "packages/agent-core/src/taxonomy/index.ts"
+  reviewed_with_client: false
+
+rag:
+  enabled: false # aan = pgvector-memory + few-shot; vereist VOYAGE_API_KEY
+  sources:
+    - "tone-of-voice / huisstijl (GLOBAL, pinned)"
+    - "klanthistorie (CLIENT)"
+    - "SOP's per proces (PROCESS)"
+
+multi_agent:
+  # false = één OrchestrationWorkflow. true = Router → Specialist(en) →
+  # Aggregator. Begin op false; zet 'm aan als de mail echt meerdere
+  # onderwerpen tegelijk bevat.
+  enabled: false
+
+# Klant-eigen domeinmodule (magazijn, planning, ticketing…). Leeg = alleen mail.
+# Zie `examples/warehouse-module/` voor een werkende referentie.
+domain_modules: []
+
+notes: >
+  <Wat moet je over deze klant onthouden dat niet uit de velden hierboven
+  blijkt? Bijzondere afspraken, bekende risico's, wat er bewust NIET in scope is.>

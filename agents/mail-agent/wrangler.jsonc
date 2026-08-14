@@ -1,0 +1,172 @@
+{
+  // ---------------------------------------------------------------------------
+  // TEMPLATE — vervang bij een nieuwe klant elke __CLIENT_SLUG__ door de slug
+  // uit `client.manifest.yaml` (kleine letters, streepjes; bv. "acme").
+  // Zoek daarna op __ om te controleren dat er geen placeholder is blijven staan.
+  // ---------------------------------------------------------------------------
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "__CLIENT_SLUG__-mail-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // EU-residency vastleggen bij creatie (Build Document A14).
+  "durable_objects": {
+    "bindings": [
+      { "name": "AIOS_POLLER", "class_name": "MailPoller" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MailPoller"] }
+  ],
+  "workflows": [
+    {
+      "name": "__CLIENT_SLUG__-workflow-orchestration",
+      "binding": "ORCHESTRATION",
+      "class_name": "OrchestrationWorkflow"
+    },
+    {
+      "name": "__CLIENT_SLUG__-workflow-execute",
+      "binding": "EXECUTE",
+      "class_name": "ExecuteWorkflow"
+    },
+    // Fase 2 — multi-agent split. Coexisteert met ORCHESTRATION zodat de
+    // feature-flag USE_MULTI_AGENT_ROUTER snel te switchen is.
+    {
+      "name": "__CLIENT_SLUG__-workflow-router",
+      "binding": "ROUTER",
+      "class_name": "RouterWorkflow"
+    },
+    {
+      "name": "__CLIENT_SLUG__-workflow-specialist",
+      "binding": "SPECIALIST",
+      "class_name": "SpecialistWorkflow"
+    },
+    // Fase 3 — compound fan-in: wacht op alle partials en weeft ze samen.
+    {
+      "name": "__CLIENT_SLUG__-workflow-aggregator",
+      "binding": "AGGREGATOR",
+      "class_name": "AggregatorWorkflow"
+    }
+  ],
+  // Cron-trigger houdt de poller-DO in leven: elke 5 minuten roept de
+  // scheduled-handler `kickPoller()` aan (idempotent — no-op als het alarm
+  // al draait). Vangnet voor edge-cases waar het alarm ooit stopt na een
+  // deploy of storage-recovery. Vereist Workers Paid-plan.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "vars": {
+    // Klantnaam zoals de agent 'm in mails mag noemen (vult {{client}} in de
+    // specialist-prompts). Geen secret.
+    "CLIENT_NAME": "__CLIENT_NAME__",
+    // Model-IDs uit config, nooit hardcoded in de code (harde regel 7).
+    "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
+    "MODEL_PLAN": "claude-sonnet-4-6",
+    // Optioneel: Opus-tier voor de `technical`-specialist (diagnose met vision
+    // op bijgevoegde foto's). Ontbrekend → val terug op MODEL_PLAN.
+    // "MODEL_PLAN_HEAVY": "claude-opus-4-7",
+    // Fase 2 multi-agent split: zet op "true" om de poller ROUTER te laten
+    // starten (Router → Specialist) i.p.v. ORCHESTRATION (single workflow).
+    // Ontbrekend of andere waarde = oud gedrag — snelle rollback zonder deploy.
+    "USE_MULTI_AGENT_ROUTER": "false",
+    // FactumAI org-id van deze klant — vul in na het aanmaken van de tenant.
+    "AIOS_ORG_ID": "__CLIENT_ORG_ID__",
+    // RAG/few-shot aan? Vereist het secret VOYAGE_API_KEY.
+    "AIOS_RAG_ENABLED": "false",
+    "MAIL_DONE_LABEL": "AIOS afgehandeld",
+    "MAIL_DONE_FOLDER": "Afgehandeld door agent",
+    // Welke vendor stuurt de mail naar de klant?
+    //   "graph"  → mail-MCP / Microsoft Graph (default)
+    //   "resend" → Resend HTTPS API (vereist secrets RESEND_API_KEY +
+    //              RESEND_FROM via `wrangler secret put`).
+    "MAIL_SEND_VIA": "graph"
+  },
+  // ---------------------------------------------------------------------------
+  // STAGING — aparte Worker om nieuwe branches te testen zonder prod te raken.
+  // Deploy via `wrangler deploy --env staging`.
+  //
+  // Verschillen met prod:
+  // - Aparte Worker-naam (`-staging`) → eigen Durable-Object-namespace →
+  //   eigen poller-storage. Deelt de klant-DB voor eenvoud.
+  // - `USE_MULTI_AGENT_ROUTER = "true"` → het multi-agent-pad wordt getest.
+  // - **Geen Cron-triggers** → de staging-poller start alleen na een
+  //   handmatige `POST /__poller/start` op de staging-URL. Zo verwerkt
+  //   staging niet stilletjes prod-signals uit dezelfde pgmq-queue.
+  //
+  // Bindings (DO's + Workflows) móeten in Cloudflare's env-config herhaald
+  // worden — env erft NIET, hij vervangt.
+  // ---------------------------------------------------------------------------
+  "env": {
+    "staging": {
+      // GEEN expliciete "name" hier — wrangler voegt automatisch "-staging" toe
+      // aan de top-level naam. Een expliciete name zou wrangler tail
+      // double-suffixen (…-staging-staging) laten zoeken.
+      "durable_objects": {
+        "bindings": [
+          { "name": "AIOS_POLLER", "class_name": "MailPoller" }
+        ]
+      },
+      // DO-migrations moeten ook op staging worden gedeclareerd — Cloudflare
+      // tracks DO-classes per Worker en de staging-Worker heeft z'n eigen
+      // migration-tabel.
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["MailPoller"] }
+      ],
+      "workflows": [
+        {
+          "name": "__CLIENT_SLUG__-workflow-orchestration-staging",
+          "binding": "ORCHESTRATION",
+          "class_name": "OrchestrationWorkflow"
+        },
+        {
+          "name": "__CLIENT_SLUG__-workflow-execute-staging",
+          "binding": "EXECUTE",
+          "class_name": "ExecuteWorkflow"
+        },
+        {
+          "name": "__CLIENT_SLUG__-workflow-router-staging",
+          "binding": "ROUTER",
+          "class_name": "RouterWorkflow"
+        },
+        {
+          "name": "__CLIENT_SLUG__-workflow-specialist-staging",
+          "binding": "SPECIALIST",
+          "class_name": "SpecialistWorkflow"
+        },
+        {
+          "name": "__CLIENT_SLUG__-workflow-aggregator-staging",
+          "binding": "AGGREGATOR",
+          "class_name": "AggregatorWorkflow"
+        }
+      ],
+      // Bewust géén `triggers.crons` — zie sectie-comment hierboven.
+      "vars": {
+        "CLIENT_NAME": "__CLIENT_NAME__",
+        "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
+        "MODEL_PLAN": "claude-sonnet-4-6",
+        // Multi-agent-flag AAN op staging — dat is wat we willen testen.
+        "USE_MULTI_AGENT_ROUTER": "true",
+        // Test-tenant (child-org), NIET de prod-org — zie docs/MULTI-ENV-DESIGN.md.
+        "AIOS_ORG_ID": "__CLIENT_TEST_ORG_ID__",
+        "AIOS_RAG_ENABLED": "false",
+        "MAIL_DONE_LABEL": "AIOS-staging afgehandeld",
+        "MAIL_DONE_FOLDER": "Afgehandeld door agent (staging)",
+        "MAIL_SEND_VIA": "graph"
+      }
+    }
+  }
+  // Secrets (niet hier, via `wrangler secret put` / Vault):
+  //   AIOS_SUPABASE_URL, AIOS_SUPABASE_SERVICE_ROLE_KEY   klant-Supabase
+  //   ANTHROPIC_API_KEY
+  //   VOYAGE_API_KEY                alleen nodig bij AIOS_RAG_ENABLED=true
+  //   RESEND_API_KEY, RESEND_FROM   alleen nodig bij MAIL_SEND_VIA=resend
+  //   FACTUMAI_MCP_CRM_URL, FACTUMAI_MCP_ERP_URL, FACTUMAI_MCP_MAIL_URL
+  //   FACTUMAI_MCP_API_KEY
+  //   FACTUMAI_MCP_INBOUND_SECRET   gedeeld inbound-auth secret voor *.workers.dev-URLs
+  //                                 (zelfde waarde als MCP_INBOUND_SECRET op de MCP-workers)
+  //   CF_ACCESS_CLIENT_ID           Cloudflare Access service-token voor de custom-domain MCPs
+  //   CF_ACCESS_CLIENT_SECRET       (mcp-<x>.factumai.nl) — beide vereist of Access geeft 403
+  //
+  // Voor staging: dezelfde secrets zetten met
+  //   `wrangler secret put <NAME> --env staging`
+}

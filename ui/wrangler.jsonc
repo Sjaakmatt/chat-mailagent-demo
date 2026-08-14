@@ -1,0 +1,97 @@
+{
+  // ---------------------------------------------------------------------------
+  // TEMPLATE — vervang bij een nieuwe klant elke __CLIENT_SLUG__ door de slug
+  // uit `client.manifest.yaml`. Zoek daarna op __ om te controleren dat er geen
+  // placeholder is blijven staan.
+  // ---------------------------------------------------------------------------
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "__CLIENT_SLUG__-cockpit",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // OpenNext-Cloudflare bouwt de Next-app naar .open-next/ — de Worker-entry en
+  // de statische assets. Beide bindings hieronder verwijzen naar die output.
+  "main": ".open-next/worker.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  // De Execute-Workflow leeft in de agent-Worker. We binden 'm hier cross-script
+  // via script_name zodat de cockpit bij approve/edit de Workflow start — de
+  // side effect (verzending) draait IN de Workflow, niet in de UI (Build
+  // Document B2). Afwijzen start nooit een Workflow.
+  "workflows": [
+    {
+      "name": "__CLIENT_SLUG__-workflow-execute",
+      "binding": "EXECUTE",
+      "class_name": "ExecuteWorkflow",
+      "script_name": "__CLIENT_SLUG__-mail-agent"
+    }
+  ],
+
+  // Niet-geheime flags. AIOS_ORG_ID is verplicht — bepaalt welke tenant deze
+  // cockpit-deployment bedient. Prod = klant-org cuid. Staging = child cuid.
+  "vars": {
+    "CLIENT_NAME": "__CLIENT_NAME__",
+    "AIOS_RAG_ENABLED": "false",
+    "AIOS_ORG_ID": "__CLIENT_ORG_ID__"
+    // "DEMO_MODE": "true"  ← alleen op een demo-/salesomgeving. Zet dit NOOIT
+    // op een productie-cockpit: het laat een beheerder synthetische mail in de
+    // echte werkbak zetten.
+  },
+
+  // ---------------------------------------------------------------------------
+  // STAGING — aparte cockpit-deployment voor het test-tenant. Deelt de aios-DB
+  // met prod; tenant-isolatie via AIOS_ORG_ID + de tenant-wrapper in
+  // `lib/tenant-query.ts` die op elke query `organization_id=eq.<orgId>` zet.
+  //
+  // Deploy via `wrangler deploy --env staging`.
+  //
+  // Vereiste stappen VOOR de eerste deploy:
+  //   1. Maak op de klant-org een aios_database-credential (systemType=
+  //      aios_database) in de dashboard-vault — nodig voor de test-tenant-clone.
+  //   2. Draai de test-tenant-create-flow en noteer de child cuid.
+  //   3. Zet die cuid hieronder in `AIOS_ORG_ID`.
+  //   4. `wrangler secret put AIOS_SUPABASE_URL --env staging` etc — dezelfde
+  //      secrets als prod (deelt de aios-DB).
+  //
+  // Bindings (workflows) móeten in Cloudflare's env-config herhaald worden —
+  // env erft NIET, hij vervangt.
+  // ---------------------------------------------------------------------------
+  "env": {
+    "staging": {
+      // GEEN expliciete "name" — wrangler voegt automatisch "-staging" toe.
+      "workflows": [
+        {
+          "name": "__CLIENT_SLUG__-workflow-execute-staging",
+          "binding": "EXECUTE",
+          "class_name": "ExecuteWorkflow",
+          "script_name": "__CLIENT_SLUG__-mail-agent-staging"
+        }
+      ],
+      "vars": {
+        "CLIENT_NAME": "__CLIENT_NAME__",
+        "AIOS_RAG_ENABLED": "false",
+        // Cuid van het aangemaakte test-tenant. Leeg laten = deploy faalt luid
+        // (AIOS_ORG_ID is required in makeCockpitClient) — bewust, om te
+        // voorkomen dat staging per ongeluk prod-data laat zien.
+        "AIOS_ORG_ID": "__CLIENT_TEST_ORG_ID__",
+        // Cuid van de klant-org (parent) — waar changes vanuit deze staging-
+        // cockpit heen worden gepromoot. Leeg = geen "Push naar prod"-knop;
+        // staging blijft dan bruikbaar voor inspectie en testen.
+        "AIOS_PARENT_ORG_ID": "__CLIENT_ORG_ID__",
+        "COCKPIT_MODE": "staging"
+      }
+    }
+  }
+
+  // Secrets (via `wrangler secret put`):
+  //   AIOS_SUPABASE_URL              — REST-endpoint van het klant-Supabase-project
+  //   AIOS_SUPABASE_SERVICE_ROLE_KEY — service-role key (server-only)
+  //   SUPABASE_ANON_KEY              — publieke anon-key (Supabase Auth-client)
+  //   VOYAGE_API_KEY (optioneel)     — embeddings voor feedback-few-shot (voyage-3.5)
+  //
+  // Voor staging: dezelfde secrets zetten met
+  //   `wrangler secret put <NAME> --env staging`
+}

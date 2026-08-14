@@ -1,0 +1,40 @@
+{
+  "name": "@factumai/agent-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./contracts": "./dist/contracts/index.js",
+    "./llm": "./dist/llm/index.js",
+    "./embeddings": "./dist/embeddings/index.js",
+    "./grounding": "./dist/grounding/index.js",
+    "./orchestrate": "./dist/orchestrate/index.js",
+    "./execute": "./dist/execute/index.js",
+    "./poller": "./dist/poller/index.js",
+    "./feedback": "./dist/feedback/index.js",
+    "./tenant": "./dist/tenant/index.js",
+    "./supabase": "./dist/supabase/index.js",
+    "./memory": "./dist/memory/index.js",
+    "./signals": "./dist/signals/index.js",
+    "./specialists": "./dist/specialists/index.js",
+    "./taxonomy": "./dist/taxonomy/index.js",
+    "./channels": "./dist/channels/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "tsc"
+  },
+  "dependencies": {
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260422.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}

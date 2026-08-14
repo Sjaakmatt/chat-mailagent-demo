@@ -1,0 +1,20 @@
+{
+  "name": "mail-agent-fundament",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FactumAI mail-agent fundament: herbruikbare agent-core, de signaal-tot-actie agent-Worker en de cockpit-werkbak. Startpunt voor een nieuwe klant-agent.",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

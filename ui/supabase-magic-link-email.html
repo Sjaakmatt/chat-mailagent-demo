@@ -1,0 +1,96 @@
+<!--
+  __CLIENT_NAME__ Cockpit — Supabase Auth e-mailtemplate (Magic Link / OTP).
+  Plak dit in Supabase → Authentication → Email Templates → "Magic Link".
+  Variabelen: {{ .Token }} = inlogcode, {{ .Email }} = adres van de genodigde.
+  Cockpit-domein: https://__CLIENT_SLUG__.factumai.nl
+  Aanbevolen subject:  Je inlogcode voor de __CLIENT_NAME__ Cockpit
+-->
+<!DOCTYPE html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light only" />
+    <title>__CLIENT_NAME__ Cockpit</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#F8F6F3;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F8F6F3;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <!-- Card -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px; background-color:#FFFFFF; border:1px solid #ECE7F2; border-radius:16px; overflow:hidden;">
+            <!-- Logo -->
+            <tr>
+              <td align="center" style="padding:36px 32px 8px 32px; font-family:Arial,Helvetica,sans-serif;">
+                <span style="font-size:30px; font-weight:700; letter-spacing:-0.5px;">
+                  <span style="font-style:italic; color:#F5A623;">sun</span><span style="color:#3D2952;">wise</span>
+                </span>
+                <div style="margin-top:4px; font-size:13px; color:#7A5C95;">Cockpit</div>
+              </td>
+            </tr>
+
+            <!-- Heading + intro -->
+            <tr>
+              <td style="padding:20px 32px 0 32px; font-family:Arial,Helvetica,sans-serif;">
+                <h1 style="margin:0 0 6px 0; font-size:20px; font-weight:700; color:#3D2952;">Je inlogcode</h1>
+                <p style="margin:0; font-size:14px; line-height:1.5; color:#5A3D78;">
+                  Gebruik onderstaande code om in te loggen en je wachtwoord in te stellen.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Code -->
+            <tr>
+              <td style="padding:20px 32px 0 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td align="center" style="background-color:#F4F1F7; border:1px solid #ECE7F2; border-radius:12px; padding:18px 12px;">
+                      <span style="font-family:'Courier New',Courier,monospace; font-size:30px; font-weight:700; letter-spacing:8px; color:#22162F;">{{ .Token }}</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Button -->
+            <tr>
+              <td style="padding:24px 32px 4px 32px;" align="center">
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td align="center" style="border-radius:10px; background-color:#3D2952;">
+                      <a href="https://__CLIENT_SLUG__.factumai.nl/auth/verify?email={{ .Email }}"
+                         style="display:inline-block; padding:13px 26px; font-family:Arial,Helvetica,sans-serif; font-size:15px; font-weight:700; color:#FFFFFF; text-decoration:none; border-radius:10px;">
+                        Open de cockpit
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Helper -->
+            <tr>
+              <td style="padding:14px 32px 32px 32px; font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0; font-size:12px; line-height:1.5; color:#7A5C95; text-align:center;">
+                  De knop opent de cockpit met je adres al ingevuld; voer daar de code in.
+                  Niet door jou aangevraagd? Negeer deze mail dan gerust.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Footer -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;">
+            <tr>
+              <td align="center" style="padding:18px 16px; font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0; font-size:11px; color:#9A86B0;">
+                  __CLIENT_NAME__ Cockpit · alleen genodigde adressen kunnen inloggen.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
