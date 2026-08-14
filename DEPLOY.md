@@ -222,10 +222,19 @@ verse omgeving faalt de cockpit dan op een binding die nog niet bestaat.
 schema — die draai je zelf (stap 1). Wijzig je iets in `migrations/`, dan zet de
 workflow een waarschuwing in de run-samenvatting zodat je het niet vergeet.
 
-**Placeholder-guard.** De deploy stopt met een duidelijke fout zolang er
-`__CLIENT_*`-tokens in de wrangler-configs staan. Zo kan een half-geconfigureerde
-repo (of het fundament zelf) nooit per ongeluk een Worker met de naam
-`__CLIENT_SLUG__-mail-agent` aanmaken.
+**Placeholder-guard.** Voorkomt dat een onvolledig geconfigureerde repo een
+Worker met de naam `__CLIENT_SLUG__-mail-agent` aanmaakt. Twee uitkomsten:
+
+| Situatie                                     | Wat er gebeurt                        |
+| -------------------------------------------- | ------------------------------------- |
+| Ongewijzigd fundament (niets ingevuld)       | schoon overgeslagen, groene run       |
+| Half geconfigureerd (bv. org-id vergeten)    | faalt, met de ontbrekende tokens erbij |
+| Klant compleet                               | deployt                               |
+
+Er wordt alleen gecontroleerd wat vóór *deze* deploy ingevuld moet zijn.
+`__CLIENT_TEST_ORG_ID__` telt dus alleen mee bij een staging-deploy — staging is
+optioneel, en een klant die alleen productie draait moet gewoon kunnen
+uitrollen.
 
 ### Handmatig deployen
 

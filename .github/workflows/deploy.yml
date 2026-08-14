@@ -52,15 +52,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Guard — placeholders vervangen?
+      # Twee verschillende situaties, twee verschillende uitkomsten:
+      #
+      #   fundament (niets ingevuld)  → niets te deployen, schoon overslaan.
+      #     Een rode X op elke push naar het fundament zou betekenisloos zijn.
+      #   half geconfigureerd         → luid falen, want dit is een échte fout.
+      #
+      # We controleren alleen de placeholders die vóór déze deploy ingevuld
+      # moeten zijn. `__CLIENT_TEST_ORG_ID__` hoort daar niet bij tenzij je naar
+      # staging deployt: staging is optioneel (NEW-CLIENT stap 9), en een klant
+      # die alleen productie draait moet gewoon kunnen deployen.
+      - name: Guard — configuratie compleet?
+        id: guard
         run: |
-          if grep -rn '__CLIENT_' agents/mail-agent/wrangler.jsonc ui/wrangler.jsonc; then
-            echo "::error::Er staan nog __CLIENT_*-placeholders in de wrangler-configs."
-            echo "::error::Dit is het fundament of een half-geconfigureerde klant-repo."
-            echo "::error::Vul client.manifest.yaml en volg docs/NEW-CLIENT.md stap 2."
+          set -euo pipefail
+          CONFIGS="agents/mail-agent/wrangler.jsonc ui/wrangler.jsonc"
+
+          if grep -q '__CLIENT_SLUG__' agents/mail-agent/wrangler.jsonc \
+             && grep -q '__CLIENT_SLUG__' ui/wrangler.jsonc; then
+            echo "::notice::Ongewijzigd fundament — geen klant geconfigureerd, dus niets te deployen."
+            echo "::notice::Scaffold eerst een klant-repo (docs/NEW-CLIENT.md)."
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          required="__CLIENT_SLUG__ __CLIENT_NAME__ __CLIENT_ORG_ID__"
+          if [ "$TARGET" = "staging" ]; then
+            required="$required __CLIENT_TEST_ORG_ID__"
+          fi
+
+          missing=""
+          for token in $required; do
+            if grep -q "$token" $CONFIGS; then
+              missing="$missing $token"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::Nog niet ingevulde placeholders voor omgeving '${TARGET}':$missing"
+            echo "::error::Zie docs/NEW-CLIENT.md stap 2 (en stap 9 voor staging)."
+            grep -n '__CLIENT_' $CONFIGS || true
             exit 1
           fi
-          echo "Geen placeholders gevonden — deploy mag door."
+
+          echo "Configuratie compleet voor '${TARGET}'."
+          echo "deployable=true" >> "$GITHUB_OUTPUT"
 
       - name: Bepaal scope
         id: decide
@@ -68,6 +104,14 @@ jobs:
           set -euo pipefail
           agent=false
           cockpit=false
+
+          # Niet deployable (ongewijzigd fundament) → beide jobs overslaan.
+          if [ "${{ steps.guard.outputs.deployable }}" != "true" ]; then
+            echo "agent=false"   >> "$GITHUB_OUTPUT"
+            echo "cockpit=false" >> "$GITHUB_OUTPUT"
+            echo "Niets te deployen."
+            exit 0
+          fi
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             case "${{ inputs.component }}" in
