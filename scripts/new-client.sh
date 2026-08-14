@@ -60,19 +60,28 @@ TARGET="${3:-../${SLUG}-mail-agent}"
 FUNDAMENT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$FUNDAMENT_ROOT"
 
-FUNDAMENT_URL="$(git remote get-url origin 2>/dev/null || echo "$FUNDAMENT_ROOT")"
+# Standaard klonen we van de gepubliceerde fundament-remote, niet van je lokale
+# checkout: een klant hoort te starten op wat er in `main` staat, niet op wat jij
+# toevallig lokaal open hebt. Beide zijn te overrulen voor tests of een fork.
+FUNDAMENT_URL="${FUNDAMENT_URL:-$(git remote get-url origin 2>/dev/null || echo "$FUNDAMENT_ROOT")}"
+FUNDAMENT_BRANCH="${FUNDAMENT_BRANCH:-main}"
 
 echo "Klant     : $NAME"
 echo "Slug      : $SLUG"
 echo "Doelmap   : $TARGET"
-echo "Fundament : $FUNDAMENT_URL"
+echo "Fundament : $FUNDAMENT_URL ($FUNDAMENT_BRANCH)"
 echo
 
 # ---------------------------------------------------------------------------
 # 1. Klonen + remotes goedzetten
+#
+# `--branch` staat er expliciet: zonder dat pakt git de default branch van de
+# remote, en die kan per ongeluk op een feature-branch staan. Dan zou een klant
+# stilletjes op onafgemaakt werk starten.
 # ---------------------------------------------------------------------------
 echo "→ Klonen…"
-git clone --quiet "$FUNDAMENT_URL" "$TARGET"
+git clone --quiet --branch "$FUNDAMENT_BRANCH" "$FUNDAMENT_URL" "$TARGET" \
+  || die "klonen mislukt — bestaat branch '$FUNDAMENT_BRANCH' op $FUNDAMENT_URL?"
 cd "$TARGET"
 
 git remote rename origin upstream
