@@ -102,8 +102,12 @@ npx wrangler secret put AIOS_SUPABASE_URL
 npx wrangler secret put AIOS_SUPABASE_SERVICE_ROLE_KEY
 npx wrangler secret put SUPABASE_ANON_KEY
 #   → de anon/publishable key (Supabase → Settings → API)
-pnpm build:cf && pnpm deploy
+pnpm run build:cf && pnpm run deploy
 ```
+
+> `pnpm run deploy`, niet `pnpm deploy` — dat laatste is een ingebouwd
+> pnpm-commando (een workspace-package naar een map kopiëren) en draait het
+> script uit `package.json` dus níet.
 
 **Zonder `SUPABASE_ANON_KEY` blijft de cockpit fail-closed op slot.** Dat is
 opzet: liever niemand binnen dan iedereen.
@@ -172,14 +176,60 @@ prod-signalen uit dezelfde queue.
 
 ---
 
-## CI
+## CI/CD
 
-Het fundament levert geen GitHub Actions mee — welke workflows zinnig zijn,
-hangt af van hoe de klant-repo beheerd wordt. Een gebruikelijke opzet:
+Het fundament levert twee GitHub Actions-workflows mee:
 
-- typecheck + test op elke push;
-- deploy van de agent bij wijzigingen in `agents/**` of `packages/**`;
-- deploy van de cockpit bij wijzigingen in `ui/**` of `packages/**`.
+| Workflow                        | Wanneer                          | Wat                                             |
+| ------------------------------- | -------------------------------- | ----------------------------------------------- |
+| `.github/workflows/ci.yml`      | elke push + PR                   | typecheck, tests, Next-build van de cockpit      |
+| `.github/workflows/deploy.yml`  | push naar `main` + handmatig     | agent-Worker en/of cockpit naar Cloudflare       |
 
-Beide deploys vereisen de repo-secrets `CLOUDFLARE_API_TOKEN` (template *Edit
-Cloudflare Workers*) en `CLOUDFLARE_ACCOUNT_ID`.
+### Eenmalig instellen
+
+Twee repo-secrets (**Settings → Secrets and variables → Actions**):
+
+| Secret                  | Waar te halen                                                          |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare-dashboard → rechterkolom **Account ID**                     |
+| `CLOUDFLARE_API_TOKEN`  | My Profile → API Tokens → Create Token → template **Edit Cloudflare Workers** |
+
+Dat is alles. De runtime-secrets (Supabase, Anthropic, MCP's) blijven bij de
+Worker via `wrangler secret put` — ze horen niet in GitHub.
+
+De deploy-jobs draaien in de GitHub-omgevingen `production` en `staging`. Wil je
+dat een productie-deploy eerst wordt goedgekeurd, zet dan een required reviewer
+op de `production`-omgeving (**Settings → Environments**). De workflow verandert
+daar niet voor.
+
+### Hoe het werkt
+
+**Volgorde is dwingend.** De cockpit bindt de Execute-Workflow cross-script aan
+de agent-Worker. Daarom staan beide in één workflow met `needs:` ertussen: eerst
+de agent, dan de cockpit. Twee losse workflows zouden parallel draaien en op een
+verse omgeving faalt de cockpit dan op een binding die nog niet bestaat.
+
+**Alleen deployen wat gewijzigd is.** De `plan`-job diff't de push:
+
+| Gewijzigd                          | Deployt                |
+| ---------------------------------- | ---------------------- |
+| `agents/**`                        | agent                  |
+| `ui/**`                            | cockpit                |
+| `packages/**`, lockfile, workspace | beide (agent-core zit in allebei) |
+| `docs/**`, `migrations/**`, README | niets                  |
+
+**Migraties worden niet toegepast.** Een groene deploy zegt niets over je
+schema — die draai je zelf (stap 1). Wijzig je iets in `migrations/`, dan zet de
+workflow een waarschuwing in de run-samenvatting zodat je het niet vergeet.
+
+**Placeholder-guard.** De deploy stopt met een duidelijke fout zolang er
+`__CLIENT_*`-tokens in de wrangler-configs staan. Zo kan een half-geconfigureerde
+repo (of het fundament zelf) nooit per ongeluk een Worker met de naam
+`__CLIENT_SLUG__-mail-agent` aanmaken.
+
+### Handmatig deployen
+
+**Actions → Deploy → Run workflow.** Kies de omgeving (`production` of
+`staging`) en wat je wilt deployen (`both`, `agent`, `cockpit`). Handig om
+staging te vullen vanaf een feature-branch, of om alleen de cockpit opnieuw uit
+te rollen na een branding-wijziging.

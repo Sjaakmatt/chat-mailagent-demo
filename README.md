@@ -68,6 +68,14 @@ rust:
 | Demo-mails                     | `ui/lib/demo/scenarios.ts`                     |
 | Beleidsregels, tone-of-voice   | in de cockpit / database — **niet** in code    |
 
+## CI/CD
+
+Twee GitHub Actions-workflows: `ci.yml` (typecheck, tests en cockpit-build op
+elke push) en `deploy.yml` (push naar `main` of handmatig → Cloudflare). De
+deploy rolt alleen uit wat gewijzigd is, houdt de volgorde agent → cockpit aan,
+en weigert te draaien zolang er nog `__CLIENT_*`-placeholders in de configs
+staan. Instellen: twee repo-secrets, zie [`DEPLOY.md`](DEPLOY.md).
+
 ## Demo
 
 Met `DEMO_MODE=true` op de cockpit-Worker verschijnt een Demo-pagina waarmee je

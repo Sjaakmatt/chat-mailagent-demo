@@ -1,0 +1,44 @@
+name: CI
+
+# Draait op elke push en elke PR. Geen secrets nodig — dit is de poort die
+# bepaalt of een deploy überhaupt mag beginnen.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile` faalt als pnpm-lock.yaml niet klopt met de
+      # package.json's. Dat is opzet: een scheve lockfile hoort hier stuk te
+      # gaan, niet pas tijdens een deploy.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      # De Next-build vangt fouten die tsc niet ziet (server/client-grenzen,
+      # ontbrekende route-exports). Goedkoper dan de volledige OpenNext-build,
+      # en het is wat in de praktijk een deploy breekt.
+      - name: Build cockpit
+        run: pnpm --filter @factumai/aios-cockpit build

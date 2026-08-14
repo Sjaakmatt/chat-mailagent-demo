@@ -1,0 +1,196 @@
+name: Deploy
+
+# Eén workflow voor beide Workers, want de volgorde is dwingend: de cockpit
+# bindt de Execute-Workflow cross-script aan de agent-Worker. Bestaat die nog
+# niet, dan faalt de cockpit-deploy. Daarom agent eerst, cockpit daarna.
+#
+# Vereiste repo-secrets:
+#   CLOUDFLARE_API_TOKEN   template "Edit Cloudflare Workers"
+#   CLOUDFLARE_ACCOUNT_ID
+#
+# Runtime-secrets (Supabase, Anthropic, MCP's) horen NIET hier: die zet je
+# eenmalig met `wrangler secret put`. Zie DEPLOY.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Welke omgeving
+        type: choice
+        options: [production, staging]
+        default: production
+      component:
+        description: Wat deployen
+        type: choice
+        options: [both, agent, cockpit]
+        default: both
+
+# Nooit twee deploys tegelijk naar dezelfde omgeving. Niet annuleren: een
+# halverwege afgebroken wrangler-deploy laat je met een onduidelijke staat.
+concurrency:
+  group: deploy-${{ inputs.target || 'production' }}
+  cancel-in-progress: false
+
+env:
+  TARGET: ${{ inputs.target || 'production' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Bepaalt wát er moet deployen. Bij een push kijken we naar de gewijzigde
+  # paden; bij een handmatige run naar wat je hebt gekozen.
+  # ---------------------------------------------------------------------------
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.decide.outputs.agent }}
+      cockpit: ${{ steps.decide.outputs.cockpit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard — placeholders vervangen?
+        run: |
+          if grep -rn '__CLIENT_' agents/mail-agent/wrangler.jsonc ui/wrangler.jsonc; then
+            echo "::error::Er staan nog __CLIENT_*-placeholders in de wrangler-configs."
+            echo "::error::Dit is het fundament of een half-geconfigureerde klant-repo."
+            echo "::error::Vul client.manifest.yaml en volg docs/NEW-CLIENT.md stap 2."
+            exit 1
+          fi
+          echo "Geen placeholders gevonden — deploy mag door."
+
+      - name: Bepaal scope
+        id: decide
+        run: |
+          set -euo pipefail
+          agent=false
+          cockpit=false
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ inputs.component }}" in
+              both)    agent=true; cockpit=true ;;
+              agent)   agent=true ;;
+              cockpit) cockpit=true ;;
+            esac
+          else
+            before="${{ github.event.before }}"
+            # Bij een eerste push of force-push is `before` leeg/nullsha en
+            # kunnen we niet diffen. Dan deployen we alles — liever te veel dan
+            # een wijziging stilletjes overslaan.
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$before^{commit}" 2>/dev/null; then
+              echo "Geen bruikbare diff-basis — beide componenten deployen."
+              agent=true; cockpit=true
+            else
+              changed=$(git diff --name-only "$before" "${{ github.sha }}")
+              echo "Gewijzigd:"; echo "$changed"
+              # packages/** raakt beide: agent-core zit in allebei de bundles.
+              if echo "$changed" | grep -qE '^(agents/|packages/|pnpm-lock\.yaml|pnpm-workspace\.yaml)'; then
+                agent=true
+              fi
+              if echo "$changed" | grep -qE '^(ui/|packages/|pnpm-lock\.yaml|pnpm-workspace\.yaml)'; then
+                cockpit=true
+              fi
+              # Migraties draaien we bewust met de hand op de klant-DB — een
+              # deploy past ze niet toe. Wél zichtbaar maken, anders denk je
+              # dat een groene deploy ook het schema heeft bijgewerkt.
+              if echo "$changed" | grep -qE '^migrations/.*\.sql$'; then
+                echo "::warning::Er zijn migraties gewijzigd. Deze deploy past ze NIET toe — draai ze zelf op de klant-DB (zie DEPLOY.md stap 1)."
+              fi
+            fi
+          fi
+
+          echo "agent=$agent"   >> "$GITHUB_OUTPUT"
+          echo "cockpit=$cockpit" >> "$GITHUB_OUTPUT"
+          echo "→ agent=$agent cockpit=$cockpit (omgeving: ${TARGET})"
+
+  # ---------------------------------------------------------------------------
+  # Agent-Worker: poller (DO) + Workflows. Moet vóór de cockpit.
+  # ---------------------------------------------------------------------------
+  agent:
+    name: agent-Worker
+    needs: plan
+    if: needs.plan.outputs.agent == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Kort vangnet: CI heeft dit al gedraaid, maar een handmatige deploy kan
+      # op een commit draaien die nooit door CI is gekomen.
+      - name: Typecheck + test
+        run: pnpm -r typecheck && pnpm -r test
+
+      - name: Deploy
+        working-directory: agents/mail-agent
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # `pnpm run` is hier verplicht: `pnpm deploy` is een ingebouwd
+          # pnpm-commando (workspace deployen naar een map) en zou dus NIET
+          # het deploy-script uit package.json draaien.
+          if [ "$TARGET" = "staging" ]; then
+            pnpm run deploy:staging
+          else
+            pnpm run deploy
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Cockpit-werkbak. Wacht op de agent vanwege de cross-script Workflow-binding.
+  # `always()` zodat een overgeslagen agent-job (niets gewijzigd) de cockpit
+  # niet blokkeert — maar een gefaalde agent-job wél.
+  # ---------------------------------------------------------------------------
+  cockpit:
+    name: cockpit
+    needs: [plan, agent]
+    if: |
+      always()
+      && needs.plan.outputs.cockpit == 'true'
+      && needs.plan.result == 'success'
+      && (needs.agent.result == 'success' || needs.agent.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @factumai/aios-cockpit typecheck
+
+      - name: Build (OpenNext)
+        working-directory: ui
+        run: pnpm run build:cf
+
+      - name: Deploy
+        working-directory: ui
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # `pnpm run` is hier verplicht: `pnpm deploy` is een ingebouwd
+          # pnpm-commando (workspace deployen naar een map) en zou dus NIET
+          # het deploy-script uit package.json draaien.
+          if [ "$TARGET" = "staging" ]; then
+            pnpm run deploy:staging
+          else
+            pnpm run deploy
+          fi
