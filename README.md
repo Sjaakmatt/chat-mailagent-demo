@@ -5,7 +5,13 @@ Cloudflare-native agent die inkomende klantmail classificeert, verrijkt met
 feiten uit de systemen van de klant, en een concept-antwoord voorstelt — dat een
 mens goedkeurt in de werkbak vóór er iets de deur uitgaat.
 
-Nieuwe klant? Begin bij **[`docs/NEW-CLIENT.md`](docs/NEW-CLIENT.md)**.
+Nieuwe klant? Eén commando om te beginnen:
+
+```bash
+./scripts/new-client.sh acme "Acme B.V."
+```
+
+Daarna **[`docs/NEW-CLIENT.md`](docs/NEW-CLIENT.md)** vanaf stap 3.
 
 ## De lus
 

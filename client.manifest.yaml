@@ -10,11 +10,11 @@
 # ============================================================================
 
 client:
-  # Kleine letters + streepjes. Wordt gebruikt in Worker-namen en
-  # Workflow-namen (__CLIENT_SLUG__ in de wrangler-configs).
+  # Kleine letters, cijfers en streepjes. Landt in de Worker- en Workflow-namen
+  # in beide wrangler-configs.
   slug: "<klant-slug>"
-  # Naam zoals de agent 'm tegen eindklanten mag noemen (__CLIENT_NAME__,
-  # vult {{client}} in de specialist-prompts).
+  # Naam zoals de agent 'm tegen eindklanten mag noemen. Vult de
+  # {{client}}-placeholder in de specialist-prompts.
   name: "<Klantnaam>"
   # Datalocatie. 'eu' tenzij expliciet anders afgesproken.
   residency: "eu"

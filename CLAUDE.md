@@ -73,12 +73,18 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 
 ## Een nieuwe klant opzetten
 
-Volg `docs/NEW-CLIENT.md`. Kort: vul `client.manifest.yaml`, vervang de
-`__PLACEHOLDER__`-tokens, pas taxonomie en branding aan, draai de migraties,
-zet de secrets. Het fundament zelf verander je daarbij niet.
+Start met `./scripts/new-client.sh <slug> "<Klantnaam>"`; dat zet de klant-repo
+op met het fundament als `upstream`-remote. Loop daarna `docs/NEW-CLIENT.md` af:
+taxonomie en branding aanpassen, migraties draaien, secrets zetten. Het
+fundament zelf verander je daarbij niet.
+
+Een klant haalt latere kernverbeteringen op met `git merge upstream/main`.
+Conflicten verschijnen op precies de bestanden die per klant afwijken — dat is
+de bedoeling.
 
 Verbeter je tijdens klantwerk iets dat élke klant wil? Breng het terug naar
-deze repo — dat is hoe het fundament beter wordt.
+deze repo via een branch die alléén die kernwijziging bevat — geen klantnamen,
+geen org-id's. Dat is hoe het fundament beter wordt.
 
 ## Werkwijze
 
