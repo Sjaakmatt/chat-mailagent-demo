@@ -197,8 +197,9 @@ Twee repo-secrets (**Settings → Secrets and variables → Actions**):
 
 Voor de wekelijkse fundament-sync komen daar in een **klant**-repo nog twee bij:
 variable `FUNDAMENT_REPO` (`<org>/mail-agent-fundament`) en secret
-`FUNDAMENT_TOKEN` (PAT met leesrechten op die privé-repo). Ontbreken ze, dan
-slaat die workflow schoon over. Details staan in `docs/NEW-CLIENT.md`.
+`FUNDAMENT_DEPLOY_KEY` (read-only deploy key op die privé-repo — die verloopt
+niet). Ontbreken ze, dan slaat die workflow schoon over. Aanmaken:
+`docs/NEW-CLIENT.md`.
 
 De runtime-secrets (Supabase, Anthropic, MCP's) blijven bij de Worker via
 `wrangler secret put` — ze horen niet in GitHub.

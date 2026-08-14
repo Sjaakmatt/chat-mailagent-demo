@@ -166,7 +166,7 @@ Volgende stappen:
 
   2. Zet in de klant-repo:
        secret   CLOUDFLARE_API_TOKEN   + CLOUDFLARE_ACCOUNT_ID   (deploy)
-       variable FUNDAMENT_REPO         + secret FUNDAMENT_TOKEN  (upstream-sync)
+       variable FUNDAMENT_REPO         + secret FUNDAMENT_DEPLOY_KEY (upstream-sync)
      Zonder de laatste twee slaat de wekelijkse fundament-sync over.
 
   3. Loop docs/NEW-CLIENT.md af vanaf stap 3 (Supabase + tenant).

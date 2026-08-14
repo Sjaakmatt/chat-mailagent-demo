@@ -209,12 +209,42 @@ vooruit is. Wat er dan gebeurt hangt af van jouw maatwerk:
 
 Eenmalig instellen in de klant-repo:
 
-| Wat                        | Waarde                                              |
-| -------------------------- | --------------------------------------------------- |
-| variable `FUNDAMENT_REPO`  | `<org>/mail-agent-fundament`                        |
-| secret `FUNDAMENT_TOKEN`   | PAT met **leesrechten** op die repo (hij is privé)  |
+| Wat                            | Waarde                                        |
+| ------------------------------ | --------------------------------------------- |
+| variable `FUNDAMENT_REPO`      | `<org>/mail-agent-fundament`                  |
+| secret `FUNDAMENT_DEPLOY_KEY`  | privé-helft van een read-only **deploy key**  |
 
 Ontbreekt er een? Dan slaat de workflow schoon over — hij faalt niet.
+
+#### De deploy key aanmaken
+
+Het fundament is privé, dus de klant-repo heeft leesrechten nodig. Een deploy
+key is daar de juiste sleutel voor: hij geeft toegang tot **precies één repo**,
+alleen **lezen**, en **verloopt niet**. Eén keer maken, daarna nooit meer naar
+omkijken — in tegenstelling tot een personal access token, dat je jaarlijks moet
+vervangen in elke klant-repo.
+
+Maak 'm één keer aan, lokaal:
+
+```bash
+ssh-keygen -t ed25519 -f fundament-key -N "" -C "fundament-sync"
+```
+
+Dat levert twee bestanden op:
+
+1. `fundament-key.pub` (openbaar) → in de **fundament**-repo:
+   Settings → Deploy keys → *Add deploy key*. Titel bijvoorbeeld
+   `upstream-sync`. **Laat "Allow write access" uit.**
+2. `fundament-key` (privé) → in **elke klant-repo**: Settings → Secrets and
+   variables → Actions → *New repository secret*, naam `FUNDAMENT_DEPLOY_KEY`,
+   plak de volledige inhoud inclusief de `-----BEGIN`- en `-----END`-regels.
+
+Bewaar de privésleutel in je wachtwoordmanager en verwijder beide bestanden van
+je schijf. Dezelfde sleutel mag je voor alle klant-repo's gebruiken: hij kan
+toch alleen lezen, en alleen dit ene fundament.
+
+Raakt de sleutel kwijt of op straat: verwijder de deploy key in de
+fundament-repo en maak een nieuwe. Alleen dán is er werk per klant-repo.
 
 > Let op wat de eerste rij betekent: een geslaagde sync deployt naar productie.
 > Wil je dat niet, zet de schedule dan uit en draai 'm handmatig via

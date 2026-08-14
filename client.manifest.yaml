@@ -23,6 +23,28 @@ client:
   # Org-id van het test-tenant (staging). Leeg laten tot je 'm aanmaakt.
   test_org_id: ""
 
+# ---------------------------------------------------------------------------
+# Product-herkomst — het contract met het FactumAI-dashboard.
+#
+# Hiermee beschrijft deze repo zichzelf: welk product het is, op welk fundament
+# hij meelift, en of hij updates hoort te krijgen. Het dashboard leest dit blok
+# om bij te houden wie welk fundament gebruikt en om de git-flow te bewaken.
+# Zie docs/DASHBOARD-INTEGRATION.md. Verander de sleutelnamen niet zonder het
+# dashboard mee te nemen.
+# ---------------------------------------------------------------------------
+product:
+  # 'product'  = leunt op een fundament en hoort kernverbeteringen te krijgen.
+  # 'maatwerk' = eenmalig bouwsel voor deze klant; géén fundament, geen sync.
+  #              Zet dan `kind` en `fundament` op "" en verwijder de
+  #              upstream-sync-workflow uit deze repo.
+  tier: "product"
+  # Welk FactumAI-product: mail | chat | ... Eén woord, stabiel.
+  kind: "mail"
+  # De fundament-repo waar deze klant op meelift (owner/repo).
+  fundament: "<org>/mail-agent-fundament"
+  # Repo van deze klant zelf (owner/repo) — zodat het dashboard 'm terugvindt.
+  repo: "<org>/<klant-slug>-mail-agent"
+
 # Welke domein-MCP's deze agent mag aanroepen. Laat weg wat de klant niet heeft:
 # een ontbrekende MCP is geen fout, de agent valt fail-soft terug (CLAUDE.md).
 tools:

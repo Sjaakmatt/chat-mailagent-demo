@@ -13,9 +13,11 @@ name: Upstream-sync
 # het moment waarop een mens moet kijken — daarom nooit automatisch.
 #
 # Benodigd in de klant-repo:
-#   variable FUNDAMENT_REPO   bv. "Sjaakmatt/mail-agent-fundament"
-#   secret   FUNDAMENT_TOKEN  PAT met leesrechten op die repo (hij is privé)
+#   variable FUNDAMENT_REPO        bv. "Sjaakmatt/mail-agent-fundament"
+#   secret   FUNDAMENT_DEPLOY_KEY  privé-helft van een read-only deploy key
+#                                  op het fundament (die verloopt niet)
 # Ontbreekt er een? Dan slaat de workflow schoon over, hij faalt niet.
+# Aanmaken: zie docs/NEW-CLIENT.md, sectie "Fundament-updates ophalen".
 
 on:
   schedule:
@@ -45,7 +47,7 @@ jobs:
         id: pre
         env:
           FUNDAMENT_REPO: ${{ vars.FUNDAMENT_REPO }}
-          FUNDAMENT_TOKEN: ${{ secrets.FUNDAMENT_TOKEN }}
+          FUNDAMENT_DEPLOY_KEY: ${{ secrets.FUNDAMENT_DEPLOY_KEY }}
         run: |
           set -euo pipefail
           skip() { echo "::notice::$1"; echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; }
@@ -54,8 +56,10 @@ jobs:
           if grep -q '__CLIENT_SLUG__' agents/mail-agent/wrangler.jsonc 2>/dev/null; then
             skip "Dit is het fundament zelf — niets op te halen."
           fi
-          [ -n "$FUNDAMENT_REPO" ]  || skip "Variable FUNDAMENT_REPO niet gezet — sync overgeslagen."
-          [ -n "$FUNDAMENT_TOKEN" ] || skip "Secret FUNDAMENT_TOKEN niet gezet — sync overgeslagen."
+          [ -n "$FUNDAMENT_REPO" ] \
+            || skip "Variable FUNDAMENT_REPO niet gezet — sync overgeslagen (zie docs/NEW-CLIENT.md)."
+          [ -n "$FUNDAMENT_DEPLOY_KEY" ] \
+            || skip "Secret FUNDAMENT_DEPLOY_KEY niet gezet — sync overgeslagen (zie docs/NEW-CLIENT.md)."
 
           echo "run=true" >> "$GITHUB_OUTPUT"
 
@@ -64,11 +68,21 @@ jobs:
         if: steps.pre.outputs.run == 'true'
         env:
           FUNDAMENT_REPO: ${{ vars.FUNDAMENT_REPO }}
-          FUNDAMENT_TOKEN: ${{ secrets.FUNDAMENT_TOKEN }}
+          FUNDAMENT_DEPLOY_KEY: ${{ secrets.FUNDAMENT_DEPLOY_KEY }}
         run: |
           set -euo pipefail
-          git remote add upstream \
-            "https://x-access-token:${FUNDAMENT_TOKEN}@github.com/${FUNDAMENT_REPO}.git"
+
+          # Deploy key klaarzetten. Read-only en zonder vervaldatum, dus dit is
+          # eenmalig werk per klant-repo — geen jaarlijkse rotatie.
+          mkdir -p ~/.ssh
+          printf '%s\n' "$FUNDAMENT_DEPLOY_KEY" > ~/.ssh/fundament
+          chmod 600 ~/.ssh/fundament
+          ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          # IdentitiesOnly voorkomt dat ssh eerst andere sleutels probeert.
+          echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/fundament -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/fundament -o IdentitiesOnly=yes"
+
+          git remote add upstream "git@github.com:${FUNDAMENT_REPO}.git"
           git fetch --quiet upstream main
 
           ahead=$(git rev-list --count HEAD..upstream/main)
@@ -159,10 +173,11 @@ jobs:
         if: |
           steps.fetch.outputs.ahead != '0'
           && (steps.merge.outputs.clean == 'false' || steps.verify.outcome == 'failure')
-        env:
-          FUNDAMENT_TOKEN: ${{ secrets.FUNDAMENT_TOKEN }}
         run: |
           set -euo pipefail
+          # Naar origin, met het automatische GITHUB_TOKEN — de deploy key is
+          # read-only en mag hier dus niets mee.
+          unset GIT_SSH_COMMAND
           git push --force origin refs/remotes/upstream/main:refs/heads/upstream-sync
           echo "branch upstream-sync bijgewerkt"
 
