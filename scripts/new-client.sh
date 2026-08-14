@@ -164,12 +164,16 @@ Volgende stappen:
        git remote add origin git@github.com:<org>/${SLUG}-mail-agent.git
        git push -u origin main
 
-  2. Zet de repo-secrets CLOUDFLARE_API_TOKEN en CLOUDFLARE_ACCOUNT_ID.
+  2. Zet in de klant-repo:
+       secret   CLOUDFLARE_API_TOKEN   + CLOUDFLARE_ACCOUNT_ID   (deploy)
+       variable FUNDAMENT_REPO         + secret FUNDAMENT_TOKEN  (upstream-sync)
+     Zonder de laatste twee slaat de wekelijkse fundament-sync over.
 
   3. Loop docs/NEW-CLIENT.md af vanaf stap 3 (Supabase + tenant).
      Stap 4 (categorieën) is de belangrijkste inhoudelijke stap.
 
 Kernverbeteringen later ophalen:
-       git pull upstream main
+       git fetch upstream && git merge upstream/main
+     of automatisch, elke maandag, via .github/workflows/upstream-sync.yml
 ────────────────────────────────────────────────────────────────────────
 EOF

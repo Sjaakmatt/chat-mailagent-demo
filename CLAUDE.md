@@ -78,9 +78,11 @@ op met het fundament als `upstream`-remote. Loop daarna `docs/NEW-CLIENT.md` af:
 taxonomie en branding aanpassen, migraties draaien, secrets zetten. Het
 fundament zelf verander je daarbij niet.
 
-Een klant haalt latere kernverbeteringen op met `git merge upstream/main`.
-Conflicten verschijnen op precies de bestanden die per klant afwijken — dat is
-de bedoeling.
+Een klant haalt latere kernverbeteringen op met `git merge upstream/main`, of
+laat `upstream-sync.yml` dat wekelijks doen. Die mergt alleen automatisch als
+het schoon gaat én de tests groen zijn; conflicteert het met maatwerk, dan komt
+er een PR. Waar maatwerk het goedkoopst zit (extensiepunt of nieuw bestand,
+niet middenin een kernbestand) staat in `docs/NEW-CLIENT.md`.
 
 Verbeter je tijdens klantwerk iets dat élke klant wil? Breng het terug naar
 deze repo via een branch die alléén die kernwijziging bevat — geen klantnamen,

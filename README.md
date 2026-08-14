@@ -76,11 +76,17 @@ rust:
 
 ## CI/CD
 
-Twee GitHub Actions-workflows: `ci.yml` (typecheck, tests en cockpit-build op
-elke push) en `deploy.yml` (push naar `main` of handmatig → Cloudflare). De
-deploy rolt alleen uit wat gewijzigd is, houdt de volgorde agent → cockpit aan,
-en weigert te draaien zolang er nog `__CLIENT_*`-placeholders in de configs
-staan. Instellen: twee repo-secrets, zie [`DEPLOY.md`](DEPLOY.md).
+Drie GitHub Actions-workflows:
+
+- **`ci.yml`** — typecheck, tests en cockpit-build op elke push.
+- **`deploy.yml`** — push naar `main` of handmatig → Cloudflare. Rolt alleen uit
+  wat gewijzigd is, houdt de volgorde agent → cockpit aan, en weigert zolang er
+  `__CLIENT_*`-placeholders in de configs staan.
+- **`upstream-sync.yml`** — draait in een klant-repo: haalt wekelijks
+  fundament-updates op. Schoon te mergen én groen → naar `main`; conflict met
+  maatwerk → PR.
+
+Instellen: zie [`DEPLOY.md`](DEPLOY.md).
 
 ## Demo
 

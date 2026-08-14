@@ -184,6 +184,7 @@ Het fundament levert twee GitHub Actions-workflows mee:
 | ------------------------------- | -------------------------------- | ----------------------------------------------- |
 | `.github/workflows/ci.yml`      | elke push + PR                   | typecheck, tests, Next-build van de cockpit      |
 | `.github/workflows/deploy.yml`  | push naar `main` + handmatig     | agent-Worker en/of cockpit naar Cloudflare       |
+| `.github/workflows/upstream-sync.yml` | wekelijks + handmatig      | fundament-updates ophalen (merge of PR)          |
 
 ### Eenmalig instellen
 
@@ -194,8 +195,13 @@ Twee repo-secrets (**Settings → Secrets and variables → Actions**):
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare-dashboard → rechterkolom **Account ID**                     |
 | `CLOUDFLARE_API_TOKEN`  | My Profile → API Tokens → Create Token → template **Edit Cloudflare Workers** |
 
-Dat is alles. De runtime-secrets (Supabase, Anthropic, MCP's) blijven bij de
-Worker via `wrangler secret put` — ze horen niet in GitHub.
+Voor de wekelijkse fundament-sync komen daar in een **klant**-repo nog twee bij:
+variable `FUNDAMENT_REPO` (`<org>/mail-agent-fundament`) en secret
+`FUNDAMENT_TOKEN` (PAT met leesrechten op die privé-repo). Ontbreken ze, dan
+slaat die workflow schoon over. Details staan in `docs/NEW-CLIENT.md`.
+
+De runtime-secrets (Supabase, Anthropic, MCP's) blijven bij de Worker via
+`wrangler secret put` — ze horen niet in GitHub.
 
 De deploy-jobs draaien in de GitHub-omgevingen `production` en `staging`. Wil je
 dat een productie-deploy eerst wordt goedgekeurd, zet dan een required reviewer

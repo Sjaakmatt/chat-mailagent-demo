@@ -1,0 +1,239 @@
+name: Upstream-sync
+
+# Haalt kernverbeteringen uit het mail-agent-fundament op. Draait in een
+# KLANT-repo; in het fundament zelf slaat hij zichzelf over.
+#
+# Twee uitkomsten, en het verschil zit 'm in jouw maatwerk:
+#
+#   schoon te mergen + tests groen  → merge naar main, en Deploy start.
+#   conflict of rode tests          → PR, main blijft ongemoeid.
+#
+# Een conflict betekent dat het fundament een bestand raakte dat jij voor deze
+# klant hebt aangepast (taxonomie, branding, wrangler-config). Dat is precies
+# het moment waarop een mens moet kijken — daarom nooit automatisch.
+#
+# Benodigd in de klant-repo:
+#   variable FUNDAMENT_REPO   bv. "Sjaakmatt/mail-agent-fundament"
+#   secret   FUNDAMENT_TOKEN  PAT met leesrechten op die repo (hij is privé)
+# Ontbreekt er een? Dan slaat de workflow schoon over, hij faalt niet.
+
+on:
+  schedule:
+    # Maandagochtend, zodat je de week begint met de stand van zaken.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write # om Deploy te kunnen starten na een geslaagde merge
+
+jobs:
+  sync:
+    name: fundament ophalen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Voorwaarden
+        id: pre
+        env:
+          FUNDAMENT_REPO: ${{ vars.FUNDAMENT_REPO }}
+          FUNDAMENT_TOKEN: ${{ secrets.FUNDAMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          skip() { echo "::notice::$1"; echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # In het fundament zelf is er geen upstream om op te halen.
+          if grep -q '__CLIENT_SLUG__' agents/mail-agent/wrangler.jsonc 2>/dev/null; then
+            skip "Dit is het fundament zelf — niets op te halen."
+          fi
+          [ -n "$FUNDAMENT_REPO" ]  || skip "Variable FUNDAMENT_REPO niet gezet — sync overgeslagen."
+          [ -n "$FUNDAMENT_TOKEN" ] || skip "Secret FUNDAMENT_TOKEN niet gezet — sync overgeslagen."
+
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upstream ophalen
+        id: fetch
+        if: steps.pre.outputs.run == 'true'
+        env:
+          FUNDAMENT_REPO: ${{ vars.FUNDAMENT_REPO }}
+          FUNDAMENT_TOKEN: ${{ secrets.FUNDAMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote add upstream \
+            "https://x-access-token:${FUNDAMENT_TOKEN}@github.com/${FUNDAMENT_REPO}.git"
+          git fetch --quiet upstream main
+
+          ahead=$(git rev-list --count HEAD..upstream/main)
+          echo "ahead=$ahead" >> "$GITHUB_OUTPUT"
+          if [ "$ahead" -eq 0 ]; then
+            echo "::notice::Al bij met het fundament."
+            exit 0
+          fi
+
+          echo "Nieuw in het fundament ($ahead commits):"
+          git log --oneline HEAD..upstream/main | tee /tmp/nieuw.txt
+
+      - name: Proefmerge
+        id: merge
+        if: steps.pre.outputs.run == 'true' && steps.fetch.outputs.ahead != '0'
+        run: |
+          set -uo pipefail
+          git config user.name "upstream-sync"
+          git config user.email "actions@github.com"
+
+          # Op een wegwerpbranch proberen, zodat main onaangeraakt blijft
+          # zolang we niet zeker weten dat het goed gaat.
+          git checkout -q -b sync-probe
+          if git merge --no-edit upstream/main > /tmp/merge.log 2>&1; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+            echo "Schoon te mergen."
+          else
+            conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            git merge --abort || true
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            echo "conflicts=$conflicts" >> "$GITHUB_OUTPUT"
+            echo "::warning::Conflict met klant-maatwerk in: $conflicts"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.merge.outputs.clean == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.merge.outputs.clean == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Verifiëren
+        id: verify
+        if: steps.merge.outputs.clean == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm -r typecheck
+          pnpm -r test
+          pnpm --filter @factumai/aios-cockpit build
+
+      # ---------------------------------------------------------------------
+      # Groen licht: naar main. Een push met GITHUB_TOKEN start géén andere
+      # workflows (recursiebeveiliging), dus Deploy starten we expliciet.
+      # ---------------------------------------------------------------------
+      - name: Mergen naar main
+        id: land
+        if: steps.merge.outputs.clean == 'true' && steps.verify.outcome == 'success'
+        run: |
+          set -euo pipefail
+          git checkout -q main
+          git merge --ff-only sync-probe
+          git push origin main
+          echo "::notice::Fundament-update gemerged naar main."
+          echo "landed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy starten
+        if: steps.land.outputs.landed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'main',
+            });
+            core.notice('Deploy gestart voor de gemergede fundament-update.');
+
+      # ---------------------------------------------------------------------
+      # Niet vanzelf te landen → PR, zodat een mens ernaar kijkt. De PR gaat
+      # uit van upstream/main naar main: GitHub toont dan precies de nieuwe
+      # fundament-commits, en markeert de conflicten met jouw maatwerk.
+      # ---------------------------------------------------------------------
+      - name: PR openen
+        if: |
+          steps.fetch.outputs.ahead != '0'
+          && (steps.merge.outputs.clean == 'false' || steps.verify.outcome == 'failure')
+        env:
+          FUNDAMENT_TOKEN: ${{ secrets.FUNDAMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git push --force origin refs/remotes/upstream/main:refs/heads/upstream-sync
+          echo "branch upstream-sync bijgewerkt"
+
+      - name: PR aanmaken of bijwerken
+        if: |
+          steps.fetch.outputs.ahead != '0'
+          && (steps.merge.outputs.clean == 'false' || steps.verify.outcome == 'failure')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const commits = fs.existsSync('/tmp/nieuw.txt')
+              ? fs.readFileSync('/tmp/nieuw.txt', 'utf8').trim()
+              : '(onbekend)';
+            const conflicts = `${{ steps.merge.outputs.conflicts }}`.trim();
+            const clean = `${{ steps.merge.outputs.clean }}` === 'true';
+
+            const reden = clean
+              ? 'De merge is schoon, maar **typecheck, tests of de cockpit-build faalt** ' +
+                'erna. Waarschijnlijk sluit een kernwijziging niet aan op het maatwerk ' +
+                'van deze klant.'
+              : 'De merge **conflicteert met maatwerk** van deze klant in:\n\n' +
+                conflicts.split(/\s+/).filter(Boolean).map(f => `- \`${f}\``).join('\n');
+
+            const body = [
+              '## Fundament-update',
+              '',
+              'Deze klant loopt achter op het mail-agent-fundament. Automatisch mergen',
+              'is hier niet veilig, dus dit is blijven staan voor een mens.',
+              '',
+              '### Waarom geen automatische merge',
+              '',
+              reden,
+              '',
+              '### Nieuw in het fundament',
+              '',
+              '```',
+              commits,
+              '```',
+              '',
+              '### Lokaal oplossen',
+              '',
+              '```bash',
+              'git fetch upstream',
+              'git merge upstream/main',
+              '# conflicten oplossen — bij twijfel wint de klant-versie',
+              'pnpm install && pnpm -r typecheck && pnpm -r test',
+              'git push',
+              '```',
+              '',
+              'Blijkt bij het oplossen dat het maatwerk eigenlijk in de kern hoort?',
+              'Breng het dan terug naar het fundament in plaats van het hier te houden.',
+            ].join('\n');
+
+            const {owner, repo} = context.repo;
+            const open = await github.rest.pulls.list({
+              owner, repo, state: 'open', head: `${owner}:upstream-sync`,
+            });
+
+            if (open.data.length > 0) {
+              await github.rest.pulls.update({
+                owner, repo, pull_number: open.data[0].number, body,
+              });
+              core.notice(`PR #${open.data[0].number} bijgewerkt.`);
+            } else {
+              const pr = await github.rest.pulls.create({
+                owner, repo,
+                title: 'Fundament-update ophalen',
+                head: 'upstream-sync',
+                base: 'main',
+                body,
+              });
+              core.notice(`PR #${pr.data.number} geopend.`);
+            }

@@ -193,30 +193,81 @@ Wat overblijft is geen configuratie meer maar afstemming:
 
 ## Fundament-updates ophalen
 
-De klant-repo houdt het fundament als `upstream`. Een verbetering in de kern —
-een bugfix in de grounding, een nieuwe specialist, een scherpere prompt — haal
-je zo binnen:
+De klant-repo houdt het fundament als `upstream`. Er gebeurt niets vanzelf: een
+commit in het fundament raakt deze klant pas als je 'm binnenhaalt.
+
+### Automatisch, via de sync-workflow
+
+`.github/workflows/upstream-sync.yml` kijkt elke maandag of het fundament
+vooruit is. Wat er dan gebeurt hangt af van jouw maatwerk:
+
+| Situatie                                   | Wat de workflow doet                          |
+| ------------------------------------------ | --------------------------------------------- |
+| Schoon te mergen én typecheck/tests groen  | mergt naar `main` en start Deploy              |
+| Conflict met maatwerk                      | opent een PR, `main` blijft ongemoeid          |
+| Schoon, maar tests of build falen erna     | opent een PR, `main` blijft ongemoeid          |
+
+Eenmalig instellen in de klant-repo:
+
+| Wat                        | Waarde                                              |
+| -------------------------- | --------------------------------------------------- |
+| variable `FUNDAMENT_REPO`  | `<org>/mail-agent-fundament`                        |
+| secret `FUNDAMENT_TOKEN`   | PAT met **leesrechten** op die repo (hij is privé)  |
+
+Ontbreekt er een? Dan slaat de workflow schoon over — hij faalt niet.
+
+> Let op wat de eerste rij betekent: een geslaagde sync deployt naar productie.
+> Wil je dat niet, zet de schedule dan uit en draai 'm handmatig via
+> **Actions → Upstream-sync → Run workflow**.
+
+### Met de hand
 
 ```bash
 git fetch upstream
 git log --oneline HEAD..upstream/main    # wat komt eraan?
 git merge upstream/main
+pnpm install && pnpm -r typecheck && pnpm -r test
+git push                                 # nu pas gaat 'ie live
 ```
 
-Verwacht conflicten op precies de bestanden die je per klant hebt aangepast:
-`taxonomy/index.ts`, `ui/lib/brand.ts`, `globals.css` en de wrangler-configs.
-Dat is geen ongemak maar informatie: het conflict laat exact zien waar deze
-klant van de kern afwijkt. Kies bij zo'n conflict standaard de klant-versie, en
-neem alleen over wat je echt wilt.
-
-Daarna `pnpm install && pnpm -r typecheck && pnpm -r test`, en pas daarna
-deployen.
-
-Wil je zien hoever een klant achterloopt:
+Hoever loopt een klant achter?
 
 ```bash
 git fetch upstream && git log --oneline HEAD..upstream/main | wc -l
 ```
+
+## Maatwerk en fundament-updates
+
+Een conflict is geen storing: het is het fundament dat een bestand raakt dat jij
+voor deze klant hebt aangepast. Hoe vaak dat gebeurt, hangt af van wáár je het
+maatwerk hebt gezet.
+
+**Op een extensiepunt — verwacht, en prima.**
+`taxonomy/index.ts`, `ui/lib/brand.ts`, `globals.css`, de wrangler-configs,
+`domain/index.ts`, `audit-sources.ts`, `demo/scenarios.ts`. Deze bestanden zijn
+bedoeld om per klant af te wijken. Het fundament raakt ze zelden, en als het
+gebeurt is het conflict klein en leesbaar. Vuistregel bij het oplossen: **de
+klant-versie wint**, en je neemt alleen over wat je bewust wilt.
+
+**In een nieuw bestand — nooit een conflict.**
+Een eigen domeinmodule (`agents/mail-agent/src/warehouse/`, extra cockpit-
+pagina's, eigen migraties) bestaat niet in het fundament, dus er valt niets te
+conflicteren. Dit is de goedkoopste plek voor maatwerk. Zie
+`examples/warehouse-module/`.
+
+**Middenin een kernbestand — hier gaat het pijn doen.**
+Pas je `orchestrate/index.ts`, een Workflow of een gedeelde cockpit-component
+aan, dan conflicteert dat bestand bij élke fundament-update die het raakt, tot
+in lengte van dagen. Twee uitwegen, allebei beter dan volhouden:
+
+1. **Verplaats het naar een extensiepunt.** Meestal kan het — en kan het niet,
+   dan ontbreekt er een naad, en is dát de echte bevinding.
+2. **Breng het terug naar het fundament.** Wil de volgende klant dit ook, dan
+   hoort het in de kern en verdwijnt het conflict permanent.
+
+Zit je in geval 3 en werkt geen van beide uitwegen, leg dan in de klant-repo
+vast *waarom* — een regel in `client.manifest.yaml` onder `notes` volstaat.
+Anders staat de volgende die het conflict oplost voor een raadsel.
 
 ### De andere kant op
 
