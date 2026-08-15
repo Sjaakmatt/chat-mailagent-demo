@@ -276,6 +276,24 @@ export class ChatSession extends DurableObject<Env> {
         p_idempotency_key: `chat:${conversationId}:${seq}`,
       }),
     });
+
+    // De poller meteen wekken. Zonder dit is de wachttijd van de bezoeker de
+    // back-off van de poller (tot 30 seconden) of, als het alarm ooit stilviel,
+    // die van de Cron (tot 5 minuten). Bij mail merkt niemand dat; hier zit
+    // iemand in een chatvenster te kijken.
+    //
+    // Best-effort: mislukt het wekken, dan pikt het gewone alarm of de Cron het
+    // alsnog op. Een bericht mag niet verloren gaan omdat de wekker het niet deed.
+    try {
+      await this.env.AIOS_POLLER.get(
+        this.env.AIOS_POLLER.idFromName('aios-poller'),
+      ).wake();
+    } catch (err) {
+      console.warn(
+        '[chat] poller wekken mislukt:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   /** Stuurt het verloop tot nu toe naar één socket, uit de database. */
