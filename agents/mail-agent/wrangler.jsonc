@@ -62,11 +62,11 @@
     // specialist-prompts). Geen secret.
     "CLIENT_NAME": "__CLIENT_NAME__",
     // Model-IDs uit config, nooit hardcoded in de code (harde regel 7).
-    "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
-    "MODEL_PLAN": "claude-sonnet-4-6",
+    "MODEL_CLASSIFY": "claude-haiku-4-5",
+    "MODEL_PLAN": "claude-sonnet-5",
     // Optioneel: Opus-tier voor de `technical`-specialist (diagnose met vision
     // op bijgevoegde foto's). Ontbrekend → val terug op MODEL_PLAN.
-    // "MODEL_PLAN_HEAVY": "claude-opus-4-7",
+    // "MODEL_PLAN_HEAVY": "claude-opus-5",
     // Fase 2 multi-agent split: zet op "true" om de poller ROUTER te laten
     // starten (Router → Specialist) i.p.v. ORCHESTRATION (single workflow).
     // Ontbrekend of andere waarde = oud gedrag — snelle rollback zonder deploy.
@@ -148,8 +148,8 @@
       // Bewust géén `triggers.crons` — zie sectie-comment hierboven.
       "vars": {
         "CLIENT_NAME": "__CLIENT_NAME__",
-        "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
-        "MODEL_PLAN": "claude-sonnet-4-6",
+        "MODEL_CLASSIFY": "claude-haiku-4-5",
+        "MODEL_PLAN": "claude-sonnet-5",
         // Multi-agent-flag AAN op staging — dat is wat we willen testen.
         "USE_MULTI_AGENT_ROUTER": "true",
         // Test-tenant (child-org), NIET de prod-org — zie docs/MULTI-ENV-DESIGN.md.
