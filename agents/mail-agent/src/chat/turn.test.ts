@@ -114,4 +114,56 @@ describe('wat de bezoeker terugkrijgt', () => {
     });
     expect(createdTickets).toHaveLength(1);
   });
+
+  // De drie fouten uit het gesprek van 15:01, elk apart vastgelegd.
+  it('vraagt alleen om het mailadres als het ordernummer al bekend is', async () => {
+    ticketAnswer = null;
+    const res = await finishChatTurn(
+      env,
+      {
+        ...item('Ik zoek het op.', {}),
+        proposed: {
+          body: 'Ik zoek het op.',
+          original: {},
+          classification: { extracted: { orderNumber: 'DEMO-1001' } },
+        },
+      },
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'levertijd_status' },
+    );
+    expect(res?.reply).toContain('ordernummer heb ik');
+    expect(res?.reply).not.toBe(CONFIRMATION.needsIdentityText);
+  });
+
+  it('vraagt alleen om het ordernummer als het mailadres al bekend is', async () => {
+    ticketAnswer = null;
+    const res = await finishChatTurn(
+      env,
+      {
+        ...item('Ik zoek het op.', {}),
+        proposed: {
+          body: 'Ik zoek het op.',
+          original: { from: 'k@example.com' },
+          classification: { extracted: {} },
+        },
+      },
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'levertijd_status' },
+    );
+    expect(res?.reply).toContain('mailadres heb ik');
+  });
+
+  it('vraagt om allebei als er niets bekend is', async () => {
+    ticketAnswer = null;
+    const res = await finishChatTurn(
+      env,
+      {
+        ...item('Ik zoek het op.', {}),
+        proposed: { body: 'Ik zoek het op.', original: {}, classification: { extracted: {} } },
+      },
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'levertijd_status' },
+    );
+    expect(res?.reply).toBe(CONFIRMATION.needsIdentityText);
+  });
 });
