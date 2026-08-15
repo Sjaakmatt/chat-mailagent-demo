@@ -12,10 +12,10 @@
 client:
   # Kleine letters, cijfers en streepjes. Landt in de Worker- en Workflow-namen
   # in beide wrangler-configs.
-  slug: "<klant-slug>"
+  slug: "factum-webshop"
   # Naam zoals de agent 'm tegen eindklanten mag noemen. Vult de
   # {{client}}-placeholder in de specialist-prompts.
-  name: "<Klantnaam>"
+  name: "Factum Webshop"
   # Datalocatie. 'eu' tenzij expliciet anders afgesproken.
   residency: "eu"
   # FactumAI org-id (cuid) — invullen ná het aanmaken van de tenant.
@@ -41,18 +41,23 @@ product:
   # Welk FactumAI-product: mail | chat | ... Eén woord, stabiel.
   kind: "mail"
   # De fundament-repo waar deze klant op meelift (owner/repo).
-  fundament: "<org>/mail-agent-fundament"
+  fundament: "Sjaakmatt/mail-agent-fundament"
   # Repo van deze klant zelf (owner/repo) — zodat het dashboard 'm terugvindt.
-  repo: "<org>/<klant-slug>-mail-agent"
+  # Wijkt af van de <slug>-mail-agent-conventie: dit is de demo-repo, niet een
+  # echte klant.
+  repo: "Sjaakmatt/chat-mailagent-demo"
 
 # Welke domein-MCP's deze agent mag aanroepen. Laat weg wat de klant niet heeft:
 # een ontbrekende MCP is geen fout, de agent valt fail-soft terug (CLAUDE.md).
 tools:
   - domain: "mail"
-    vendor: "<outlook|gmail|...>"
+    vendor: "outlook"
     mcp: "internal-mcp-mail"
     auth: "oauth"
     credentials_in_vault: true
+  # Bewust géén ERP-MCP: de demo doet order- en voorraad-lookups rechtstreeks op
+  # de demo_*-tabellen uit migrations/0005. Sluit je een echte klant aan, zet de
+  # ERP-MCP hieronder aan en laat 0005 weg.
   # - domain: "erp"
   #   vendor: "<snelstart|woocommerce|exact|...>"
   #   mcp: "internal-mcp-erp"
@@ -65,10 +70,16 @@ tools:
   #   credentials_in_vault: true
 
 use_cases:
-  - name: "<Naam van de eerste use-case>"
+  - name: "Klantenservicemail beantwoorden"
     description: >
-      <Wat komt er binnen, wat moet eruit komen, en waar haalt de agent de
-      feiten vandaan? Eén use-case per regel — begin met één, niet met vijf.>
+      Binnen komt een mail van een webshopklant over levering, retour, garantie
+      of facturatie. Eruit komt een conceptantwoord in de werkbak, met de feiten
+      uit een order-lookup erbij. Een mens keurt goed vóór verzending.
+  - name: "Chat op de site"
+    description: >
+      Binnen komt een bericht van een bezoeker via de chatwidget. Kennis- en
+      statusvragen worden direct beantwoord; alles wat een actie vraagt wordt een
+      ticket en gaat langs de werkbak. Feiten komen uit dezelfde order-lookup.
 
 first_workflow:
   trigger: "mail.received"
@@ -106,5 +117,20 @@ multi_agent:
 domain_modules: []
 
 notes: >
-  <Wat moet je over deze klant onthouden dat niet uit de velden hierboven
-  blijkt? Bijzondere afspraken, bekende risico's, wat er bewust NIET in scope is.>
+  Dit is de demo-repo, niet een echte klant: de eerste scaffold uit het
+  fundament, bedoeld om aan prospects te laten zien en om het scaffold-pad zelf
+  uit te proberen. Alle data is verzonnen (example.com) en moet dat blijven.
+
+  De taxonomie en de domeingrens staan bewust nog op de neutrale
+  webshop-startset uit het fundament — voor een echte klant is dat stap 4 en 4b
+  uit docs/NEW-CLIENT.md, en die begint met discovery.
+
+  Twee kanalen staan aan: mail en chat. `product.kind` blijft "mail" omdat chat
+  in dit fundament een tweede kanaal op dezelfde agent is, geen apart product.
+  Bij chat gaan `kennis` en `systeem` zónder mens naar de bezoeker
+  (mayRespondWithoutHuman); draai daarom `pnpm gate` tegen een echt model
+  voordat de widget publiek staat.
+
+  Nog open: org_id en test_org_id, in te vullen zodra het tenant in het
+  FactumAI-dashboard bestaat (stap 3b). Zolang __CLIENT_ORG_ID__ in de
+  wrangler-configs staat, weigert de deploy-workflow — dat is de bedoeling.

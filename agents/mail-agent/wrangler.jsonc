@@ -1,11 +1,11 @@
 {
   // ---------------------------------------------------------------------------
-  // TEMPLATE — vervang bij een nieuwe klant elke __CLIENT_SLUG__ door de slug
+  // TEMPLATE — vervang bij een nieuwe klant elke factum-webshop door de slug
   // uit `client.manifest.yaml` (kleine letters, streepjes; bv. "acme").
   // Zoek daarna op __ om te controleren dat er geen placeholder is blijven staan.
   // ---------------------------------------------------------------------------
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "__CLIENT_SLUG__-mail-agent",
+  "name": "factum-webshop-mail-agent",
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -22,30 +22,30 @@
   ],
   "workflows": [
     {
-      "name": "__CLIENT_SLUG__-workflow-orchestration",
+      "name": "factum-webshop-workflow-orchestration",
       "binding": "ORCHESTRATION",
       "class_name": "OrchestrationWorkflow"
     },
     {
-      "name": "__CLIENT_SLUG__-workflow-execute",
+      "name": "factum-webshop-workflow-execute",
       "binding": "EXECUTE",
       "class_name": "ExecuteWorkflow"
     },
     // Fase 2 — multi-agent split. Coexisteert met ORCHESTRATION zodat de
     // feature-flag USE_MULTI_AGENT_ROUTER snel te switchen is.
     {
-      "name": "__CLIENT_SLUG__-workflow-router",
+      "name": "factum-webshop-workflow-router",
       "binding": "ROUTER",
       "class_name": "RouterWorkflow"
     },
     {
-      "name": "__CLIENT_SLUG__-workflow-specialist",
+      "name": "factum-webshop-workflow-specialist",
       "binding": "SPECIALIST",
       "class_name": "SpecialistWorkflow"
     },
     // Fase 3 — compound fan-in: wacht op alle partials en weeft ze samen.
     {
-      "name": "__CLIENT_SLUG__-workflow-aggregator",
+      "name": "factum-webshop-workflow-aggregator",
       "binding": "AGGREGATOR",
       "class_name": "AggregatorWorkflow"
     }
@@ -60,13 +60,13 @@
   "vars": {
     // Klantnaam zoals de agent 'm in mails mag noemen (vult {{client}} in de
     // specialist-prompts). Geen secret.
-    "CLIENT_NAME": "__CLIENT_NAME__",
+    "CLIENT_NAME": "Factum Webshop",
     // Model-IDs uit config, nooit hardcoded in de code (harde regel 7).
     "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
-    "MODEL_PLAN": "claude-sonnet-4-6",
+    "MODEL_PLAN": "claude-sonnet-5",
     // Optioneel: Opus-tier voor de `technical`-specialist (diagnose met vision
     // op bijgevoegde foto's). Ontbrekend → val terug op MODEL_PLAN.
-    // "MODEL_PLAN_HEAVY": "claude-opus-4-7",
+    // "MODEL_PLAN_HEAVY": "claude-opus-5",
     // Fase 2 multi-agent split: zet op "true" om de poller ROUTER te laten
     // starten (Router → Specialist) i.p.v. ORCHESTRATION (single workflow).
     // Ontbrekend of andere waarde = oud gedrag — snelle rollback zonder deploy.
@@ -83,7 +83,11 @@
     //              RESEND_FROM via `wrangler secret put`).
     "MAIL_SEND_VIA": "graph",
     // Prefix voor ticketnummers (PREFIX-JJMM-NNNN). Drie letters.
-    "TICKET_PREFIX": "TIC"
+    "TICKET_PREFIX": "TIC",
+    // Zet de chat-testwidget op /chat open. Dit is de demo-repo, dus aan.
+    // NOOIT op een productie-Worker: de widget is ongestyled, heeft geen
+    // herverbindingslogica en hoort niet op de site van een klant.
+    "DEMO_MODE": "true"
   },
   // ---------------------------------------------------------------------------
   // STAGING — aparte Worker om nieuwe branches te testen zonder prod te raken.
@@ -120,34 +124,34 @@
       ],
       "workflows": [
         {
-          "name": "__CLIENT_SLUG__-workflow-orchestration-staging",
+          "name": "factum-webshop-workflow-orchestration-staging",
           "binding": "ORCHESTRATION",
           "class_name": "OrchestrationWorkflow"
         },
         {
-          "name": "__CLIENT_SLUG__-workflow-execute-staging",
+          "name": "factum-webshop-workflow-execute-staging",
           "binding": "EXECUTE",
           "class_name": "ExecuteWorkflow"
         },
         {
-          "name": "__CLIENT_SLUG__-workflow-router-staging",
+          "name": "factum-webshop-workflow-router-staging",
           "binding": "ROUTER",
           "class_name": "RouterWorkflow"
         },
         {
-          "name": "__CLIENT_SLUG__-workflow-specialist-staging",
+          "name": "factum-webshop-workflow-specialist-staging",
           "binding": "SPECIALIST",
           "class_name": "SpecialistWorkflow"
         },
         {
-          "name": "__CLIENT_SLUG__-workflow-aggregator-staging",
+          "name": "factum-webshop-workflow-aggregator-staging",
           "binding": "AGGREGATOR",
           "class_name": "AggregatorWorkflow"
         }
       ],
       // Bewust géén `triggers.crons` — zie sectie-comment hierboven.
       "vars": {
-        "CLIENT_NAME": "__CLIENT_NAME__",
+        "CLIENT_NAME": "Factum Webshop",
         "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
         "MODEL_PLAN": "claude-sonnet-4-6",
         // Multi-agent-flag AAN op staging — dat is wat we willen testen.

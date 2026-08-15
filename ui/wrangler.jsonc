@@ -1,11 +1,11 @@
 {
   // ---------------------------------------------------------------------------
-  // TEMPLATE — vervang bij een nieuwe klant elke __CLIENT_SLUG__ door de slug
+  // TEMPLATE — vervang bij een nieuwe klant elke factum-webshop door de slug
   // uit `client.manifest.yaml`. Zoek daarna op __ om te controleren dat er geen
   // placeholder is blijven staan.
   // ---------------------------------------------------------------------------
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "__CLIENT_SLUG__-cockpit",
+  "name": "factum-webshop-cockpit",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
 
@@ -23,22 +23,22 @@
   // Document B2). Afwijzen start nooit een Workflow.
   "workflows": [
     {
-      "name": "__CLIENT_SLUG__-workflow-execute",
+      "name": "factum-webshop-workflow-execute",
       "binding": "EXECUTE",
       "class_name": "ExecuteWorkflow",
-      "script_name": "__CLIENT_SLUG__-mail-agent"
+      "script_name": "factum-webshop-mail-agent"
     }
   ],
 
   // Niet-geheime flags. AIOS_ORG_ID is verplicht — bepaalt welke tenant deze
   // cockpit-deployment bedient. Prod = klant-org cuid. Staging = child cuid.
   "vars": {
-    "CLIENT_NAME": "__CLIENT_NAME__",
+    "CLIENT_NAME": "Factum Webshop",
     "AIOS_RAG_ENABLED": "false",
-    "AIOS_ORG_ID": "__CLIENT_ORG_ID__"
-    // "DEMO_MODE": "true"  ← alleen op een demo-/salesomgeving. Zet dit NOOIT
-    // op een productie-cockpit: het laat een beheerder synthetische mail in de
-    // echte werkbak zetten.
+    "AIOS_ORG_ID": "__CLIENT_ORG_ID__",
+    // Aan: dit is de demo-repo. Zet dit NOOIT op een productie-cockpit — het
+    // laat een beheerder synthetische mail in de echte werkbak zetten.
+    "DEMO_MODE": "true"
   },
 
   // ---------------------------------------------------------------------------
@@ -64,14 +64,14 @@
       // GEEN expliciete "name" — wrangler voegt automatisch "-staging" toe.
       "workflows": [
         {
-          "name": "__CLIENT_SLUG__-workflow-execute-staging",
+          "name": "factum-webshop-workflow-execute-staging",
           "binding": "EXECUTE",
           "class_name": "ExecuteWorkflow",
-          "script_name": "__CLIENT_SLUG__-mail-agent-staging"
+          "script_name": "factum-webshop-mail-agent-staging"
         }
       ],
       "vars": {
-        "CLIENT_NAME": "__CLIENT_NAME__",
+        "CLIENT_NAME": "Factum Webshop",
         "AIOS_RAG_ENABLED": "false",
         // Cuid van het aangemaakte test-tenant. Leeg laten = deploy faalt luid
         // (AIOS_ORG_ID is required in makeCockpitClient) — bewust, om te
