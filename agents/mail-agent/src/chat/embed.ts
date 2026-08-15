@@ -216,6 +216,19 @@ const FRAME = String.raw`<!doctype html>
   }
   .msg.in { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
   .msg.out { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  /* Duimen onder een antwoord. Klein en grijs: ze horen beschikbaar te zijn,
+     niet om aandacht te vragen. */
+  .rate { align-self: flex-start; display: flex; align-items: center; gap: 4px; margin: -4px 0 2px; }
+  .rate button {
+    border: 0; background: transparent; cursor: pointer; padding: 2px 5px;
+    border-radius: 6px; font-size: 13px; line-height: 1; opacity: .45;
+  }
+  .rate button:hover { opacity: 1; background: var(--surface); }
+  .rate button[aria-pressed="true"] { opacity: 1; background: var(--surface); }
+  .rate .dank { font-size: 11px; color: var(--ink-soft); }
+  .rate-note { align-self: stretch; display: flex; gap: 6px; margin: 0 0 4px; }
+  .rate-note input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; }
+  .rate-note button { font-size: 12px; padding: 6px 10px; }
   .meta { align-self: center; font-size: 12px; color: var(--ink-soft); font-style: italic; text-align: center; }
   /* Eerder gesprek: bewaard maar dichtgeklapt. De bezoeker begint schoon en
      kan zelf terugkijken; hij hoeft niet eerst langs een muur oude tekst.
@@ -360,6 +373,89 @@ const FRAME = String.raw`<!doctype html>
     log.appendChild(box);
   }
 
+  // Een duim per antwoord, niet per gesprek: zo weet je wélk antwoord faalde.
+  // Bij een duim omlaag vragen we door — één tekstveld, optioneel, want de
+  // meeste mensen typen niets en dat mag.
+  function addRating(messageId) {
+    var rij = document.createElement('div');
+    rij.className = 'rate';
+
+    var omhoog = knop('👍', 'Dit hielp');
+    var omlaag = knop('👎', 'Dit hielp niet');
+    rij.appendChild(omhoog);
+    rij.appendChild(omlaag);
+    log.appendChild(rij);
+
+    function knop(teken, label) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = teken;
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.setAttribute('aria-pressed', 'false');
+      return b;
+    }
+
+    function stuur(rating, comment) {
+      // Best-effort: mislukt het, dan is dat vervelend maar niet iets waar de
+      // bezoeker last van hoort te hebben. Hij heeft zijn antwoord al.
+      try {
+        fetch('/chat/' + encodeURIComponent(session) + '/feedback', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ messageId: messageId, rating: rating, comment: comment || null }),
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    function bedankt() {
+      rij.innerHTML = '';
+      var d = document.createElement('span');
+      d.className = 'dank';
+      d.textContent = 'Bedankt voor je feedback.';
+      rij.appendChild(d);
+    }
+
+    omhoog.onclick = function () {
+      stuur('up');
+      bedankt();
+    };
+
+    omlaag.onclick = function () {
+      stuur('down');
+      omhoog.disabled = true;
+      omlaag.setAttribute('aria-pressed', 'true');
+      omlaag.disabled = true;
+
+      var vak = document.createElement('div');
+      vak.className = 'rate-note';
+      var veld = document.createElement('input');
+      veld.type = 'text';
+      veld.placeholder = 'Wat ging er mis? (optioneel)';
+      veld.setAttribute('aria-label', 'Wat ging er mis');
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'send';
+      ok.textContent = 'Stuur';
+      vak.appendChild(veld);
+      vak.appendChild(ok);
+      log.appendChild(vak);
+      log.scrollTop = log.scrollHeight;
+      veld.focus();
+
+      ok.onclick = function () {
+        // Nogmaals sturen met de toelichting erbij; dezelfde sleutel, dus de
+        // server werkt de bestaande stem bij in plaats van er een toe te voegen.
+        stuur('down', veld.value.trim());
+        vak.parentNode.removeChild(vak);
+        bedankt();
+      };
+      veld.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') ok.click();
+      });
+    };
+  }
+
   function setState(text) { stateEl.textContent = text; }
 
   // Een wachtregel per beurt: pending is het element zelf, zodat de tekst
@@ -427,7 +523,12 @@ const FRAME = String.raw`<!doctype html>
       // onder elkaar leest als drie gebeurtenissen, terwijl het één wachtende
       // beurt is.
       if (data.type === 'status') { setPending(data.body); return; }
-      if (data.type === 'message') { clearPending(); add(data.body, 'msg out'); return; }
+      if (data.type === 'message') {
+        clearPending();
+        add(data.body, 'msg out');
+        if (data.messageId) addRating(data.messageId);
+        return;
+      }
       if (data.type === 'notice') { clearPending(); add(data.body, 'notice'); return; }
     };
   }
