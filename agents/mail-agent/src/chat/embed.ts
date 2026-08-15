@@ -46,16 +46,29 @@ const LOADER = String.raw`(function () {
   var greeting = script.getAttribute('data-greeting') || '';
   var side = script.getAttribute('data-position') === 'left' ? 'left' : 'right';
 
-  // Sessie vasthouden over paginanavigatie heen: een bezoeker die doorklikt
-  // naar een productpagina hoort niet opnieuw te beginnen. localStorage en niet
-  // een cookie, want de widget hoort niets mee te sturen naar de klantsite.
+  // Ingelogde klant? Dan hangt het gesprek aan het klant-id van de winkel en
+  // niet aan iets in deze browser. De hash is door de server van de winkel
+  // gezet; wij geven 'm alleen door, de Worker controleert 'm.
+  var uid = script.getAttribute('data-user-id') || '';
+  var uhash = script.getAttribute('data-user-hash') || '';
+  var ingelogd = uid !== '' && uhash !== '';
+
+  // Waar de anonieme sessie leeft, is een beleidskeuze en geen detail:
+  //
+  //   sessionStorage  weg zodra het tabblad dicht gaat. Wie op een gedeelde of
+  //                   openbare computer chat, laat niets achter voor de
+  //                   volgende persoon.
+  //   localStorage    zou blijven staan, ook morgen, ook voor een ander.
+  //
+  // Voor een ingelogde klant is dat niet nodig: die vindt zijn gesprek terug
+  // via zijn klant-id, ook op een ander apparaat.
   var KEY = 'aios-chat-session';
   var session;
   try {
-    session = localStorage.getItem(KEY);
+    session = sessionStorage.getItem(KEY);
     if (!session) {
       session = 'w-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-      localStorage.setItem(KEY, session);
+      sessionStorage.setItem(KEY, session);
     }
   } catch (e) {
     // Privémodus of storage geblokkeerd: dan per paginalading een nieuwe sessie.
@@ -67,7 +80,8 @@ const LOADER = String.raw`(function () {
       + '?session=' + encodeURIComponent(id)
       + '&accent=' + encodeURIComponent(accent)
       + '&title=' + encodeURIComponent(title)
-      + (greeting ? '&greeting=' + encodeURIComponent(greeting) : '');
+      + (greeting ? '&greeting=' + encodeURIComponent(greeting) : '')
+      + (ingelogd ? '&uid=' + encodeURIComponent(uid) + '&uhash=' + encodeURIComponent(uhash) : '');
   }
   var src = frameSrc(session);
 
@@ -130,7 +144,7 @@ const LOADER = String.raw`(function () {
     // iframe met een vers id.
     if (e.data.type === 'aios-reset') {
       var vers = 'w-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-      try { localStorage.setItem(KEY, vers); } catch (err) {}
+      try { sessionStorage.setItem(KEY, vers); } catch (err) {}
       session = vers;
       frame.src = frameSrc(vers);
     }
@@ -363,7 +377,17 @@ const FRAME = String.raw`<!doctype html>
 
   function connect() {
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(proto + '//' + location.host + '/chat/' + encodeURIComponent(session) + '/ws');
+    // Identiteit gaat mee op de socket en niet alleen bij het laden van deze
+    // pagina: het pad bepaalt welk gesprek je krijgt, dus daar hoort de
+    // controle. De server rekent de handtekening na en kiest de sessie.
+    var uid = params.get('uid');
+    var uhash = params.get('uhash');
+    var extra = uid && uhash
+      ? '?uid=' + encodeURIComponent(uid) + '&uhash=' + encodeURIComponent(uhash)
+      : '';
+    ws = new WebSocket(
+      proto + '//' + location.host + '/chat/' + encodeURIComponent(session) + '/ws' + extra,
+    );
 
     ws.onopen = function () {
       attempt = 0;

@@ -47,6 +47,20 @@ export interface Env {
    */
   CHAT_ALLOWED_ORIGINS?: string;
 
+  /**
+   * Gedeeld geheim waarmee de webshop het klant-id ondertekent, zodat een
+   * ingelogde klant zijn gesprek over apparaten heen meeneemt.
+   *
+   * De winkel rekent `hash_hmac('sha256', $klantId, $geheim)` uit op de server
+   * en zet dat als `data-user-hash` bij de widget. Wij rekenen hetzelfde uit en
+   * vergelijken. Zonder deze var wordt elke identiteitsclaim genegeerd en is
+   * iedereen anoniem — bewust, want zonder geheim valt er niets te geloven.
+   *
+   * Zet 'm met `wrangler secret put CHAT_IDENTITY_SECRET`. Nooit als `var`: dit
+   * hoort niet in een repo en niet in een dashboard-overzicht.
+   */
+  CHAT_IDENTITY_SECRET?: string;
+
   /** Berichten per minuut per chatsessie. Ongeldig/ontbrekend → 10. */
   CHAT_RATE_PER_MIN?: string;
   /** Harde bovengrens per chatsessie. Ongeldig/ontbrekend → 100. */

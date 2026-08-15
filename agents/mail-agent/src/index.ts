@@ -19,6 +19,7 @@ import { AggregatorWorkflow } from './workflows/aggregator.js';
 import { ChatSession } from './chat/session-do.js';
 import { chatWidgetResponse } from './chat/widget.js';
 import { widgetLoaderResponse, widgetFrameResponse } from './chat/embed.js';
+import { verifyChatIdentity, customerSessionId } from '@factumai/agent-core';
 import type { Env } from './env.js';
 
 export {
@@ -108,7 +109,29 @@ export default {
       if (!sessionId) {
         return new Response('sessie-id ontbreekt in path', { status: 400 });
       }
-      const id = env.CHAT_SESSION.idFromName(sessionId);
+
+      // Is deze bezoeker een ingelogde klant van de winkel? Dan hangt zijn
+      // gesprek aan zijn klant-id in plaats van aan een willekeurig id uit de
+      // browser, en vindt hij het morgen op een ander apparaat terug.
+      //
+      // De verificatie hoort HIER en niet alleen bij het renderen van de widget:
+      // het pad bepaalt welk Durable Object je krijgt, dus wie een sessienaam
+      // raadt, zou anders bij dat gesprek kunnen. Klopt de handtekening niet,
+      // dan valt de bezoeker terug op de anonieme sessie uit het pad — geen
+      // foutmelding, wel een logregel.
+      const identity = await verifyChatIdentity(
+        { customerId: url.searchParams.get('uid'), hash: url.searchParams.get('uhash') },
+        env.CHAT_IDENTITY_SECRET,
+      );
+      if (identity.reason !== 'anoniem' && !identity.verified) {
+        console.warn(`[chat] identiteitsclaim afgewezen: ${identity.reason}`);
+      }
+      const naam =
+        identity.verified && identity.customerId && env.CHAT_IDENTITY_SECRET
+          ? await customerSessionId(identity.customerId, env.CHAT_IDENTITY_SECRET)
+          : sessionId;
+
+      const id = env.CHAT_SESSION.idFromName(naam);
       return env.CHAT_SESSION.get(id).fetch(request);
     }
 
