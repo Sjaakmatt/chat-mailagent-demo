@@ -26,6 +26,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0019_decision_logs`        | beslislog per run: poort, uitkomst, bronnen         |
 | `0020_conversations_tickets`| gesprekken, berichten, tickets + nummerteller       |
 | `0021_revoke_security_definer` | RPC-grants dichtzetten — **verplicht** op bestaande DB's |
+| `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
 
 ## Waarom de gaten in de nummering
 

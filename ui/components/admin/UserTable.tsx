@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Trash2, Loader2, ShieldCheck } from "lucide-react";
+import { UserPlus, Trash2, Loader2, ShieldCheck, Building2 } from "lucide-react";
+import {
+  isDomainRule,
+  isValidAllowlistEntry,
+  normalizeEmail,
+} from "@factumai/agent-core";
 import { cn } from "@/lib/utils";
 
 type Role = "admin" | "reviewer" | "viewer";
@@ -48,9 +53,9 @@ export function UserTable({
     e.preventDefault();
     setError(null);
     setNotice(null);
-    const addr = email.trim().toLowerCase();
-    if (!addr.includes("@")) {
-      setError("Voer een geldig e-mailadres in.");
+    const addr = normalizeEmail(email);
+    if (!isValidAllowlistEntry(addr)) {
+      setError("Voer een geldig e-mailadres in, of een heel domein als @klant.nl.");
       return;
     }
     setInviting(true);
@@ -65,7 +70,11 @@ export function UserTable({
         throw new Error(j.error ?? "uitnodigen mislukt");
       }
       setEmail("");
-      setNotice(`Uitnodiging verstuurd naar ${addr} (rol ${ROLE_LABEL[role]}).`);
+      setNotice(
+        isDomainRule(addr)
+          ? `Iedereen met een adres op ${addr} krijgt nu de rol ${ROLE_LABEL[role]}.`
+          : `Uitnodiging verstuurd naar ${addr} (rol ${ROLE_LABEL[role]}).`,
+      );
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "uitnodigen mislukt");
@@ -130,11 +139,15 @@ export function UserTable({
           Gebruiker uitnodigen
         </h3>
         <form onSubmit={invite} className="flex flex-col sm:flex-row gap-3">
+          {/* Bewust type="text": browservalidatie op type="email" weigert een
+              domeinregel als "@klant.nl". Validatie doet isValidAllowlistEntry. */}
           <input
-            type="email"
+            type="text"
+            inputMode="email"
+            autoComplete="off"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="collega@klant.nl"
+            placeholder="collega@klant.nl of @klant.nl"
             className="flex-1 rounded-lg border border-brand-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           />
           <select
@@ -165,7 +178,10 @@ export function UserTable({
         </form>
         <p className="text-xs text-ink-subtle mt-2">
           De genodigde krijgt een e-mail met een code om in te loggen en een
-          wachtwoord in te stellen.
+          wachtwoord in te stellen. Vul je een heel domein in (
+          <code className="text-[11px]">@klant.nl</code>), dan krijgt iedereen met
+          zo&apos;n adres deze rol — er gaat dan geen uitnodiging uit. Een losse
+          regel voor één persoon gaat vóór de domeinregel.
         </p>
       </div>
 
@@ -206,6 +222,12 @@ export function UserTable({
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-sm text-ink font-medium truncate flex items-center gap-2">
+                    {isDomainRule(u.email) && (
+                      <Building2
+                        className="w-3.5 h-3.5 text-ink-subtle shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
                     {u.email}
                     {isSelf && (
                       <span className="text-[10px] uppercase tracking-wide text-ink-subtle">
@@ -213,6 +235,11 @@ export function UserTable({
                       </span>
                     )}
                   </div>
+                  {isDomainRule(u.email) && (
+                    <div className="text-xs text-ink-subtle mt-0.5">
+                      Iedereen met een adres op dit domein
+                    </div>
+                  )}
                 </div>
 
                 <span

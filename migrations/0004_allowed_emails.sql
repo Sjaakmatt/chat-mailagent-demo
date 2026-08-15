@@ -21,3 +21,10 @@ alter table public.allowed_emails enable row level security;
 -- insert into public.allowed_emails (email, role)
 -- values ('<beheerder@klant.nl>', 'admin')
 -- on conflict (email) do nothing;
+--
+-- Ná migratie 0022 mag een rij ook een heel domein zijn, geschreven als
+-- `@klant.nl`. Iedereen met een adres op dat domein krijgt dan die rol:
+--
+-- insert into public.allowed_emails (email, role)
+-- values ('@klant.nl', 'reviewer')
+-- on conflict (email) do nothing;

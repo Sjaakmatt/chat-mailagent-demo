@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
+import {
+  allowlistKeysFor,
+  normalizeEmail,
+  resolveRoleFromRows,
+  type Role,
+} from "@factumai/agent-core";
 import { supabaseFromCookies, supabaseAdmin } from "@/lib/supabase/server";
 
-export type Role = "admin" | "reviewer" | "viewer";
+export type { Role };
 
 const RANK: Record<Role, number> = { viewer: 0, reviewer: 1, admin: 2 };
 
@@ -27,18 +33,25 @@ export async function getCurrentUser(): Promise<AuthedUser | null> {
   return resolveRole(email);
 }
 
-/** Zoekt de rol bij een (al geverifieerd) e-mailadres. */
+/**
+ * Zoekt de rol bij een (al geverifieerd) e-mailadres.
+ *
+ * Haalt in één query zowel de persoonlijke regel als de domeinregel op
+ * (`jan@klant.nl` en `@klant.nl`); welke van de twee wint, beslist
+ * `resolveRoleFromRows` in agent-core — daar staan ook de tests.
+ */
 export async function resolveRole(email: string): Promise<AuthedUser | null> {
   const admin = supabaseAdmin();
   if (!admin) return null;
+  const normalized = normalizeEmail(email);
   const { data, error } = await admin
     .from("allowed_emails")
-    .select("role")
-    .eq("email", email.toLowerCase())
-    .maybeSingle();
+    .select("email, role")
+    .in("email", allowlistKeysFor(normalized));
   if (error || !data) return null;
-  const role = (data.role as Role) ?? "reviewer";
-  return { email: email.toLowerCase(), role };
+
+  const role = resolveRoleFromRows(normalized, data as { email: string; role: string | null }[]);
+  return role ? { email: normalized, role } : null;
 }
 
 /**

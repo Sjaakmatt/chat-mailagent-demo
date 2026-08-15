@@ -127,6 +127,17 @@ Wie mag inloggen, staat in `allowed_emails` (rollen: `admin`, `reviewer`,
 `viewer`). De eerste admin zet je met de hand in de tabel; daarna kan die via de
 Toegang-pagina de rest uitnodigen.
 
+Een rij is óf één adres (`jan@klant.nl`) óf een heel domein (`@klant.nl`). Met
+een domeinregel krijgt iedereen met zo'n adres die rol, zonder aparte
+uitnodiging — handig als de hele klantorganisatie mee mag kijken. Een
+persoonlijke rij gaat vóór de domeinregel, dus je kunt één iemand promoveren of
+met `viewer` terugschroeven zonder het domein te raken.
+
+Let op wat een domeinregel betekent: iedereen die een adres op dat domein kan
+laten verifiëren via Supabase Auth, komt binnen met die rol. Zet er dus geen
+domein in dat je niet zelf beheert, en geef een domeinregel niet lichtvaardig
+`admin`.
+
 ---
 
 ## Stap 6 — RAG (optioneel)
