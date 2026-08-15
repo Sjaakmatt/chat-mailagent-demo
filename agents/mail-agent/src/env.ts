@@ -1,5 +1,6 @@
 import type {
   Classification,
+  DecisionLog,
   PartialResponse,
   Signal,
   ReviewItem,
@@ -195,6 +196,13 @@ export interface PlatformStore {
   listPartialResponses(signalId: string): Promise<PartialResponse[]>;
   /** Snelle telling voor de aggregator-wachtgang. */
   countPartialResponses(signalId: string): Promise<number>;
+
+  /**
+   * Best-effort: schrijf het beslislog van deze run. Idempotent op signalId.
+   * Faalt nooit door: het log is er om te reconstrueren, niet om de
+   * afhandeling te blokkeren.
+   */
+  saveDecisionLog(log: DecisionLog): Promise<void>;
 
   /**
    * Best-effort: log een rij in `aios_unknown_intent_log` als de router

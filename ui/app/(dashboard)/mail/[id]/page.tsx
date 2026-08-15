@@ -15,10 +15,12 @@ import {
   makeClient,
   getReviewItem,
   listReviewEdits,
+  getDecisionLog,
 } from "@/lib/db";
 import { signAttachmentUrl } from "@/lib/storage";
 import { ReviewForm } from "@/components/mail-detail/ReviewForm";
 import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
+import { DecisionPanel } from "@/components/mail-detail/DecisionPanel";
 import { CompoundBreakdown } from "@/components/mail-detail/CompoundBreakdown";
 import { cn, timeAgoNL } from "@/lib/utils";
 
@@ -145,12 +147,18 @@ export default async function ReviewDetailPage({
   // die extra tijdlijn-punten wil tonen, haalt ze hier op en geeft ze door als
   // `extraEvents` aan <CaseTimeline> — zie examples/warehouse-module.
   let edits: Awaited<ReturnType<typeof listReviewEdits>> = [];
+  let decisionLog: Awaited<ReturnType<typeof getDecisionLog>> = null;
   try {
     if (env) {
-      edits = await listReviewEdits(makeClient(env), row.id);
+      const client = makeClient(env);
+      [edits, decisionLog] = await Promise.all([
+        listReviewEdits(client, row.id),
+        getDecisionLog(client, row.id),
+      ]);
     }
   } catch {
     edits = [];
+    decisionLog = null;
   }
 
   return (
@@ -230,6 +238,10 @@ export default async function ReviewDetailPage({
             <div className="lg:col-span-2 space-y-6">
               <Panel title="Tijdlijn">
                 <CaseTimeline item={row} edits={edits} />
+              </Panel>
+
+              <Panel title="Beslissing">
+                <DecisionPanel log={decisionLog} />
               </Panel>
 
               <AgentAnalysis

@@ -22,7 +22,8 @@
     "./taxonomy": "./dist/taxonomy/index.js",
     "./channels": "./dist/channels/index.js",
     "./domain-gate": "./dist/domain-gate/index.js",
-    "./outcomes": "./dist/outcomes/index.js"
+    "./outcomes": "./dist/outcomes/index.js",
+    "./decision-log": "./dist/decision-log/index.js"
   },
   "scripts": {
     "build": "tsc",

@@ -36,6 +36,7 @@ import {
   type OutcomeDecision,
 } from '../outcomes/index.js';
 import { channelForDomain } from '../channels/index.js';
+import type { DecisionSource } from '../decision-log/index.js';
 
 export interface Classification {
   /** Categorie/triage-label (klant-specifiek). */
@@ -245,6 +246,8 @@ export interface OrchestrationResult {
   ungrounded: string[];
   /** Definitieve uitkomst ná de tool-calls, inclusief eventuele degradatie. */
   outcome?: OutcomeDecision;
+  /** Geraadpleegde bronnen in deze run — voedt het beslislog. */
+  sources?: DecisionSource[];
 }
 
 function defaultId(): string {
@@ -443,7 +446,16 @@ export async function runSpecialize(
     createdAt: now(),
   };
 
-  return { reviewItem, classification, resolved, ungrounded, outcome };
+  // Elke geregistreerde tool-call is een geraadpleegde bron. `hit` is false
+  // als de call wel draaide maar niets bruikbaars opleverde — dat is precies
+  // wat je in het beslislog wilt terugzien.
+  const sources: DecisionSource[] = recorder.all().map((r) => ({
+    id: r.toolCallId,
+    tool: r.tool,
+    hit: true,
+  }));
+
+  return { reviewItem, classification, resolved, ungrounded, outcome, sources };
 }
 
 /**

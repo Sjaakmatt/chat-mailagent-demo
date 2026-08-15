@@ -23,6 +23,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0016_partial_responses`    | compound fan-in tussenlaag                          |
 | `0017_review_items_compound`| compound-vlag + per-taak samenvattingen             |
 | `0018_unknown_intent_log`   | router-misses, voedt latere intent-discovery        |
+| `0019_decision_logs`        | beslislog per run: poort, uitkomst, bronnen         |
 
 ## Waarom de gaten in de nummering
 

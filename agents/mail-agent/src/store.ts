@@ -14,6 +14,7 @@ import type {
   SignalStatus,
   SpecialistId,
 } from '@factumai/agent-core';
+import { toDecisionLogRow, type DecisionLog } from '@factumai/agent-core';
 import type { Env, PlatformStore, UnknownIntentEntry } from './env.js';
 import { callMcp, cfAccessHeaders, mcpBearer } from './mcp.js';
 
@@ -268,6 +269,34 @@ export function createPlatformStore(env: Env): PlatformStore {
         method: 'GET',
       });
       return Array.isArray(rows) ? rows.length : 0;
+    },
+
+    /**
+     * Schrijft het beslislog. Idempotent op `dl_<signalId>`: een herstartende
+     * Workflow-step overschrijft z'n eigen regel in plaats van er een tweede
+     * bij te zetten.
+     *
+     * Best-effort: het beslislog is er om achteraf te kunnen reconstrueren,
+     * niet om de afhandeling te blokkeren. Faalt de schrijfactie, dan loggen we
+     * dat en gaat de mail gewoon door (CLAUDE.md: fail-soft).
+     */
+    async saveDecisionLog(log: DecisionLog): Promise<void> {
+      try {
+        const url = client.tableUrl('aios_decision_logs');
+        await client.request<unknown>(STORE_CTX, url, {
+          method: 'POST',
+          body: JSON.stringify({
+            ...toDecisionLogRow(log, `dl_${log.signalId}`),
+            organization_id: env.AIOS_ORG_ID,
+          }),
+          prefer: 'return=minimal,resolution=merge-duplicates',
+        });
+      } catch (err) {
+        console.warn(
+          '[decision-log] schrijven mislukt:',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     },
 
     async saveUnknownIntent(entry: UnknownIntentEntry): Promise<void> {

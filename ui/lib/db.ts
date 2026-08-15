@@ -4,6 +4,11 @@ import type { CockpitEnv } from "./env";
 import { CockpitDbClient, makeCockpitClient } from "./tenant-query";
 import type { ReviewItemRow, ReviewStatus } from "./review";
 import {
+  fromDecisionLogRow,
+  type DecisionLog,
+  type DecisionLogRow,
+} from "@factumai/agent-core";
+import {
   DOMAIN_AUDIT_SOURCES,
   selectedDomainSources,
   type DomainAuditSource,
@@ -408,6 +413,26 @@ export async function listAuditForExport(
     method: "GET",
   });
   return Array.isArray(rows) ? rows : [];
+}
+
+/**
+ * Beslislog bij een ReviewItem. Fail-soft: items van vóór de invoering van het
+ * beslislog hebben er geen, en dat mag het detailscherm niet breken.
+ */
+export async function getDecisionLog(
+  client: CockpitDbClient,
+  reviewItemId: string,
+): Promise<DecisionLog | null> {
+  try {
+    const url = client.tableUrl("aios_decision_logs");
+    url.searchParams.set("review_item_id", `eq.${reviewItemId}`);
+    url.searchParams.set("limit", "1");
+    const rows = await client.request<DecisionLogRow[]>(CTX, url, { method: "GET" });
+    const row = Array.isArray(rows) ? rows[0] : undefined;
+    return row ? fromDecisionLogRow(row) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getReviewItem(
