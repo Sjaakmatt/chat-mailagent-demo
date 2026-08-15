@@ -29,22 +29,49 @@ export interface CategoryDef {
    * kiest. Conservatief invullen: bij twijfel `escalate` (naar een mens).
    */
   specialist: SpecialistId;
+  /**
+   * Eén regel voor de classifier: wanneer hoort een bericht hier, en — vaak
+   * belangrijker — wanneer níét.
+   *
+   * Dit is geen documentatie maar werkende configuratie. Een kale lijst slugs
+   * laat het model raden wat een naam betekent, en dan belandt "ik zie een
+   * mailagent op de website" onder `demo_aanvraag` omdat het woord "mailagent"
+   * commercieel klinkt. Vervolgens vraagt de agent netjes om naam en bedrijf,
+   * precies zoals het beleid voor die categorie voorschrijft, op een vraag die
+   * gewoon een productvraag was.
+   *
+   * Schrijf de afbakening op, niet de omschrijving. "Alleen als de bezoeker zelf
+   * om een gesprek vraagt" stuurt beter dan "demo-aanvragen".
+   */
+  hint?: string;
 }
 
 /** Neutrale startset — vervang per klant. */
 export const CATEGORIES: readonly CategoryDef[] = Object.freeze([
-  { slug: 'levertijd_status', label: 'Levertijd / status', specialist: 'simple_reply' },
-  { slug: 'order_wijziging', label: 'Orderwijziging', specialist: 'order_change' },
-  { slug: 'retour_ruilen', label: 'Retour / ruilen', specialist: 'order_change' },
-  { slug: 'garantie_claim', label: 'Garantieclaim', specialist: 'complaint' },
-  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply' },
-  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical' },
-  { slug: 'facturatie', label: 'Facturatie', specialist: 'simple_reply' },
-  { slug: 'klacht', label: 'Klacht', specialist: 'complaint' },
-  { slug: 'commercieel', label: 'Commercieel', specialist: 'escalate' },
-  { slug: 'gdpr_verzoek', label: 'Privacy / GDPR-verzoek', specialist: 'gdpr' },
-  { slug: 'overig', label: 'Overig', specialist: 'escalate' },
+  { slug: 'levertijd_status', label: 'Levertijd / status', specialist: 'simple_reply', hint: 'waar blijft mijn bestelling, wanneer wordt het geleverd, track & trace' },
+  { slug: 'order_wijziging', label: 'Orderwijziging', specialist: 'order_change', hint: 'adres, aantal of artikel wijzigen, of annuleren vóór verzending' },
+  { slug: 'retour_ruilen', label: 'Retour / ruilen', specialist: 'order_change', hint: 'retourneren, ruilen, herroepingsrecht, geld terug' },
+  { slug: 'garantie_claim', label: 'Garantieclaim', specialist: 'complaint', hint: 'defect binnen de garantietermijn, ontbrekende of kapotte onderdelen' },
+  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply', hint: 'maten, materialen, compatibiliteit, gebruik — ook als de klant enthousiast klinkt. De standaard voor elke inhoudelijke vraag over een artikel' },
+  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical', hint: 'werkt niet zoals verwacht, maar nog niet vastgesteld dat er iets stuk is' },
+  { slug: 'facturatie', label: 'Facturatie', specialist: 'simple_reply', hint: 'facturen, betaalmethoden, btw, betaling die niet klopt' },
+  { slug: 'klacht', label: 'Klacht', specialist: 'complaint', hint: 'ontevredenheid over een product, bezorging of afhandeling; boze of teleurgestelde toon' },
+  { slug: 'commercieel', label: 'Commercieel', specialist: 'escalate', hint: 'grotere aantallen, offerte, wederverkoop, samenwerking. ALLEEN als de klant er zelf om vraagt' },
+  { slug: 'gdpr_verzoek', label: 'Privacy / GDPR-verzoek', specialist: 'gdpr', hint: 'AVG-verzoek over de eigen gegevens van de schrijver: inzage, verwijdering, uitschrijven' },
+  { slug: 'overig', label: 'Overig', specialist: 'escalate', hint: 'te vaag om te routeren, of past nergens onder. Bij een losse begroeting hoort dit, ook als er eerder in het gesprek iets anders speelde' },
 ]);
+
+/**
+ * De categorielijst zoals de classifier 'm te zien krijgt: slug plus afbakening.
+ *
+ * Een kale opsomming van slugs laat het model de betekenis raden uit de naam.
+ * Dat gaat mis op precies de plek waar het duur is: "ik zie een mailagent op de
+ * website" belandde onder `demo_aanvraag` omdat dat commercieel klinkt, waarna
+ * de agent keurig om naam en bedrijf vroeg — het beleid voor die categorie.
+ */
+export const CATEGORY_GUIDE: string = CATEGORIES.map(
+  (c) => `- ${c.slug}${c.hint ? `: ${c.hint}` : ''}`,
+).join('\n');
 
 /** Alle slugs — voor de classify-prompt en validatie. */
 export const CATEGORY_SLUGS: readonly string[] = Object.freeze(

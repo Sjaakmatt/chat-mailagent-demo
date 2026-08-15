@@ -7,6 +7,7 @@ import {
   outcomeFromClassification,
   renderPrompt,
   CATEGORY_SLUGS,
+  CATEGORY_GUIDE,
   getIntentConfig,
   knownSpecialistIds,
   type OrchestrationSteps,
@@ -730,10 +731,13 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               'Staat er eerder in het gesprek een ordernummer of e-mailadres, dan telt dat ' +
               'mee: neem het over in extracted en behandel de vraag als geïdentificeerd. ' +
               'De klant hoeft zich niet elk bericht opnieuw voor te stellen. ' +
-              'category MOET exact één van deze waarden zijn (kies de best passende, anders "overig"): ' +
-              `${CATEGORY_SLUGS.join(', ')}. ` +
-              'gdpr_verzoek = AVG/privacy-verzoek: uitschrijven mailinglist, verwijdering ' +
-              'persoonsgegevens, inzage data, recht op vergetelheid, dataportabiliteit. ' +
+              'category MOET exact één van deze waarden zijn (kies de best passende, ' +
+              'anders "overig"). Let op de afbakening achter de dubbele punt — die is ' +
+              'leidend, niet wat de naam suggereert:\n' +
+              `${CATEGORY_GUIDE}\n` +
+              'Het LAATSTE bericht van de klant bepaalt de categorie. Eerdere beurten zijn ' +
+              'context om verwijzingen op te lossen ("en die andere dan?"), geen onderwerp: ' +
+              'een losse begroeting blijft een begroeting, ook als er eerder iets anders speelde. ' +
               'needsRag=true als een goed antwoord huisstijl/historie/SOP nodig heeft. ' +
               'escalate=true bij een juridische dreiging (advocaat, rechtszaak, claim, ACM/' +
               'geschillencommissie, ingebrekestelling) of een andere ernstige/risicovolle ' +

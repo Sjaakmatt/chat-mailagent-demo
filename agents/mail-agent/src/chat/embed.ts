@@ -204,15 +204,36 @@ const FRAME = String.raw`<!doctype html>
   .msg.out { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
   .meta { align-self: center; font-size: 12px; color: var(--ink-soft); font-style: italic; text-align: center; }
   /* Eerder gesprek: bewaard maar dichtgeklapt. De bezoeker begint schoon en
-     kan zelf terugkijken; hij hoeft niet eerst langs een muur oude tekst. */
-  .earlier { align-self: stretch; margin: 0 0 4px; }
+     kan zelf terugkijken; hij hoeft niet eerst langs een muur oude tekst.
+
+     Opengeklapt moet het een archief blijven en geen vervolg worden: eigen
+     kader, gedempte kleuren en een afsluitende regel. Anders schuift het oude
+     gesprek tussen het nieuwe en lijkt het één doorlopend gesprek. */
+  .earlier { align-self: stretch; margin: 0 0 6px; }
   .earlier summary {
     cursor: pointer; font-size: 12px; color: var(--ink-soft);
     text-align: center; padding: 6px; border-radius: 8px; list-style: none;
   }
   .earlier summary::-webkit-details-marker { display: none; }
   .earlier summary:hover { background: var(--surface); }
-  .earlier .items { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
+  .earlier[open] {
+    background: #f1f5f9; border: 1px solid var(--line);
+    border-radius: 10px; padding: 4px;
+  }
+  .earlier[open] summary { font-weight: 600; }
+  .earlier .items {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px 8px; opacity: .72;
+  }
+  /* Kleinere, gedempte bellen: herkenbaar als hetzelfde gesprek, duidelijk
+     niet het huidige. */
+  .earlier .items .msg { font-size: 13px; max-width: 92%; }
+  .earlier .items .msg.in { background: #64748b; }
+  .earlier .items .msg.out { background: var(--surface); }
+  .earlier .end {
+    text-align: center; font-size: 11px; color: var(--ink-soft);
+    border-top: 1px dashed var(--line); padding-top: 8px; margin: 0 8px;
+  }
   .notice {
     align-self: stretch; font-size: 13px; color: var(--alert);
     background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px;
@@ -298,9 +319,13 @@ const FRAME = String.raw`<!doctype html>
     var box = document.createElement('details');
     box.className = 'earlier';
     var kop = document.createElement('summary');
-    kop.textContent = messages.length === 1
-      ? 'Eerder gesprek (1 bericht) — klik om te openen'
-      : 'Eerder gesprek (' + messages.length + ' berichten) — klik om te openen';
+    var telling = messages.length === 1 ? '1 bericht' : messages.length + ' berichten';
+    function zetKop() {
+      kop.textContent = 'Eerder gesprek (' + telling + ') — '
+        + (box.open ? 'klik om te sluiten' : 'klik om te openen');
+    }
+    zetKop();
+    box.addEventListener('toggle', zetKop);
     box.appendChild(kop);
 
     var items = document.createElement('div');
@@ -312,6 +337,12 @@ const FRAME = String.raw`<!doctype html>
       items.appendChild(el);
     });
     box.appendChild(items);
+
+    var slot = document.createElement('div');
+    slot.className = 'end';
+    slot.textContent = 'einde eerder gesprek';
+    box.appendChild(slot);
+
     log.appendChild(box);
   }
 

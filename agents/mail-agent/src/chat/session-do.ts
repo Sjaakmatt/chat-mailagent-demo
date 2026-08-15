@@ -64,6 +64,8 @@ const CONV_KEY = 'chat:conv-ready';
  * geschiedenis wil; dit is de werkkopie voor de lus.
  */
 const RECENT_KEY = 'chat:recent';
+/** Wanneer er voor het laatst iets in deze sessie gebeurde. Zie `CHAPTER_GAP_MS`. */
+const SEEN_KEY = 'chat:last-seen';
 
 /** Terugvalwaarden als de bijbehorende `var` ontbreekt of onzin bevat. */
 const DEFAULT_PER_MIN = 10;
@@ -80,6 +82,21 @@ const HISTORY_LIMIT = 100;
  * dat een uur duurt.
  */
 const CONTEXT_TURNS = 10;
+
+/**
+ * Hoe lang stilte een gesprek afsluit.
+ *
+ * Het sessie-id leeft in localStorage en verloopt niet, dus zonder deze grens
+ * blijft iemand die morgen terugkomt technisch in hetzelfde gesprek zitten. De
+ * widget toont dat verloop dan dichtgeklapt met een begroeting eronder — een
+ * schone start — terwijl de agent nog tien beurten van gisteren meekrijgt en
+ * antwoordt met "bedankt dat u terugreageert". Dat is precies de mismatch die
+ * een chat onbetrouwbaar laat voelen.
+ *
+ * Binnen dit venster is een herverbinding een verversing: alles blijft staan.
+ * Erbuiten is het een nieuw gesprek, en dan begint de agent ook echt schoon.
+ */
+const CHAPTER_GAP_MS = 30 * 60_000;
 
 /**
  * Wat de bezoeker leest terwijl hij wacht. De lus levert een fase; de tekst
@@ -172,9 +189,9 @@ export class ChatSession extends DurableObject<Env> {
       // socket openblijft. Berichten komen daarna binnen op `webSocketMessage`.
       this.ctx.acceptWebSocket(server);
 
-      // Wat er al stond meesturen, zodat een herverbinding niet leeg begint.
-      // Uit de database, niet uit geheugen — geheugen is er na hibernatie niet.
-      void this.sendHistory(server);
+      // Te lang stil? Dan is dit geen herverbinding maar een nieuw gesprek, en
+      // hoort de agent net zo schoon te beginnen als het venster eruitziet.
+      void this.startNewChapterIfStale().then(() => this.sendHistory(server));
 
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -315,6 +332,7 @@ export class ChatSession extends DurableObject<Env> {
     // kapot maakt.
     const context = await this.recentTurns();
     await this.remember({ role: 'klant', body });
+    await this.ctx.storage.put(SEEN_KEY, Date.now());
 
     // Eén keer opgebouwd en twee keer gebruikt: hij gaat naar de bus én
     // rechtstreeks de beurt in. Twee keer samenstellen is twee kansen om uit
@@ -409,6 +427,24 @@ export class ChatSession extends DurableObject<Env> {
         'Het duurt even langer dan normaal. Ik ben er nog mee bezig — je krijgt zo antwoord.',
       );
     }
+  }
+
+  /**
+   * Sluit het vorige gesprek af als er lang niets is gebeurd.
+   *
+   * Wist alleen het werkgeheugen van de agent, niet de geschiedenis: de
+   * bezoeker kan zijn eerdere gesprek nog gewoon openklappen in de widget. Wat
+   * verdwijnt is dat de agent erover begint.
+   */
+  private async startNewChapterIfStale(): Promise<void> {
+    const laatst = await this.ctx.storage.get<number>(SEEN_KEY);
+    if (laatst === undefined) return;
+    if (Date.now() - laatst < CHAPTER_GAP_MS) return;
+    await this.ctx.storage.delete(RECENT_KEY);
+    console.log(
+      `[chat] ${this.sessionId()}: langer dan ${Math.round(CHAPTER_GAP_MS / 60000)} min stil — ` +
+        'nieuw gesprek, werkgeheugen leeg',
+    );
   }
 
   /** Het gespreksvenster zoals het nu in de opslag staat. */
