@@ -221,6 +221,12 @@ export interface PlatformStore {
   saveReviewItem(item: ReviewItem): Promise<void>;
   loadReviewItem(reviewItemId: string): Promise<ReviewItem>;
   markSignal(signalId: string, status: Signal['status']): Promise<void>;
+  /**
+   * Claimt een signaal om het te verwerken; `false` als een ander het al heeft.
+   * Voorkomt dat de chat-DO en de poller dezelfde beurt allebei draaien — en de
+   * bezoeker dus twee antwoorden krijgt. Zie de implementatie in `store.ts`.
+   */
+  claimSignal(signalId: string, staleAfterMs?: number): Promise<boolean>;
 
   // ── Fase 3 — compound-fan-in ──────────────────────────────────────────
   /**

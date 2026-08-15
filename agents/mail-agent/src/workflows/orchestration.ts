@@ -26,15 +26,14 @@ export class OrchestrationWorkflow extends WorkflowEntrypoint<Env, Orchestration
     await step.do('orchestrate', async () => {
       const signal = await store.loadSignal(event.payload.signalId);
 
-      // Al afgehandeld — vrijwel altijd doordat de chat-DO deze beurt zelf heeft
-      // gedraaid en de wachtrij hier achteraan komt. Opnieuw draaien zou de
-      // bezoeker een tweede antwoord sturen en een tweede ReviewItem opleveren.
-      if (signal.status === 'DONE' || signal.processedAt) {
-        console.log(`[orchestration] ${signal.id} was al afgehandeld — overgeslagen`);
-        return;
+      // Geen eigen check op de status hier: `runSignalTurn` claimt het signaal
+      // en geeft `null` terug als de andere route het al heeft. Dat moet daar
+      // gebeuren en niet hier, want tussen een check en het werk zit tijd — en
+      // precies in dat gat draaide de beurt vandaag twee keer.
+      const turn = await runSignalTurn(this.env, signal);
+      if (!turn) {
+        console.log(`[orchestration] ${signal.id} was al geclaimd — overgeslagen`);
       }
-
-      await runSignalTurn(this.env, signal);
     });
   }
 }
