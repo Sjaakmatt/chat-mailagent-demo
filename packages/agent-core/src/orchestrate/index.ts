@@ -28,7 +28,14 @@ import {
 } from '../grounding/index.js';
 import { getIntentConfig, type IntentConfig } from '../specialists/index.js';
 import { DOMAIN } from '../domain-gate/index.js';
-import type { Outcome } from '../outcomes/index.js';
+import {
+  finalizeOutcome,
+  isIdentified,
+  outcomeFromClassification,
+  type Outcome,
+  type OutcomeDecision,
+} from '../outcomes/index.js';
+import { channelForDomain } from '../channels/index.js';
 
 export interface Classification {
   /** Categorie/triage-label (klant-specifiek). */
@@ -173,6 +180,15 @@ export interface Plan {
   noReply?: boolean;
   /** Korte reden waarom no_reply geldt (uit de beleidsrichtlijn). */
   noReplyReason?: string;
+  /**
+   * Kwam er daadwerkelijk een systeemantwoord terug uit een bron-lookup
+   * (order, status, tracking)? Een geslaagde call die niets vond is `false`.
+   *
+   * Bepaalt samen met de identificatie of een voorlopige uitkomst `systeem`
+   * overeind blijft — zie `finalizeOutcome()`. Laat 'm weg als de plan-stap
+   * geen bron heeft geraadpleegd; dan telt dat als geen systeemantwoord.
+   */
+  systemAnswer?: boolean;
 }
 
 export interface PlanInput {
@@ -227,6 +243,8 @@ export interface OrchestrationResult {
   resolved: ResolvedEntities;
   /** Niet-gedekte numerieke claims (guardrail-signaal). */
   ungrounded: string[];
+  /** Definitieve uitkomst ná de tool-calls, inclusief eventuele degradatie. */
+  outcome?: OutcomeDecision;
 }
 
 function defaultId(): string {
@@ -383,6 +401,26 @@ export async function runSpecialize(
     specialist: classification.specialist ?? null,
   };
 
+  // De uitkomst staat pas nu vast: `systeem` mag alleen overeind blijven als
+  // de klant geïdentificeerd is én er echt een systeemantwoord terugkwam.
+  // Ontbreekt een van beide, dan degradeert 'ie naar `taak` (bouwbriefing §3).
+  const channel = channelForDomain(signal.domain)?.id ?? signal.domain;
+  const payload = (signal.payload ?? {}) as Record<string, unknown>;
+  const outcome: OutcomeDecision = finalizeOutcome(
+    classification.outcome ?? outcomeFromClassification(classification),
+    {
+      identified: isIdentified(channel, {
+        senderAddress: typeof payload.from === 'string' ? payload.from : null,
+        orderReference:
+          typeof classification.extracted.orderNumber === 'string'
+            ? classification.extracted.orderNumber
+            : null,
+      }),
+      systemAnswer: plan.systemAnswer === true,
+    },
+  );
+  proposed.outcome = outcome;
+
   const confidence = adjustConfidence(classification.confidence, ungrounded.length);
   proposed.triage = deriveTriage(
     classification,
@@ -405,7 +443,7 @@ export async function runSpecialize(
     createdAt: now(),
   };
 
-  return { reviewItem, classification, resolved, ungrounded };
+  return { reviewItem, classification, resolved, ungrounded, outcome };
 }
 
 /**

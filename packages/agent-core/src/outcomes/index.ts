@@ -187,3 +187,53 @@ export function mayRespondWithoutHuman(channel: ChannelId, outcome: Outcome): bo
   if (channel === 'mail') return false;
   return routingFor(outcome).mayAutoRespond;
 }
+
+// ---------------------------------------------------------------------------
+// Terugval als de router geen uitkomst noemt
+// ---------------------------------------------------------------------------
+
+/**
+ * Leidt een uitkomst af uit de specialist en de geëxtraheerde velden, voor het
+ * geval de router er zelf geen noemt (oude prompt, kapotte JSON).
+ *
+ * Bewust conservatief: alles waar een mens iets mee moet, wordt `taak`. Alleen
+ * `simple_reply` mag `kennis` of `systeem` worden, en `systeem` uitsluitend als
+ * er een ordernummer in het bericht stond — anders valt er niets op te zoeken
+ * en is het een kennisvraag.
+ */
+export function outcomeFromClassification(input: {
+  specialist?: string;
+  extracted?: Record<string, unknown>;
+}): Outcome {
+  const orderRef = input.extracted?.orderNumber;
+  const hasOrder = typeof orderRef === 'string' && orderRef.trim().length > 0;
+
+  switch (input.specialist) {
+    case 'simple_reply':
+      return hasOrder ? 'systeem' : 'kennis';
+    case 'escalate':
+      // De router kon niet classificeren. Dat is precies `onbekend`:
+      // doorvragen of overdragen, géén ticket.
+      return 'onbekend';
+    case 'order_change':
+    case 'complaint':
+    case 'technical':
+    case 'gdpr':
+      return 'taak';
+    default:
+      // Onbekende of ontbrekende specialist: naar een mens, niet gokken.
+      return 'taak';
+  }
+}
+
+/** De vier geldige waarden — voor validatie van LLM-output. */
+export const OUTCOMES: readonly Outcome[] = Object.freeze([
+  'kennis',
+  'systeem',
+  'taak',
+  'onbekend',
+]);
+
+export function isOutcome(value: unknown): value is Outcome {
+  return typeof value === 'string' && (OUTCOMES as readonly string[]).includes(value);
+}

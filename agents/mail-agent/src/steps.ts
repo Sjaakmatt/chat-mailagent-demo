@@ -3,6 +3,8 @@ import {
   categoryToSpecialist,
   categoryLabel,
   evaluateDomainGate,
+  isOutcome,
+  outcomeFromClassification,
   renderPrompt,
   CATEGORY_SLUGS,
   getIntentConfig,
@@ -202,8 +204,21 @@ export function parseClassification(text: string): Classification {
     .filter((t): t is TaskDescriptor => t !== null);
   const compound = o.compound === true && tasks.length >= 2;
 
+  // De router mag de uitkomst noemen; doet 'ie dat niet (of onbekende waarde),
+  // dan leiden we 'm conservatief af uit de specialist.
+  const outcome = isOutcome(o.outcome)
+    ? o.outcome
+    : outcomeFromClassification({
+        specialist: validSpecialist,
+        extracted:
+          o.extracted && typeof o.extracted === 'object'
+            ? (o.extracted as Record<string, unknown>)
+            : {},
+      });
+
   return {
     category,
+    outcome,
     confidence: typeof o.confidence === 'number' ? o.confidence : 0.5,
     needsRag: o.needsRag === true,
     escalate: o.escalate === true,
@@ -558,9 +573,17 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
             role: 'system',
             content:
               `Je classificeert inkomende klantmail voor ${clientName(env)}. ` +
-              'Antwoord ALLEEN met JSON: {"category": string, "confidence": number (0..1), ' +
-              '"needsRag": boolean, "escalate": boolean, "extracted": {"orderNumber"?: string}, ' +
-              '"compound": boolean, "tasks": [...]?}. ' +
+              'Antwoord ALLEEN met JSON: {"category": string, "outcome": string, ' +
+              '"confidence": number (0..1), "needsRag": boolean, "escalate": boolean, ' +
+              '"extracted": {"orderNumber"?: string}, "compound": boolean, "tasks": [...]?}. ' +
+              'outcome MOET een van: kennis | systeem | taak | onbekend. ' +
+              '  kennis   = te beantwoorden uit productinfo/beleid (verzendkosten, retourtermijn). ' +
+              '  systeem  = het antwoord komt uit een systeem (orderstatus, levertijd, track&trace). ' +
+              '  taak     = er moet iemand iets uitzoeken of regelen (wijziging, niet geleverd, ' +
+              '             retour, defect, klacht, factuurgeschil). ' +
+              '  onbekend = gaat wel over ons, maar te vaag om te routeren. Dan vragen we door. ' +
+              'Kies systeem alleen als er echt iets op te zoeken valt; zonder ordernummer is een ' +
+              'statusvraag meestal onbekend of taak. ' +
               'category MOET exact één van deze waarden zijn (kies de best passende, anders "overig"): ' +
               `${CATEGORY_SLUGS.join(', ')}. ` +
               'gdpr_verzoek = AVG/privacy-verzoek: uitschrijven mailinglist, verwijdering ' +
@@ -721,8 +744,8 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
       //   2. De vaste output-contract-instructie (JSON-schema, grounding-eis).
       //   3. Optionele beleidsrichtlijn uit aios_policy_rules (per categorie).
       const outputContract =
-        'Je schrijft een Nederlands concept-antwoord namens een ' +
-        'zonnepanelen-installateur. Gebruik UITSLUITEND de geverifieerde ' +
+        `Je schrijft een Nederlands concept-antwoord namens ${clientName(env)}. ` +
+        'Gebruik UITSLUITEND de geverifieerde ' +
         'feiten voor cijfers/codes. ' +
         'Antwoord ALLEEN met JSON: {"summary": string, "subject": string, ' +
         '"body": string, "claims": [{"value": string, "toolCallId": string}]}. ' +
@@ -817,6 +840,10 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         ...parsed,
         ...(policyMeta ? { policy: policyMeta } : {}),
         trustedText,
+        // Kwam er echt iets uit de bron? Een geslaagde lookup die niets vond
+        // telt niet mee — dan degradeert de uitkomst `systeem` naar `taak` in
+        // plaats van dat de agent het gat zelf invult.
+        systemAnswer: facts.length > 0,
       };
     },
   };

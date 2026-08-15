@@ -39,7 +39,23 @@ describe('parseClassification', () => {
       escalate: false,
       extracted: { orderNumber: 'SO-42' },
       specialist: 'escalate',
+      // Geen `outcome` in de respons → afgeleid uit de specialist. Escalate
+      // betekent "router kon niet classificeren", en dat is `onbekend`:
+      // doorvragen, geen ticket.
+      outcome: 'onbekend',
     });
+  });
+
+  it('neemt de uitkomst over als de router die noemt', () => {
+    const c = parseClassification(
+      '{"category":"levertijd_status","outcome":"systeem","extracted":{"orderNumber":"DEMO-1001"}}',
+    );
+    expect(c.outcome).toBe('systeem');
+  });
+
+  it('negeert een onbekende uitkomst en valt terug op de afleiding', () => {
+    const c = parseClassification('{"category":"klacht","outcome":"onzin"}');
+    expect(c.outcome).toBe('taak');
   });
 
   it('mapt de categorieën uit de taxonomie naar de juiste specialist', () => {

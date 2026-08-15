@@ -5,6 +5,8 @@ import {
   identificationPolicy,
   routingFor,
   mayRespondWithoutHuman,
+  outcomeFromClassification,
+  isOutcome,
   OUTCOME_ROUTING,
   type Outcome,
 } from './index.js';
@@ -145,5 +147,42 @@ describe('mag de agent zelf antwoorden', () => {
     const beslissing = finalizeOutcome('systeem', { identified, systemAnswer: true });
     expect(beslissing.outcome).toBe('taak');
     expect(mayRespondWithoutHuman('chat', beslissing.outcome)).toBe(false);
+  });
+});
+
+describe('terugval als de router geen uitkomst noemt', () => {
+  it('simple_reply met ordernummer wordt systeem', () => {
+    expect(
+      outcomeFromClassification({ specialist: 'simple_reply', extracted: { orderNumber: 'DEMO-1001' } }),
+    ).toBe('systeem');
+  });
+
+  it('simple_reply zonder ordernummer wordt kennis', () => {
+    expect(outcomeFromClassification({ specialist: 'simple_reply', extracted: {} })).toBe('kennis');
+    expect(
+      outcomeFromClassification({ specialist: 'simple_reply', extracted: { orderNumber: '  ' } }),
+    ).toBe('kennis');
+  });
+
+  it('escalate wordt onbekend, niet taak', () => {
+    // De router kon niet classificeren → doorvragen, geen ticket aanmaken.
+    expect(outcomeFromClassification({ specialist: 'escalate' })).toBe('onbekend');
+  });
+
+  it.each(['order_change', 'complaint', 'technical', 'gdpr'])('%s wordt taak', (s) => {
+    expect(outcomeFromClassification({ specialist: s })).toBe('taak');
+  });
+
+  it('onbekende of ontbrekende specialist wordt taak, niet automatisch', () => {
+    expect(outcomeFromClassification({ specialist: 'iets_nieuws' })).toBe('taak');
+    expect(outcomeFromClassification({})).toBe('taak');
+  });
+
+  it('valideert de vier waarden', () => {
+    expect(isOutcome('kennis')).toBe(true);
+    expect(isOutcome('taak')).toBe(true);
+    expect(isOutcome('Systeem')).toBe(false);
+    expect(isOutcome('')).toBe(false);
+    expect(isOutcome(null)).toBe(false);
   });
 });
