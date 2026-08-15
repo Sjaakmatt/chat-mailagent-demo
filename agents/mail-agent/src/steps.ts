@@ -697,9 +697,20 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
     // vóór de poort en gaat elk bericht naar de router.
     async gate(signal) {
       if (env.DOMAIN_GATE === 'off') return { inDomain: true, reason: 'poort uit' };
-      const payload = signal.payload as { subject?: string; bodyText?: string };
+      const payload = signal.payload as {
+        subject?: string;
+        bodyText?: string;
+        context?: unknown;
+      };
       return evaluateDomainGate(
-        { subject: payload.subject, body: payload.bodyText ?? '' },
+        {
+          subject: payload.subject,
+          body: payload.bodyText ?? '',
+          // De poort moet weten dat de agent zelf om dit antwoord vroeg.
+          // Anders is "j.dekker@example.com" een los bericht zonder onderwerp,
+          // en dus buiten domein.
+          context: conversationBlock(payload),
+        },
         llm,
       );
     },

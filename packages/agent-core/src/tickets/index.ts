@@ -123,6 +123,10 @@ export interface ConfirmationConfig {
   template: string;
   /** Tekst als er (nog) geen ticket is omdat de identificatie ontbreekt. */
   needsIdentityText: string;
+  /** Als alleen het mailadres nog ontbreekt. Het ordernummer is al bekend. */
+  needsEmailText: string;
+  /** Als alleen het ordernummer nog ontbreekt. */
+  needsOrderText: string;
 }
 
 export const CONFIRMATION: ConfirmationConfig = {
@@ -132,7 +136,33 @@ export const CONFIRMATION: ConfirmationConfig = {
   needsIdentityText:
     'Om dit voor je uit te zoeken heb ik je e-mailadres nodig, en als je het ' +
     'bij de hand hebt ook je ordernummer.',
+  // Waarom drie teksten en niet één: wie net zijn ordernummer heeft gegeven en
+  // dezelfde vraag terugkrijgt, denkt dat de chat kapot is. Erkennen wat er al
+  // binnen is, kost één zin en scheelt dat gevoel volledig.
+  needsEmailText:
+    'Dank je, dat ordernummer heb ik. Wat is het e-mailadres waarmee je hebt ' +
+    'besteld? Dan zoek ik het meteen op.',
+  needsOrderText:
+    'Dank je, dat mailadres heb ik. Heb je het ordernummer er ook bij? Dan ' +
+    'zoek ik het meteen op.',
 };
+
+/**
+ * Welke tekst hoort bij wat er nog ontbreekt.
+ *
+ * Zonder dit krijgt een bezoeker die net iets heeft aangeleverd letterlijk
+ * dezelfde vraag terug — en dat leest als een chat die niet luistert.
+ */
+export function identityPrompt(
+  have: { email?: string | null; order?: string | null },
+  config: ConfirmationConfig = CONFIRMATION,
+): string {
+  const email = Boolean(have.email?.trim());
+  const order = Boolean(have.order?.trim());
+  if (order && !email) return config.needsEmailText;
+  if (email && !order) return config.needsOrderText;
+  return config.needsIdentityText;
+}
 
 /**
  * Vult het ticketnummer in. Ontbreekt de placeholder in een aangepaste

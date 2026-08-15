@@ -73,13 +73,13 @@ describe('wat de bezoeker terugkrijgt', () => {
   it('taak: ticket plus bevestiging, niet het opgestelde antwoord', async () => {
     const res = await finishChatTurn(
       env,
-      item('Ik regel je retour meteen.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
+      item('Ik zeg je abonnement meteen op.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
       uitkomst('taak'),
-      { conversationId: 'conv_1', category: 'retour_ruilen' },
+      { conversationId: 'conv_1', category: 'opzegging_proef' },
     );
     expect(res?.ticketNumber).toBe('TIC-2608-0001');
     expect(pushed).toEqual(['Ticket TIC-2608-0001.']);
-    expect(pushed[0]).not.toContain('regel je retour');
+    expect(pushed[0]).not.toContain('zeg je abonnement');
   });
 
   it('taak zonder bruikbare identificatie: om gegevens vragen, geen ticket', async () => {
@@ -113,5 +113,57 @@ describe('wat de bezoeker terugkrijgt', () => {
       conversationId: 'conv_1',
     });
     expect(createdTickets).toHaveLength(1);
+  });
+
+  // De drie fouten uit het gesprek van 15:01, elk apart vastgelegd.
+  it('vraagt alleen om het mailadres als het ordernummer al bekend is', async () => {
+    ticketAnswer = null;
+    const res = await finishChatTurn(
+      env,
+      {
+        ...item('Ik zoek het op.', {}),
+        proposed: {
+          body: 'Ik zoek het op.',
+          original: {},
+          classification: { extracted: { orderNumber: 'DEMO-1001' } },
+        },
+      },
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'levertijd_status' },
+    );
+    expect(res?.reply).toContain('ordernummer heb ik');
+    expect(res?.reply).not.toBe(CONFIRMATION.needsIdentityText);
+  });
+
+  it('vraagt alleen om het ordernummer als het mailadres al bekend is', async () => {
+    ticketAnswer = null;
+    const res = await finishChatTurn(
+      env,
+      {
+        ...item('Ik zoek het op.', {}),
+        proposed: {
+          body: 'Ik zoek het op.',
+          original: { from: 'k@example.com' },
+          classification: { extracted: {} },
+        },
+      },
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'levertijd_status' },
+    );
+    expect(res?.reply).toContain('mailadres heb ik');
+  });
+
+  it('vraagt om allebei als er niets bekend is', async () => {
+    ticketAnswer = null;
+    const res = await finishChatTurn(
+      env,
+      {
+        ...item('Ik zoek het op.', {}),
+        proposed: { body: 'Ik zoek het op.', original: {}, classification: { extracted: {} } },
+      },
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'levertijd_status' },
+    );
+    expect(res?.reply).toBe(CONFIRMATION.needsIdentityText);
   });
 });
