@@ -19,5 +19,9 @@ create table if not exists public.aios_part_batches (
   updated_at timestamptz not null default now()
 );
 
+-- Alleen via service-role benaderd; RLS aan zonder policies houdt
+-- anon/authenticated buiten de deur.
+alter table public.aios_part_batches enable row level security;
+
 create index if not exists aios_part_batches_org_sku_idx
   on public.aios_part_batches (organization_id, sku, start_date);

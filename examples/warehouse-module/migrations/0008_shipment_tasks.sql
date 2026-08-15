@@ -24,5 +24,9 @@ create table if not exists public.aios_shipment_tasks (
   completed_at timestamptz
 );
 
+-- Alleen via service-role benaderd; RLS aan zonder policies houdt
+-- anon/authenticated buiten de deur.
+alter table public.aios_shipment_tasks enable row level security;
+
 create index if not exists aios_shipment_tasks_org_status_idx
   on public.aios_shipment_tasks (organization_id, status);

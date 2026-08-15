@@ -25,5 +25,9 @@ create table if not exists public.aios_policy_rules (
   created_at timestamptz not null default now()
 );
 
+-- Alleen via service-role benaderd; RLS aan zonder policies houdt
+-- anon/authenticated buiten de deur.
+alter table public.aios_policy_rules enable row level security;
+
 create index if not exists aios_policy_rules_org_idx
   on public.aios_policy_rules (organization_id);

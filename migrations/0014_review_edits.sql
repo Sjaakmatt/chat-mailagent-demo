@@ -20,6 +20,10 @@ create table if not exists public.aios_review_edits (
                   check (source in ('manual_save','decision'))
 );
 
+-- Alleen via service-role benaderd; RLS aan zonder policies houdt
+-- anon/authenticated buiten de deur.
+alter table public.aios_review_edits enable row level security;
+
 create index if not exists idx_aios_review_edits_item
   on public.aios_review_edits(review_item_id, edited_at);
 
