@@ -20,19 +20,32 @@ voegen.
 De naden staan in `packages/agent-core/src/channels/index.ts` (welke kanalen
 bestaan) en `agents/mail-agent/src/channels.ts` (hoe er bezorgd wordt).
 
-## Chat toevoegen
+## Chat — wat er staat
 
-### 1. Kanaal registreren
+Het chat-kanaal is geregistreerd en de keten is bedraad:
 
-`CHAT_CHANNEL` staat al beschreven in `agent-core/src/channels/index.ts` maar is
-bewust **niet** geregistreerd. Zet 'm in `CHANNELS`:
+| Onderdeel | Waar |
+| --------- | ---- |
+| Kanaal | `agent-core/src/channels/` — `CHAT_CHANNEL`, realtime |
+| Sessie | `agents/mail-agent/src/chat/session-do.ts` — één DO per sessie |
+| Route | `GET /chat/<sessie>/ws` op de agent-Worker |
+| Bezorging | `chat/delivery.ts` — schrijft het bericht én duwt het naar de sessie |
+| Tickets | `chat/tickets.ts` — alleen bij uitkomst `taak` |
+| Autonomie | `outcomes/mayRespondWithoutHuman()` — `kennis` en `systeem` mogen |
 
-```ts
-export const CHANNELS: readonly ChannelDef[] = Object.freeze([
-  MAIL_CHANNEL,
-  CHAT_CHANNEL,
-]);
-```
+De sessie-DO beslist niets. Hij normaliseert een binnenkomend bericht tot een
+Signal en zet dat op dezelfde work-bus als mail; de lus (domeingrens → router →
+specialist → beleidslaag) draait daarbuiten. Dat is de scheiding die maakt dat
+beide kanalen dezelfde kern delen.
+
+### Nog te doen voordat chat live kan
+
+- **De widget.** Er is een websocket-endpoint maar geen bezoekerskant.
+- **Cockpit-conversatieweergave.** Het detailscherm toont mailvelden; een
+  chatgesprek verdient een gespreksweergave.
+- **De adversariële set tegen een echt model.** De tests in
+  `domain-gate.test.ts` meten de mechaniek, niet het oordeel. Dit is de gate
+  uit bouwbriefing §6 en die staat nog open.
 
 ### 2. Signalen laten binnenkomen
 

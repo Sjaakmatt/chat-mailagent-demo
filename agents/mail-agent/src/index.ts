@@ -16,10 +16,12 @@ import { ExecuteWorkflow } from './workflows/execute.js';
 import { RouterWorkflow } from './workflows/router.js';
 import { SpecialistWorkflow } from './workflows/specialist.js';
 import { AggregatorWorkflow } from './workflows/aggregator.js';
+import { ChatSession } from './chat/session-do.js';
 import type { Env } from './env.js';
 
 export {
   MailPoller,
+  ChatSession,
   OrchestrationWorkflow,
   ExecuteWorkflow,
   RouterWorkflow,
@@ -67,6 +69,19 @@ export default {
         status: 202,
       });
     }
+    // Chat: de bezoeker verbindt met /chat/<sessie>/ws. Elke sessie is een
+    // eigen Durable Object, zodat snel achter elkaar getypte berichten niet
+    // op elkaars gespreksstand botsen.
+    if (url.pathname.startsWith('/chat/')) {
+      const rest = url.pathname.slice('/chat/'.length);
+      const sessionId = rest.split('/')[0];
+      if (!sessionId) {
+        return new Response('sessie-id ontbreekt in path', { status: 400 });
+      }
+      const id = env.CHAT_SESSION.idFromName(sessionId);
+      return env.CHAT_SESSION.get(id).fetch(request);
+    }
+
     return new Response('AIOS mail-agent. Inbound events horen op de MCP-laag.', {
       status: 404,
     });

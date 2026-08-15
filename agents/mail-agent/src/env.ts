@@ -6,6 +6,7 @@ import type {
   ReviewItem,
 } from '@factumai/agent-core';
 import type { MailPoller } from './poller-do.js';
+import type { ChatSession } from './chat/session-do.js';
 
 /**
  * Worker-bindings voor de klant-agent (zie wrangler.jsonc). Secrets komen
@@ -26,12 +27,21 @@ export interface Env {
    */
   DOMAIN_GATE?: string;
 
+  /**
+   * Prefix voor ticketnummers, drie letters (PREFIX-JJMM-NNNN). Ontbreekt of
+   * ongeldig → "TIC". Hoort per tenant in het control plane; hier als var.
+   */
+  TICKET_PREFIX?: string;
+
   /** Klant-Supabase (waar Signal + ReviewItem leven). */
   AIOS_SUPABASE_URL: string;
   AIOS_SUPABASE_SERVICE_ROLE_KEY: string;
 
   /** DO-namespace voor de poller (één instance: 'aios-poller'). */
   AIOS_POLLER: DurableObjectNamespace<MailPoller>;
+
+  /** DO-namespace voor chatsessies — één object per sessie. */
+  CHAT_SESSION: DurableObjectNamespace<ChatSession>;
 
   /** Workflow-bindings (durable execution). */
   ORCHESTRATION: Workflow<OrchestrationParams>;

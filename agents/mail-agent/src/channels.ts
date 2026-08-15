@@ -15,12 +15,14 @@
 import { channelForKind, type ReviewItem } from '@factumai/agent-core';
 import type { Env } from './env.js';
 import { deliverMailReply } from './steps.js';
+import { deliverChatReply } from './chat/delivery.js';
 
 /** Eén bezorgroutine per ReviewItem-soort. */
 type DeliveryFn = (env: Env, item: ReviewItem) => Promise<{ ref?: string }>;
 
 const DELIVERY: Record<string, DeliveryFn> = {
   draft_email: deliverMailReply,
+  draft_chat_reply: deliverChatReply,
 };
 
 /**

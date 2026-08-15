@@ -48,9 +48,13 @@ export const MAIL_CHANNEL: ChannelDef = {
 };
 
 /**
- * Voorbeeld van hoe een chat-kanaal eruitziet — nog **niet** geregistreerd.
- * Zie `docs/CHANNELS.md` voor wat er nog aan vast hangt (bezorgroutine,
- * cockpit-weergave, en de autonomie-vraag die realtime chat oproept).
+ * Chat. Realtime: er zit iemand te wachten, dus een concept in een wachtrij
+ * werkt hier niet. De beleidslaag en de domeingrens zijn wat tussen de agent
+ * en de bezoeker staat — bij mail is dat een mens.
+ *
+ * Welke uitkomsten zonder mens naar buiten mogen, staat in
+ * `outcomes/mayRespondWithoutHuman()`: `kennis` en `systeem` wel, `taak` en
+ * `onbekend` niet.
  */
 export const CHAT_CHANNEL: ChannelDef = {
   id: 'chat',
@@ -61,8 +65,12 @@ export const CHAT_CHANNEL: ChannelDef = {
   realtime: true,
 };
 
-/** Actieve kanalen voor deze klant. */
-export const CHANNELS: readonly ChannelDef[] = Object.freeze([MAIL_CHANNEL]);
+/**
+ * Actieve kanalen voor deze klant. Haal weg wat een klant niet afneemt: een
+ * geregistreerd kanaal zonder bezorgroutine faalt luid bij het uitvoeren, en
+ * dat is beter dan stilletjes niets doen.
+ */
+export const CHANNELS: readonly ChannelDef[] = Object.freeze([MAIL_CHANNEL, CHAT_CHANNEL]);
 
 const BY_KIND = new Map<string, ChannelDef>(
   CHANNELS.map((c) => [c.reviewItemKind, c]),

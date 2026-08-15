@@ -12,11 +12,13 @@
   // EU-residency vastleggen bij creatie (Build Document A14).
   "durable_objects": {
     "bindings": [
-      { "name": "AIOS_POLLER", "class_name": "MailPoller" }
+      { "name": "AIOS_POLLER", "class_name": "MailPoller" },
+      { "name": "CHAT_SESSION", "class_name": "ChatSession" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["MailPoller"] }
+    { "tag": "v1", "new_sqlite_classes": ["MailPoller"] },
+    { "tag": "v2", "new_sqlite_classes": ["ChatSession"] }
   ],
   "workflows": [
     {
@@ -79,7 +81,9 @@
     //   "graph"  → mail-MCP / Microsoft Graph (default)
     //   "resend" → Resend HTTPS API (vereist secrets RESEND_API_KEY +
     //              RESEND_FROM via `wrangler secret put`).
-    "MAIL_SEND_VIA": "graph"
+    "MAIL_SEND_VIA": "graph",
+    // Prefix voor ticketnummers (PREFIX-JJMM-NNNN). Drie letters.
+    "TICKET_PREFIX": "TIC"
   },
   // ---------------------------------------------------------------------------
   // STAGING — aparte Worker om nieuwe branches te testen zonder prod te raken.
@@ -103,14 +107,16 @@
       // double-suffixen (…-staging-staging) laten zoeken.
       "durable_objects": {
         "bindings": [
-          { "name": "AIOS_POLLER", "class_name": "MailPoller" }
+          { "name": "AIOS_POLLER", "class_name": "MailPoller" },
+          { "name": "CHAT_SESSION", "class_name": "ChatSession" }
         ]
       },
       // DO-migrations moeten ook op staging worden gedeclareerd — Cloudflare
       // tracks DO-classes per Worker en de staging-Worker heeft z'n eigen
       // migration-tabel.
       "migrations": [
-        { "tag": "v1", "new_sqlite_classes": ["MailPoller"] }
+        { "tag": "v1", "new_sqlite_classes": ["MailPoller"] },
+        { "tag": "v2", "new_sqlite_classes": ["ChatSession"] }
       ],
       "workflows": [
         {
@@ -151,7 +157,8 @@
         "AIOS_RAG_ENABLED": "false",
         "MAIL_DONE_LABEL": "AIOS-staging afgehandeld",
         "MAIL_DONE_FOLDER": "Afgehandeld door agent (staging)",
-        "MAIL_SEND_VIA": "graph"
+        "MAIL_SEND_VIA": "graph",
+        "TICKET_PREFIX": "TIC"
       }
     }
   }
