@@ -239,10 +239,50 @@ describe('domeingrens in de orchestratie', () => {
     };
   }
 
-  it('stopt de run: geen classify, resolve, retrieve of plan', async () => {
+  // Classify draait wél — die start tegelijk met de poort, omdat wachten op de
+  // poort bij élk bericht een hele LLM-call aan tijd kost en chat realtime is.
+  // Wat telt is dat de uitkomst wordt weggegooid: geen resolve, geen retrieve,
+  // geen plan. Dus geen tool-calls en geen generatie op basis van het bericht.
+  it('stopt de run: geen resolve, retrieve of plan', async () => {
     const { calls, steps } = spyingSteps(false);
     await orchestrate(signal, { steps });
-    expect(calls).toEqual(['gate']);
+    expect(calls).not.toContain('resolve');
+    expect(calls).not.toContain('retrieve');
+    expect(calls).not.toContain('plan');
+  });
+
+  it('draait de poort ook echt, en niet alleen classify', async () => {
+    const { calls, steps } = spyingSteps(false);
+    await orchestrate(signal, { steps });
+    expect(calls).toContain('gate');
+  });
+
+  // De poort en de router mogen geen prompt delen — dat is wat een bericht zou
+  // toestaan de poort te beïnvloeden via de routering. Parallel draaien verandert
+  // alleen wanneer ze beginnen: het blijven twee losse aanroepen met elk hun
+  // eigen invoer.
+  it('houdt poort en classificatie gescheiden: elk krijgt het signaal apart', async () => {
+    const gezien: string[] = [];
+    await orchestrate(signal, {
+      steps: {
+        async gate(s) {
+          gezien.push(`gate:${s.id}`);
+          return { inDomain: true, reason: 'ok' };
+        },
+        async classify(s) {
+          gezien.push(`classify:${s.id}`);
+          return { category: 'overig', confidence: 0.9, needsRag: false, extracted: {} };
+        },
+        async resolve() {
+          return {};
+        },
+        async plan() {
+          return { kind: 'draft_email' as const, summary: 's', body: 'b', claims: [] };
+        },
+      },
+    });
+    expect(gezien).toContain(`gate:${signal.id}`);
+    expect(gezien).toContain(`classify:${signal.id}`);
   });
 
   it('gebruikt de vaste afwijzingstekst, letterlijk', async () => {
@@ -281,7 +321,10 @@ describe('domeingrens in de orchestratie', () => {
   it('laat een bericht binnen het domein gewoon door de hele lus', async () => {
     const { calls, steps } = spyingSteps(true);
     await orchestrate(signal, { steps });
-    expect(calls).toEqual(['gate', 'classify', 'resolve', 'plan']);
+    // Gate en classify starten tegelijk, dus hun onderlinge volgorde ligt niet
+    // vast. Wat wél vastligt: allebei gedraaid, en pas daarna de rest.
+    expect(new Set(calls.slice(0, 2))).toEqual(new Set(['gate', 'classify']));
+    expect(calls.slice(2)).toEqual(['resolve', 'plan']);
   });
 
   it('zonder gate-stap blijft het oude gedrag ongewijzigd', async () => {

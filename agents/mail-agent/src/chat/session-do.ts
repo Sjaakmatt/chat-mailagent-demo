@@ -54,6 +54,16 @@ const RATE_KEY = 'chat:rate';
 const SEQ_KEY = 'chat:seq';
 const EMAIL_KEY = 'chat:email';
 const CONV_KEY = 'chat:conv-ready';
+/**
+ * Het gespreksvenster: de laatste beurten, in dit object.
+ *
+ * Waarom hier en niet uit `aios_messages`: de DO ís het geheugen van deze
+ * sessie. `ctx.storage` overleeft hibernatie, staat naast de code en kost geen
+ * netwerkrondje — en in het chatpad is elk rondje zichtbare wachttijd. De
+ * database blijft de bron voor de cockpit en voor een herverbinding die de hele
+ * geschiedenis wil; dit is de werkkopie voor de lus.
+ */
+const RECENT_KEY = 'chat:recent';
 
 /** Terugvalwaarden als de bijbehorende `var` ontbreekt of onzin bevat. */
 const DEFAULT_PER_MIN = 10;
@@ -63,10 +73,38 @@ const DEFAULT_MAX_CHARS = 2000;
 /** Hoeveel eerdere berichten een (her)verbinding terugkrijgt. */
 const HISTORY_LIMIT = 100;
 
+/**
+ * Hoeveel beurten de lus meekrijgt als context. Bewust kort: genoeg om
+ * "en wanneer is het klaar?" aan het ordernummer van drie berichten eerder te
+ * koppelen, kort genoeg om de prompt niet te laten dichtslibben met een gesprek
+ * dat een uur duurt.
+ */
+const CONTEXT_TURNS = 10;
+
+/**
+ * Wat de bezoeker leest terwijl hij wacht. De lus levert een fase; de tekst
+ * hoort hier, want die is kanaal- en taalgebonden.
+ *
+ * Eerlijk blijven: dit zijn de fasen die echt draaien, niet een animatie die
+ * doet alsof er iets gebeurt. Gaat de agent niets opzoeken, dan ziet de
+ * bezoeker die regel ook niet.
+ */
+const PROGRESS_TEXT: Record<string, string> = {
+  routeren: 'even kijken waar dit over gaat…',
+  opzoeken: 'ik zoek het voor je op…',
+  schrijven: 'ik schrijf het antwoord…',
+};
+
 interface SessionMessage {
   direction: 'inbound' | 'outbound';
   body: string;
   at: string;
+}
+
+/** Eén beurt in het venster. Compact: dit gaat mee in een prompt. */
+interface ContextTurn {
+  role: 'klant' | 'agent';
+  body: string;
 }
 
 interface MessageRow {
@@ -145,7 +183,13 @@ export class ChatSession extends DurableObject<Env> {
     // bezoeker. Losse route, want die draait in een andere isolate.
     if (url.pathname.endsWith('/push') && request.method === 'POST') {
       const { body } = (await request.json()) as { body?: string };
-      if (body) this.broadcast({ type: 'message', body });
+      if (body) {
+        this.broadcast({ type: 'message', body });
+        // Ook het antwoord hoort in het venster. Anders ziet de agent bij de
+        // volgende beurt alleen de vragen van de klant en niet wat hij zelf al
+        // heeft toegezegd — en herhaalt hij zichzelf of spreekt hij zichzelf tegen.
+        await this.remember({ role: 'agent', body });
+      }
       return new Response(null, { status: 204 });
     }
 
@@ -264,6 +308,14 @@ export class ChatSession extends DurableObject<Env> {
     // in plaats van bij een nieuw geval. De lus krijgt het mee als hint.
     const ticketNumber = findTicketNumber(body);
 
+    // Het gesprek tot nu toe, vóórdat dit bericht erbij komt. Zonder dit
+    // beantwoordt de agent elk bericht alsof het het eerste is: "en wanneer is
+    // het klaar?" verliest dan het ordernummer van drie berichten eerder, en de
+    // bezoeker moet zijn e-mailadres opnieuw geven. Dat is precies wat een chat
+    // kapot maakt.
+    const context = await this.recentTurns();
+    await this.remember({ role: 'klant', body });
+
     // Eén keer opgebouwd en twee keer gebruikt: hij gaat naar de bus én
     // rechtstreeks de beurt in. Twee keer samenstellen is twee kansen om uit
     // elkaar te lopen.
@@ -274,6 +326,7 @@ export class ChatSession extends DurableObject<Env> {
       sessionId: this.sessionId(),
       ticketNumber,
       receivedDateTime: new Date().toISOString(),
+      ...(context.length > 0 ? { context } : {}),
     };
 
     const emitted = await db.request<Array<{ signal_id?: string }>>(
@@ -320,19 +373,30 @@ export class ChatSession extends DurableObject<Env> {
    */
   private async startTurn(signalId: string, seq: number, payload: Record<string, unknown>): Promise<void> {
     try {
-      await runSignalTurn(this.env, {
-        id: signalId,
-        organizationId: this.env.AIOS_ORG_ID,
-        domain: 'chat',
-        type: 'chat.message',
-        // Dezelfde payload als op de bus. Bewust niet eerst uit de database
-        // lezen: dat is een rondje netwerk voor iets wat we net zelf hebben
-        // weggeschreven, en dat is precies de wachttijd die we hier weghalen.
-        payload,
-        status: 'NEW',
-        idempotencyKey: `chat:${this.conversationId()}:${seq}`,
-        receivedAt: new Date().toISOString(),
-      });
+      await runSignalTurn(
+        this.env,
+        {
+          id: signalId,
+          organizationId: this.env.AIOS_ORG_ID,
+          domain: 'chat',
+          type: 'chat.message',
+          // Dezelfde payload als op de bus. Bewust niet eerst uit de database
+          // lezen: dat is een rondje netwerk voor iets wat we net zelf hebben
+          // weggeschreven, en dat is precies de wachttijd die we hier weghalen.
+          payload,
+          status: 'NEW',
+          idempotencyKey: `chat:${this.conversationId()}:${seq}`,
+          receivedAt: new Date().toISOString(),
+        },
+        {
+          // Wát de agent aan het doen is, in de taal van de bezoeker. Drie
+          // fasen is genoeg: meer stappen tonen leest als een voortgangsbalk
+          // die zichzelf serieuzer neemt dan het wachten waard is.
+          onProgress: (phase) => {
+            this.broadcast({ type: 'status', body: PROGRESS_TEXT[phase] });
+          },
+        },
+      );
     } catch (err) {
       // Niet doorgooien: het signaal staat op de bus, dus de poller pakt het op
       // en de bezoeker krijgt alsnog antwoord — later. Wel luid loggen, want
@@ -343,6 +407,29 @@ export class ChatSession extends DurableObject<Env> {
       );
       this.notify(
         'Het duurt even langer dan normaal. Ik ben er nog mee bezig — je krijgt zo antwoord.',
+      );
+    }
+  }
+
+  /** Het gespreksvenster zoals het nu in de opslag staat. */
+  private async recentTurns(): Promise<ContextTurn[]> {
+    const stored = await this.ctx.storage.get<ContextTurn[]>(RECENT_KEY);
+    return Array.isArray(stored) ? stored : [];
+  }
+
+  /**
+   * Zet een beurt in het venster en gooit het oudste eruit. Best-effort: lukt
+   * het schrijven niet, dan verliest de agent context maar valt het gesprek
+   * niet om.
+   */
+  private async remember(turn: ContextTurn): Promise<void> {
+    try {
+      const next = [...(await this.recentTurns()), turn].slice(-CONTEXT_TURNS);
+      await this.ctx.storage.put(RECENT_KEY, next);
+    } catch (err) {
+      console.warn(
+        '[chat] context bijwerken mislukt:',
+        err instanceof Error ? err.message : String(err),
       );
     }
   }
