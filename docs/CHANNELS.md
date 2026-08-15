@@ -38,14 +38,38 @@ Signal en zet dat op dezelfde work-bus als mail; de lus (domeingrens → router 
 specialist → beleidslaag) draait daarbuiten. Dat is de scheiding die maakt dat
 beide kanalen dezelfde kern delen.
 
-### Nog te doen voordat chat live kan
+### Zelf uitproberen
 
-- **De widget.** Er is een websocket-endpoint maar geen bezoekerskant.
-- **Cockpit-conversatieweergave.** Het detailscherm toont mailvelden; een
-  chatgesprek verdient een gespreksweergave.
-- **De adversariële set tegen een echt model.** De tests in
-  `domain-gate.test.ts` meten de mechaniek, niet het oordeel. Dit is de gate
-  uit bouwbriefing §6 en die staat nog open.
+1. Zet `DEMO_MODE=true` op de agent-Worker en deploy.
+2. Open `https://<agent-worker>/chat` — een zelfstandige testwidget.
+3. Vul een e-mailadres in (nodig voor `systeem`-antwoorden en tickets) en typ.
+4. Volg mee in de cockpit: **Gesprekken** toont het verloop, **Tickets** wat
+   eruit kwam, en het beslislog op elk ReviewItem waaróm.
+
+Probeer in elk geval deze vier: een productvraag (`kennis`), een statusvraag met
+ordernummer (`systeem`), een retourmelding (`taak` → ticket met nummer), en iets
+buiten het domein (vaste afwijzingstekst).
+
+De widget is een **testwidget**: geen klant-styling, geen herverbindingslogica,
+en hij hoort niet op de site van een klant. Een insluitbare productiewidget is
+nog te bouwen.
+
+### De gate die nog moet vallen
+
+`pnpm gate` draait de adversariële set tegen een écht model:
+
+```bash
+ANTHROPIC_API_KEY=sk-... pnpm gate
+```
+
+De unit-tests meten de mechaniek — dat een `false` overal `false` blijft. Dit
+script meet het oordeel: blokkeert het model wat het moet blokkeren, en laat het
+gewone klantvragen door? Een poort die alles tegenhoudt is net zo kapot als een
+poort die alles doorlaat, dus het telt beide kanten.
+
+Lekt er iets door, dan faalt het script — scherp `DOMAIN.outOfScope` aan.
+Draai dit vóórdat chat naar een echte bezoeker gaat: daar gaan `kennis` en
+`systeem` zonder mens naar buiten.
 
 ## De autonomie-vraag — beantwoord
 

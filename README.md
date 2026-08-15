@@ -88,6 +88,16 @@ Drie GitHub Actions-workflows:
 
 Instellen: zie [`DEPLOY.md`](DEPLOY.md).
 
+## Chat
+
+Het chat-kanaal draait op dezelfde lus als mail: één Durable Object per sessie,
+websocket op `/chat/<sessie>/ws`. Wat de bezoeker terugkrijgt hangt af van de
+uitkomst — `kennis` en `systeem` direct, `taak` wordt een ticket met nummer,
+`onbekend` een wedervraag, buiten het domein een vaste tekst.
+
+Met `DEMO_MODE=true` serveert de agent-Worker een testwidget op `/chat`.
+Achtergrond en de nog openstaande gate: [`docs/CHANNELS.md`](docs/CHANNELS.md).
+
 ## Demo
 
 Met `DEMO_MODE=true` op de cockpit-Worker verschijnt een Demo-pagina waarmee je

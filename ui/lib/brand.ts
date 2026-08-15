@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   PlayCircle,
   ClipboardList,
+  MessagesSquare,
 } from "lucide-react";
 
 export interface NavItem {
@@ -55,6 +56,7 @@ export interface Brand {
 const CORE_NAV: NavItem[] = [
   { href: "/", label: "Werkbak", icon: Inbox },
   { href: "/tickets", label: "Tickets", icon: ClipboardList },
+  { href: "/gesprekken", label: "Gesprekken", icon: MessagesSquare },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/audit", label: "Auditlog", icon: FileClock },
   { href: "/policy", label: "Beleid", icon: Settings, adminOnly: true },
