@@ -110,6 +110,115 @@ opgeven dat de agent niets verzint. In plaats daarvan meldt de lus drie fasen
 en telkens vervangt. Het zijn de fasen die echt draaien — zoekt de agent niets
 op, dan ziet de bezoeker die regel ook niet.
 
+## Ingelogde klanten: het gesprek aan een klant-id hangen
+
+Webshops hebben inlogomgevingen, en dan is een willekeurig id in de browser de
+verkeerde sleutel. Een ingelogde klant hoort zijn gesprek terug te vinden op zijn
+telefoon; een anonieme bezoeker op een gedeelde computer hoort niets achter te
+laten. Beide volgen uit één keuze: waar de sessie aan hangt.
+
+| | sleutel | leeft in | blijft |
+| --- | --- | --- | --- |
+| Ingelogd | klant-id van de winkel | de database | over apparaten en dagen heen |
+| Anoniem | willekeurig id | `sessionStorage` | tot het tabblad dicht gaat |
+
+Die opslagkeuze is het hele privacybeleid. `localStorage` zou blijven staan, ook
+morgen, ook voor de volgende persoon op dezelfde computer.
+
+### Waarom de winkel moet ondertekenen
+
+De widget draait in de browser van de bezoeker. Geeft de pagina alleen
+`data-user-id="123"` mee, dan zet een bezoeker dat zelf op `124` en leest hij het
+gesprek van een ander. Daarom ondertekent de **server** van de winkel het
+klant-id met een geheim dat de browser nooit ziet:
+
+```
+hash = HMAC-SHA256(geheim, klantId)   -> hex
+```
+
+Wij rekenen hetzelfde uit en vergelijken. Klopt het niet, dan is de bezoeker
+anoniem — geen foutmelding, wel een logregel. Dezelfde constructie als bij
+Intercom en Crisp, dus wie zo een koppeling eerder heeft gemaakt herkent hem.
+
+Geverifieerd wordt er bij de **socket-upgrade**, niet alleen bij het laden van de
+widget: het pad bepaalt welk Durable Object je krijgt, dus wie een sessienaam
+raadt zou anders bij dat gesprek kunnen.
+
+Zet het geheim als secret, niet als var:
+
+```bash
+wrangler secret put CHAT_IDENTITY_SECRET
+```
+
+Zonder dat secret wordt elke identiteitsclaim genegeerd en is iedereen anoniem.
+Bewust: zonder geheim valt er niets te geloven.
+
+### WooCommerce / WordPress
+
+In `functions.php` van je thema of in een kleine plugin:
+
+```php
+add_action( 'wp_footer', function () {
+    $uid  = '';
+    $hash = '';
+    if ( is_user_logged_in() ) {
+        $uid  = (string) get_current_user_id();
+        $hash = hash_hmac( 'sha256', $uid, FACTUM_CHAT_SECRET );
+    }
+    printf(
+        '<script src="%s/widget.js" data-title="Klantenservice"%s></script>',
+        esc_url( FACTUM_WIDGET_ORIGIN ),
+        $uid ? sprintf( ' data-user-id="%s" data-user-hash="%s"', esc_attr( $uid ), esc_attr( $hash ) ) : ''
+    );
+} );
+```
+
+Zet `FACTUM_CHAT_SECRET` in `wp-config.php`, niet in de themabestanden.
+
+### Shopify
+
+In `theme.liquid`:
+
+```liquid
+<script src="{{ settings.factum_widget_origin }}/widget.js"
+        data-title="Klantenservice"
+        {% if customer %}
+          data-user-id="{{ customer.id }}"
+          data-user-hash="{{ customer.metafields.factum.chat_hash }}"
+        {% endif %}></script>
+```
+
+Liquid kan zelf geen HMAC uitrekenen, dus die hash moet ergens vandaan komen: een
+app proxy die hem per request berekent, of een metafield dat je bij klantaanmaak
+vult. Reken hem nooit in JavaScript uit — dan staat het geheim in de broncode van
+de pagina.
+
+### Alles wat een backend heeft
+
+Dezelfde twee attributen, hoe je ze ook rendert:
+
+```html
+<script src="https://<agent>/widget.js"
+        data-user-id="klant-42"
+        data-user-hash="<hex uit je backend>"></script>
+```
+
+Het klant-id mag alles zijn wat bij jou stabiel is: een getal, een UUID, een
+e-mailadres. Wij leiden er een sessienaam uit af, dus het id zelf belandt niet in
+een URL of een logregel.
+
+### Wat je hierna nog moet weten
+
+- **Uitloggen wist niets.** De volgende bezoeker krijgt een anonieme sessie en
+  ziet het gesprek dus niet — maar wil je dat het venster ook leeg oogt, herlaad
+  dan de pagina of gebruik de nieuw-gesprek-knop.
+- **De handtekening verloopt niet.** Lekt er een, dan blijft die geldig voor die
+  klant tot je het geheim vervangt. Een tijdstempel meetekenen zou dat begrenzen,
+  maar dwingt elke integratie tot gelijklopende klokken — precies wat in de
+  praktijk stukgaat. Rotatie van het geheim is hier het antwoord.
+- **Twee klanten op één apparaat** delen niets: elk klant-id krijgt een eigen
+  sessie.
+
 ## Identificatie: pas vragen als het nodig is
 
 De widget heeft geen e-mailveld. Een identificatievraag vóór de eerste vraag is
