@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isOriginAllowed,
+  frameAncestors,
   evaluateRate,
   emptyRateState,
   parseVisitorMessage,
@@ -47,6 +48,30 @@ describe('isOriginAllowed', () => {
   it('behandelt een lege allowlist als ongezet', () => {
     expect(isOriginAllowed('https://anders.nl', '   ,  ,', SELF)).toBe(false);
     expect(isOriginAllowed(SELF, '   ,  ,', SELF)).toBe(true);
+  });
+});
+
+describe('frameAncestors', () => {
+  it('staat zonder allowlist alleen de Worker zelf toe', () => {
+    expect(frameAncestors(undefined)).toBe("'self'");
+    expect(frameAncestors('')).toBe("'self'");
+    expect(frameAncestors('  ,  ')).toBe("'self'");
+  });
+
+  it('houdt self erbij naast de toegestane sites', () => {
+    expect(frameAncestors('https://shop.acme.nl')).toBe("'self' https://shop.acme.nl");
+    expect(frameAncestors('https://shop.acme.nl,https://www.acme.nl')).toBe(
+      "'self' https://shop.acme.nl https://www.acme.nl",
+    );
+  });
+
+  it('normaliseert net als de origin-check', () => {
+    expect(frameAncestors(' HTTPS://Shop.Acme.NL/ ')).toBe("'self' https://shop.acme.nl");
+  });
+
+  it('geeft * door bij een wildcard', () => {
+    expect(frameAncestors('*')).toBe('*');
+    expect(frameAncestors('https://shop.acme.nl,*')).toBe('*');
   });
 });
 

@@ -61,6 +61,31 @@ export function isOriginAllowed(
   return entries.includes(candidate);
 }
 
+/**
+ * Waarde voor `Content-Security-Policy: frame-ancestors` op de widget-iframe.
+ *
+ * Dit is het échte slot op insluiting, en niet de origin-check op de socket.
+ * De widget wordt geserveerd vanaf de Worker, dus een WebSocket die vanuit de
+ * iframe opengaat heeft de Worker als `Origin` — de allowlist zou daar altijd
+ * "eigen origin" zien en dus nooit iets tegenhouden. `frame-ancestors` legt de
+ * vraag bij de browser: die weigert de iframe te renderen op een pagina die er
+ * niet in staat, en dat kan een site niet omzeilen.
+ *
+ * Ongezet → `'self'`: alleen de Worker mag zichzelf insluiten. `*` → `*`,
+ * alleen voor lokale ontwikkeling.
+ */
+export function frameAncestors(allowlist: string | undefined): string {
+  const entries = (allowlist ?? '')
+    .split(',')
+    .map((o) => normalizeOrigin(o))
+    .filter((o) => o.length > 0);
+
+  if (entries.length === 0) return "'self'";
+  if (entries.includes('*')) return '*';
+  // 'self' blijft erbij, anders breekt de testwidget op de Worker zelf.
+  return ["'self'", ...entries].join(' ');
+}
+
 // ---------------------------------------------------------------------------
 // Rate limiting
 // ---------------------------------------------------------------------------

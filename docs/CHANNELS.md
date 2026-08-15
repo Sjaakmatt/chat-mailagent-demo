@@ -51,9 +51,50 @@ Probeer in elk geval deze vier: een productvraag (`kennis`), een statusvraag met
 ordernummer (`systeem`), een retourmelding (`taak` → ticket met nummer), en iets
 buiten het domein (vaste afwijzingstekst).
 
-De widget is een **testwidget**: geen klant-styling, geen herverbindingslogica,
-en hij hoort niet op de site van een klant. Een insluitbare productiewidget is
-nog te bouwen.
+Dit blijft een **testwidget**: één pagina om de keten te doorlopen, zonder
+klant-styling. Voor een echte site is er de productiewidget hieronder.
+
+### De productiewidget
+
+Plaatsing op de site van de klant is één regel:
+
+```html
+<script src="https://<agent-worker>/widget.js"
+        data-accent="#0f766e"
+        data-title="Klantenservice"
+        data-greeting="Hoi! Waar kan ik je mee helpen?"
+        data-position="right"></script>
+```
+
+Dat zet een knop rechtsonder en een paneel erboven. Twee endpoints, beide
+statisch — er wordt niets van de server in de HTML of JS geïnterpoleerd, dus er
+is geen injectie-oppervlak:
+
+| Route | Wat |
+| ----- | --- |
+| `GET /widget.js` | loader op de klantsite: knop, iframe, sessiebeheer |
+| `GET /widget` | de iframe-inhoud (de chat zelf) |
+
+Beide staan **niet** achter `DEMO_MODE` — dit is productiefunctionaliteit. Wie
+'m mag insluiten regelt `frame-ancestors`, niet een vlag.
+
+**Waarom een iframe.** De CSS van de klantsite kan de widget dan niet breken en
+andersom; dat scheelt per klant een middag uitzoeken waarom de knop achter een
+sticky header valt. De prijs is dat insluiting niet met de origin-check op de
+socket te bewaken is — de iframe komt van de Worker, dus die socket heeft altijd
+de Worker als `Origin`. Daarom zet `GET /widget` een
+`Content-Security-Policy: frame-ancestors` uit `CHAT_ALLOWED_ORIGINS`: de
+browser weigert dan te renderen op een site die er niet in staat, en dát kan een
+site niet omzeilen. Staat de var leeg, dan is het `'self'`.
+
+**Sessie.** De loader bewaart een sessie-id in `localStorage` van de klantsite,
+zodat doorklikken naar een productpagina het gesprek niet afbreekt. Bewust geen
+cookie: de widget hoort niets mee te sturen in verzoeken naar de klantsite.
+
+**Herverbinden.** Valt de socket weg, dan probeert de widget opnieuw met
+oplopende wachttijd tot maximaal 30 seconden. Het verloop komt uit
+`aios_messages`, dus na een herverbinding staat het gesprek er nog — ook als het
+Durable Object intussen is gehiberneerd.
 
 ### Bewaking op het kanaal
 
