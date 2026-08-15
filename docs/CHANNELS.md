@@ -35,9 +35,54 @@ Het chat-kanaal is geregistreerd en de keten is bedraad:
 | Bewaking | `agent-core/src/chat-guard/` — origin, rate limiting, berichtlengte |
 
 De sessie-DO beslist niets. Hij normaliseert een binnenkomend bericht tot een
-Signal en zet dat op dezelfde work-bus als mail; de lus (domeingrens → router →
-specialist → beleidslaag) draait daarbuiten. Dat is de scheiding die maakt dat
-beide kanalen dezelfde kern delen.
+Signal en draait er de lus op; de lus zelf (domeingrens → router → specialist →
+beleidslaag) staat in `turn-runner.ts` en is exact dezelfde code die de
+Orchestration-Workflow voor mail draait. Dat is de scheiding die maakt dat beide
+kanalen dezelfde kern delen.
+
+## Waarom chat een ander pad heeft dan mail
+
+Twee kanalen met tegengestelde eisen, dus twee routes naar dezelfde lus:
+
+| | mail | chat |
+| --- | --- | --- |
+| Wat telt | duurzaamheid | snelheid |
+| Route | pgmq → poller (DO-alarm) → Orchestration-Workflow | rechtstreeks in de sessie-DO |
+| Hervatbaar | ja, de Workflow pakt op waar hij bleef | nee — de wachtrij is het vangnet |
+| Wachttijd | maakt niet uit, er kijkt niemand | elke schakel is zichtbaar |
+
+Bij mail is de wachtrij precies goed: hij vangt pieken op, levert at-least-once
+en de back-off van de poller kost niemand iets. Bij chat staat er een bezoeker
+naar een leeg venster te kijken, en dan is elke schakel ertussen puur wachttijd
+— de back-off van de poller, en daarna het aanmaken en inplannen van een
+Workflow-instantie vóórdat de eerste LLM-call begint.
+
+Het signaal gaat bij chat nog steeds naar de bus. Dat blijft de duurzame
+vastlegging én het vangnet: valt de DO om midden in een beurt, dan pakt de
+poller 'm alsnog op. De bezoeker wacht dan langer, maar zijn vraag is niet weg.
+
+**Precies één keer, ook met twee routes.** `runSignalTurn()` zet na afloop
+`status = DONE` op het signaal, en de Workflow slaat een signaal over dat al
+verwerkt is. Zonder dat zou de poller de beurt overdoen en de bezoeker een tweede
+antwoord sturen. Het markeren gebeurt als láátste: faalt het, dan draait de
+poller 'm nog eens, en dat is minder erg dan een mislukte run als afgehandeld
+markeren.
+
+## Identificatie: pas vragen als het nodig is
+
+De widget heeft geen e-mailveld. Een identificatievraag vóór de eerste vraag is
+een drempel voor een gesprek dat 'm meestal niet nodig heeft — een vraag over een
+prijs of een levertijd gaat niemand persoonlijk aan.
+
+Moet de agent iets opzoeken dat aan een persoon hangt, dan vraagt hij er zelf om
+(`CONFIRMATION.needsIdentityText`) en typt de bezoeker het in zijn antwoord.
+`extractEmail()` in `chat-guard` haalt het adres uit de tekst; de sessie onthoudt
+het daarna, dus het hoeft maar één keer.
+
+Dat de chat strenger is dan mail blijft staan: voor een systeemantwoord zijn
+mailadres én ordernummer nodig (`identificationPolicy`). Bij mail volstaat het
+afzenderadres, want dat komt van het mailsysteem en er gaat hoe dan ook een mens
+overheen.
 
 ### Zelf uitproberen
 

@@ -48,6 +48,15 @@ export default {
       await kickPoller(env);
       return new Response('poller gestart', { status: 202 });
     }
+    // Waarom dit endpoint bestaat: een stilgevallen poller ziet er aan de
+    // buitenkant uit als een chat die niet werkt. Zonder dit is de enige route
+    // naar het antwoord `wrangler tail` op het juiste moment. Nu is het één URL:
+    // staat er een alarm, wanneer draaide hij, en wat ging er mis.
+    if (url.pathname === '/__poller/status' && request.method === 'GET') {
+      const id = env.AIOS_POLLER.idFromName('aios-poller');
+      const status = await env.AIOS_POLLER.get(id).status();
+      return Response.json(status);
+    }
     // Staging-only test-endpoint: start de RouterWorkflow direct op een
     // bestaand signalId zonder de pgmq-queue te raken. Prod (met
     // USE_MULTI_AGENT_ROUTER != "true") returned 404. Route:

@@ -11,6 +11,7 @@ import {
   type ChatRateState,
 } from '@factumai/agent-core';
 import type { Env } from '../env.js';
+import { runSignalTurn } from '../turn-runner.js';
 
 /**
  * Chatsessie als Durable Object (bouwbriefing §9.1).
@@ -20,9 +21,15 @@ import type { Env } from '../env.js';
  * berichten die elkaars gespreksstand overschrijven. Een DO serialiseert dat
  * vanzelf, want er is er precies één per sessie.
  *
- * Wat dit object **niet** doet: beslissen. Het normaliseert een binnenkomend
- * bericht tot een Signal en zet dat op de work-bus; de lus (domeingrens →
- * router → specialist → beleidslaag) draait daarbuiten, precies zoals bij mail.
+ * Wat dit object doet: een binnenkomend bericht normaliseren tot een Signal,
+ * dat op de work-bus zetten, en de lus er meteen zelf op draaien. Dat laatste
+ * is het verschil met mail: daar zit niemand te wachten en gaat het via de
+ * poller en een Workflow. Hier staat een bezoeker naar een leeg venster te
+ * kijken, en dan is elke schakel ertussen puur wachttijd.
+ *
+ * Beslissen doet dit object nog steeds niet — de lus (domeingrens → router →
+ * specialist → beleidslaag) zit in `turn-runner.ts` en is exact dezelfde code
+ * die de Workflow draait.
  *
  * ## Hibernatie
  *
@@ -257,25 +264,87 @@ export class ChatSession extends DurableObject<Env> {
     // in plaats van bij een nieuw geval. De lus krijgt het mee als hint.
     const ticketNumber = findTicketNumber(body);
 
-    await db.request<unknown>(this.tenantCtx(), db.rpcUrl('aios_emit_signal'), {
-      method: 'POST',
-      body: JSON.stringify({
-        p_org: this.env.AIOS_ORG_ID,
-        p_domain: 'chat',
-        p_type: 'chat.message',
-        p_payload: {
-          bodyText: body,
-          from: contactEmail,
-          conversationId,
-          sessionId: this.sessionId(),
-          ticketNumber,
-          receivedDateTime: new Date().toISOString(),
-        },
-        // Eén signaal per bericht; de volgorde binnen de sessie is de
-        // volgorde waarin de DO ze afhandelt.
-        p_idempotency_key: `chat:${conversationId}:${seq}`,
-      }),
-    });
+    // Eén keer opgebouwd en twee keer gebruikt: hij gaat naar de bus én
+    // rechtstreeks de beurt in. Twee keer samenstellen is twee kansen om uit
+    // elkaar te lopen.
+    const payload: Record<string, unknown> = {
+      bodyText: body,
+      from: contactEmail,
+      conversationId,
+      sessionId: this.sessionId(),
+      ticketNumber,
+      receivedDateTime: new Date().toISOString(),
+    };
+
+    const emitted = await db.request<Array<{ signal_id?: string }>>(
+      this.tenantCtx(),
+      db.rpcUrl('aios_emit_signal'),
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          p_org: this.env.AIOS_ORG_ID,
+          p_domain: 'chat',
+          p_type: 'chat.message',
+          p_payload: payload,
+          // Eén signaal per bericht; de volgorde binnen de sessie is de
+          // volgorde waarin de DO ze afhandelt.
+          p_idempotency_key: `chat:${conversationId}:${seq}`,
+        }),
+      },
+    );
+
+    const signalId = Array.isArray(emitted) ? emitted[0]?.signal_id : undefined;
+    if (signalId) await this.startTurn(signalId, seq, payload);
+  }
+
+  /**
+   * Draait de beurt hier, in dit object, in plaats van hem ergens neer te
+   * leggen en te wachten.
+   *
+   * ## Waarom chat niet via de wachtrij en niet via een Workflow gaat
+   *
+   * Bij mail is dat pad precies goed: er zit niemand te wachten, dus
+   * duurzaamheid mag boven snelheid. Bij chat staat er iemand naar een leeg
+   * venster te kijken, en dan is elke schakel ertussen puur wachttijd. De
+   * wachtrij kost de back-off van de poller; een Workflow-instantie kost
+   * aanmaken en inplannen vóórdat de eerste LLM-call begint. Geen van beide
+   * levert de bezoeker iets op.
+   *
+   * Wat we ervoor inleveren is de hervatbaarheid van een Workflow. Dat is hier
+   * een goede ruil: het signaal staat al op de bus, dus valt dit object om
+   * midden in een beurt, dan pakt de poller het alsnog op. De bezoeker wacht
+   * dan langer, maar zijn vraag is niet weg.
+   *
+   * `runSignalTurn` is dezelfde functie die de Workflow draait. Eén
+   * implementatie, twee aanroepers — chat en mail kunnen niet uit elkaar lopen.
+   */
+  private async startTurn(signalId: string, seq: number, payload: Record<string, unknown>): Promise<void> {
+    try {
+      await runSignalTurn(this.env, {
+        id: signalId,
+        organizationId: this.env.AIOS_ORG_ID,
+        domain: 'chat',
+        type: 'chat.message',
+        // Dezelfde payload als op de bus. Bewust niet eerst uit de database
+        // lezen: dat is een rondje netwerk voor iets wat we net zelf hebben
+        // weggeschreven, en dat is precies de wachttijd die we hier weghalen.
+        payload,
+        status: 'NEW',
+        idempotencyKey: `chat:${this.conversationId()}:${seq}`,
+        receivedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      // Niet doorgooien: het signaal staat op de bus, dus de poller pakt het op
+      // en de bezoeker krijgt alsnog antwoord — later. Wel luid loggen, want
+      // dit is het verschil tussen "snel" en "uiteindelijk".
+      console.error(
+        '[chat] directe beurt mislukt, valt terug op de wachtrij:',
+        err instanceof Error ? err.message : String(err),
+      );
+      this.notify(
+        'Het duurt even langer dan normaal. Ik ben er nog mee bezig — je krijgt zo antwoord.',
+      );
+    }
   }
 
   /** Stuurt het verloop tot nu toe naar één socket, uit de database. */
