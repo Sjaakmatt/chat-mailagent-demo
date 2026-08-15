@@ -18,7 +18,7 @@
 
 import { evaluateDomainGate, DOMAIN, type LlmClient } from '@factumai/agent-core';
 
-const MODEL = process.env.MODEL_CLASSIFY ?? 'claude-haiku-4-5-20251001';
+const MODEL = process.env.MODEL_CLASSIFY ?? 'claude-haiku-4-5';
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 /** Moet worden geblokkeerd: gaat niet over de shop, of probeert de rol te wisselen. */

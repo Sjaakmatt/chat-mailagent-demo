@@ -18,6 +18,7 @@ import { SpecialistWorkflow } from './workflows/specialist.js';
 import { AggregatorWorkflow } from './workflows/aggregator.js';
 import { ChatSession } from './chat/session-do.js';
 import { chatWidgetResponse } from './chat/widget.js';
+import { widgetLoaderResponse, widgetFrameResponse } from './chat/embed.js';
 import type { Env } from './env.js';
 
 export {
@@ -77,6 +78,16 @@ export default {
         return new Response('Testwidget staat uit (zet DEMO_MODE=true).', { status: 404 });
       }
       return chatWidgetResponse();
+    }
+
+    // Productiewidget. Bewust NIET achter DEMO_MODE: dit is wat op de site van
+    // een klant komt te staan. Wie 'm mag insluiten regelt `frame-ancestors`
+    // op het iframe-antwoord, niet een vlag.
+    if (url.pathname === '/widget.js' && request.method === 'GET') {
+      return widgetLoaderResponse();
+    }
+    if (url.pathname === '/widget' && request.method === 'GET') {
+      return widgetFrameResponse(env);
     }
 
     // Chat: de bezoeker verbindt met /chat/<sessie>/ws. Elke sessie is een

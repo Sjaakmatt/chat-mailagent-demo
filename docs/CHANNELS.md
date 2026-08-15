@@ -32,6 +32,7 @@ Het chat-kanaal is geregistreerd en de keten is bedraad:
 | Bezorging | `chat/delivery.ts` — schrijft het bericht én duwt het naar de sessie |
 | Tickets | `chat/tickets.ts` — alleen bij uitkomst `taak` |
 | Autonomie | `outcomes/mayRespondWithoutHuman()` — `kennis` en `systeem` mogen |
+| Bewaking | `agent-core/src/chat-guard/` — origin, rate limiting, berichtlengte |
 
 De sessie-DO beslist niets. Hij normaliseert een binnenkomend bericht tot een
 Signal en zet dat op dezelfde work-bus als mail; de lus (domeingrens → router →
@@ -50,9 +51,82 @@ Probeer in elk geval deze vier: een productvraag (`kennis`), een statusvraag met
 ordernummer (`systeem`), een retourmelding (`taak` → ticket met nummer), en iets
 buiten het domein (vaste afwijzingstekst).
 
-De widget is een **testwidget**: geen klant-styling, geen herverbindingslogica,
-en hij hoort niet op de site van een klant. Een insluitbare productiewidget is
-nog te bouwen.
+Dit blijft een **testwidget**: één pagina om de keten te doorlopen, zonder
+klant-styling. Voor een echte site is er de productiewidget hieronder.
+
+### De productiewidget
+
+Plaatsing op de site van de klant is één regel:
+
+```html
+<script src="https://<agent-worker>/widget.js"
+        data-accent="#0f766e"
+        data-title="Klantenservice"
+        data-greeting="Hoi! Waar kan ik je mee helpen?"
+        data-position="right"></script>
+```
+
+Dat zet een knop rechtsonder en een paneel erboven. Twee endpoints, beide
+statisch — er wordt niets van de server in de HTML of JS geïnterpoleerd, dus er
+is geen injectie-oppervlak:
+
+| Route | Wat |
+| ----- | --- |
+| `GET /widget.js` | loader op de klantsite: knop, iframe, sessiebeheer |
+| `GET /widget` | de iframe-inhoud (de chat zelf) |
+
+Beide staan **niet** achter `DEMO_MODE` — dit is productiefunctionaliteit. Wie
+'m mag insluiten regelt `frame-ancestors`, niet een vlag.
+
+**Waarom een iframe.** De CSS van de klantsite kan de widget dan niet breken en
+andersom; dat scheelt per klant een middag uitzoeken waarom de knop achter een
+sticky header valt. De prijs is dat insluiting niet met de origin-check op de
+socket te bewaken is — de iframe komt van de Worker, dus die socket heeft altijd
+de Worker als `Origin`. Daarom zet `GET /widget` een
+`Content-Security-Policy: frame-ancestors` uit `CHAT_ALLOWED_ORIGINS`: de
+browser weigert dan te renderen op een site die er niet in staat, en dát kan een
+site niet omzeilen. Staat de var leeg, dan is het `'self'`.
+
+**Sessie.** De loader bewaart een sessie-id in `localStorage` van de klantsite,
+zodat doorklikken naar een productpagina het gesprek niet afbreekt. Bewust geen
+cookie: de widget hoort niets mee te sturen in verzoeken naar de klantsite.
+
+**Herverbinden.** Valt de socket weg, dan probeert de widget opnieuw met
+oplopende wachttijd tot maximaal 30 seconden. Het verloop komt uit
+`aios_messages`, dus na een herverbinding staat het gesprek er nog — ook als het
+Durable Object intussen is gehiberneerd.
+
+### Bewaking op het kanaal
+
+Mail komt binnen via een MCP met eigen auth. Chat komt van een willekeurige
+bezoeker, er zit geen mens tussen, en elk bericht kost LLM-calls op de sleutel
+van de klant. Daarom staat er bewaking vóór de lus, in
+`agent-core/src/chat-guard/` — puur en getest, zodat een tweede realtime kanaal
+'m kan hergebruiken.
+
+| Var | Doet | Default |
+| --- | ---- | ------- |
+| `CHAT_ALLOWED_ORIGINS` | Welke sites de widget mogen insluiten | alleen de Worker zelf |
+| `CHAT_RATE_PER_MIN` | Berichten per minuut per sessie | 10 |
+| `CHAT_MAX_PER_SESSION` | Harde bovengrens per sessie | 100 |
+| `CHAT_MAX_MESSAGE_CHARS` | Max lengte van één bericht | 2000 |
+
+Twee dingen om goed te begrijpen:
+
+**De origin-check is geen beveiliging tegen scripts.** Hij houdt tegen dat een
+*andere website* jouw widget insluit en op jouw rekening laat praten. Wie zelf
+HTTP doet, zet de `Origin`-header op wat hij wil. De rate limiting is de enige
+harde grens op kosten — die telt per sessie in de duurzame opslag van het
+Durable Object, dus een eviction reset 'm niet.
+
+**Ongezet betekent dicht, niet open.** Zonder `CHAT_ALLOWED_ORIGINS` mag alleen
+de Worker zelf een sessie openen. Dat houdt de testwidget werkend en sluit de
+rest uit; een vergeten var zet de deur dus niet open. Zodra de widget op een
+echte site staat, horen die domeinen erin.
+
+Een geweigerd bericht wordt géén Signal en start dus geen lus. De bezoeker
+krijgt een `notice` over de socket — een eigen berichttype, zodat een widget het
+anders kan tonen dan een antwoord van de agent, en het niet in de logging belandt.
 
 ### De gate die nog moet vallen
 

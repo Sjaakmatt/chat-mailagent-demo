@@ -62,7 +62,7 @@
     // specialist-prompts). Geen secret.
     "CLIENT_NAME": "Factum Webshop",
     // Model-IDs uit config, nooit hardcoded in de code (harde regel 7).
-    "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
+    "MODEL_CLASSIFY": "claude-haiku-4-5",
     "MODEL_PLAN": "claude-sonnet-5",
     // Optioneel: Opus-tier voor de `technical`-specialist (diagnose met vision
     // op bijgevoegde foto's). Ontbrekend → val terug op MODEL_PLAN.
@@ -85,9 +85,28 @@
     // Prefix voor ticketnummers (PREFIX-JJMM-NNNN). Drie letters.
     "TICKET_PREFIX": "TIC",
     // Zet de chat-testwidget op /chat open. Dit is de demo-repo, dus aan.
-    // NOOIT op een productie-Worker: de widget is ongestyled, heeft geen
-    // herverbindingslogica en hoort niet op de site van een klant.
-    "DEMO_MODE": "true"
+    // NOOIT op een productie-Worker: de testwidget is ongestyled en hoort niet
+    // op de site van een klant. De productiewidget (/widget.js) staat er los
+    // van en heeft deze vlag niet nodig.
+    "DEMO_MODE": "true",
+
+    // ---------------------------------------------------------------------
+    // CHAT-BEWAKING — de andere drie zijn optioneel; de defaults tussen haakjes
+    // gelden als je ze weglaat.
+    //
+    // CHAT_RATE_PER_MIN      Berichten per minuut per sessie.        (10)
+    // CHAT_MAX_PER_SESSION   Harde bovengrens per sessie.            (100)
+    // CHAT_MAX_MESSAGE_CHARS Max lengte van één bericht.             (2000)
+    //
+    // De origin-check houdt andere sites tegen, geen scripts — die zetten de
+    // Origin-header zelf. De rate limiting is wat de rekening begrenst.
+    // ---------------------------------------------------------------------
+    // De demo-webshop die de widget draagt. Zonder deze regel weigert de
+    // browser de iframe daar te tonen (frame-ancestors staat dan op 'self').
+    "CHAT_ALLOWED_ORIGINS": "https://factum-webshop.terveldholding.workers.dev"
+    // "CHAT_RATE_PER_MIN": "10",
+    // "CHAT_MAX_PER_SESSION": "100",
+    // "CHAT_MAX_MESSAGE_CHARS": "2000"
   },
   // ---------------------------------------------------------------------------
   // STAGING — aparte Worker om nieuwe branches te testen zonder prod te raken.
@@ -152,7 +171,7 @@
       // Bewust géén `triggers.crons` — zie sectie-comment hierboven.
       "vars": {
         "CLIENT_NAME": "Factum Webshop",
-        "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
+        "MODEL_CLASSIFY": "claude-haiku-4-5",
         "MODEL_PLAN": "claude-sonnet-5",
         // Multi-agent-flag AAN op staging — dat is wat we willen testen.
         "USE_MULTI_AGENT_ROUTER": "true",
