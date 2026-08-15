@@ -3,8 +3,27 @@ import {
   SupabaseClient,
   ServiceRoleCredentialStore,
   findTicketNumber,
+  isOriginAllowed,
+  evaluateRate,
+  emptyRateState,
+  parseVisitorMessage,
+  readLimit,
+  type ChatRateState,
 } from '@factumai/agent-core';
 import type { Env } from '../env.js';
+
+/**
+ * Sleutels in de duurzame opslag van dit object. Deze twee móeten duurzaam
+ * zijn: Cloudflare mag een Durable Object tussen twee berichten door
+ * opruimen, en een teller in geheugen springt dan terug naar nul.
+ */
+const RATE_KEY = 'chat:rate';
+const SEQ_KEY = 'chat:seq';
+
+/** Terugvalwaarden als de bijbehorende `var` ontbreekt of onzin bevat. */
+const DEFAULT_PER_MIN = 10;
+const DEFAULT_PER_SESSION = 100;
+const DEFAULT_MAX_CHARS = 2000;
 
 /**
  * Chatsessie als Durable Object (bouwbriefing §9.1).
@@ -65,6 +84,23 @@ export class ChatSession extends DurableObject<Env> {
       if (request.headers.get('Upgrade') !== 'websocket') {
         return new Response('Verwacht een websocket-upgrade', { status: 426 });
       }
+
+      // Wie mag deze widget insluiten? Alles buiten de allowlist krijgt de deur
+      // dicht vóór er een socket open gaat — een geweigerde upgrade kost niets,
+      // een open sessie wel.
+      if (
+        !isOriginAllowed(
+          request.headers.get('Origin'),
+          this.env.CHAT_ALLOWED_ORIGINS,
+          url.origin,
+        )
+      ) {
+        console.warn(
+          `[chat] upgrade geweigerd voor origin=${request.headers.get('Origin') ?? '(geen)'}`,
+        );
+        return new Response('Origin niet toegestaan', { status: 403 });
+      }
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       server.accept();
@@ -108,16 +144,41 @@ export class ChatSession extends DurableObject<Env> {
    * lus delen.
    */
   private async onVisitorMessage(raw: string): Promise<void> {
-    let text = raw;
-    try {
-      const parsed = JSON.parse(raw) as { body?: string; email?: string };
-      if (typeof parsed.body === 'string') text = parsed.body;
-      if (typeof parsed.email === 'string') this.contactEmail = parsed.email;
-    } catch {
-      // Platte tekst mag ook.
+    const maxChars = readLimit(this.env.CHAT_MAX_MESSAGE_CHARS, DEFAULT_MAX_CHARS);
+    const parsed = parseVisitorMessage(raw, maxChars);
+    if (!parsed) {
+      // Leeg is stil negeren; te lang verdient uitleg, anders lijkt de widget stuk.
+      if (raw.trim().length > maxChars) {
+        this.notify(`Je bericht is te lang. Houd het onder ${maxChars} tekens.`);
+      }
+      return;
     }
-    const body = text.trim();
-    if (!body) return;
+    const { body } = parsed;
+    if (parsed.email) this.contactEmail = parsed.email;
+
+    // Limiet vóór alles wat geld kost: een geweigerd bericht wordt geen Signal
+    // en start dus geen lus. De telstand slaan we ook bij een afwijzing op,
+    // want het venster kan intussen verlopen zijn.
+    const now = Date.now();
+    const prev =
+      (await this.ctx.storage.get<ChatRateState>(RATE_KEY)) ?? emptyRateState(now);
+    const decision = evaluateRate(prev, now, {
+      perMinute: readLimit(this.env.CHAT_RATE_PER_MIN, DEFAULT_PER_MIN),
+      perSession: readLimit(this.env.CHAT_MAX_PER_SESSION, DEFAULT_PER_SESSION),
+    });
+    await this.ctx.storage.put(RATE_KEY, decision.state);
+
+    if (!decision.allowed) {
+      console.warn(
+        `[chat] bericht geweigerd (${decision.reason}) sessie=${this.sessionId()}`,
+      );
+      this.notify(
+        decision.reason === 'per_minute'
+          ? `Je stuurt te snel achter elkaar. Probeer het over ${Math.ceil(decision.retryAfterMs / 1000)} seconden nog eens.`
+          : 'Dit gesprek heeft het maximale aantal berichten bereikt. Open een nieuw gesprek om verder te gaan.',
+      );
+      return;
+    }
 
     this.history.push({ direction: 'inbound', body, at: new Date().toISOString() });
 
@@ -126,6 +187,13 @@ export class ChatSession extends DurableObject<Env> {
     // Noemt de bezoeker een ticketnummer, dan hoort dit bericht bij dat ticket
     // in plaats van bij een nieuw geval. De lus krijgt het mee als hint.
     const ticketNumber = findTicketNumber(body);
+
+    // Volgnummer uit duurzame opslag, niet uit `history.length`. Dat laatste
+    // leeft in geheugen: na een eviction begint het weer bij nul, krijgt het
+    // volgende bericht een sleutel die al bestaat, en verdwijnt het stil als
+    // duplicaat. De bezoeker typt dan en er gebeurt niets.
+    const seq = ((await this.ctx.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
+    await this.ctx.storage.put(SEQ_KEY, seq);
 
     const db = this.db();
     await db.request<unknown>(this.tenantCtx(), db.rpcUrl('aios_emit_signal'), {
@@ -144,9 +212,26 @@ export class ChatSession extends DurableObject<Env> {
         },
         // Eén signaal per bericht; de volgorde binnen de sessie is de
         // volgorde waarin de DO ze afhandelt.
-        p_idempotency_key: `chat:${this.conversationId}:${this.history.length}`,
+        p_idempotency_key: `chat:${this.conversationId}:${seq}`,
       }),
     });
+  }
+
+  /**
+   * Een mededeling aan de bezoeker die géén onderdeel van het gesprek is —
+   * een limiet, een afwijzing. Bewust een eigen `type`, zodat een widget 'm
+   * anders kan tonen dan een antwoord van de agent, en bewust niet in
+   * `history`: het is geen gespreksinhoud en hoort niet in de logging.
+   */
+  private notify(body: string): void {
+    const payload = JSON.stringify({ type: 'notice', body });
+    for (const s of this.sockets) {
+      try {
+        s.send(payload);
+      } catch {
+        this.sockets.delete(s);
+      }
+    }
   }
 
   /** Duwt een antwoord naar alle openstaande sockets van deze sessie. */

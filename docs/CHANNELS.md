@@ -32,6 +32,7 @@ Het chat-kanaal is geregistreerd en de keten is bedraad:
 | Bezorging | `chat/delivery.ts` — schrijft het bericht én duwt het naar de sessie |
 | Tickets | `chat/tickets.ts` — alleen bij uitkomst `taak` |
 | Autonomie | `outcomes/mayRespondWithoutHuman()` — `kennis` en `systeem` mogen |
+| Bewaking | `agent-core/src/chat-guard/` — origin, rate limiting, berichtlengte |
 
 De sessie-DO beslist niets. Hij normaliseert een binnenkomend bericht tot een
 Signal en zet dat op dezelfde work-bus als mail; de lus (domeingrens → router →
@@ -53,6 +54,38 @@ buiten het domein (vaste afwijzingstekst).
 De widget is een **testwidget**: geen klant-styling, geen herverbindingslogica,
 en hij hoort niet op de site van een klant. Een insluitbare productiewidget is
 nog te bouwen.
+
+### Bewaking op het kanaal
+
+Mail komt binnen via een MCP met eigen auth. Chat komt van een willekeurige
+bezoeker, er zit geen mens tussen, en elk bericht kost LLM-calls op de sleutel
+van de klant. Daarom staat er bewaking vóór de lus, in
+`agent-core/src/chat-guard/` — puur en getest, zodat een tweede realtime kanaal
+'m kan hergebruiken.
+
+| Var | Doet | Default |
+| --- | ---- | ------- |
+| `CHAT_ALLOWED_ORIGINS` | Welke sites de widget mogen insluiten | alleen de Worker zelf |
+| `CHAT_RATE_PER_MIN` | Berichten per minuut per sessie | 10 |
+| `CHAT_MAX_PER_SESSION` | Harde bovengrens per sessie | 100 |
+| `CHAT_MAX_MESSAGE_CHARS` | Max lengte van één bericht | 2000 |
+
+Twee dingen om goed te begrijpen:
+
+**De origin-check is geen beveiliging tegen scripts.** Hij houdt tegen dat een
+*andere website* jouw widget insluit en op jouw rekening laat praten. Wie zelf
+HTTP doet, zet de `Origin`-header op wat hij wil. De rate limiting is de enige
+harde grens op kosten — die telt per sessie in de duurzame opslag van het
+Durable Object, dus een eviction reset 'm niet.
+
+**Ongezet betekent dicht, niet open.** Zonder `CHAT_ALLOWED_ORIGINS` mag alleen
+de Worker zelf een sessie openen. Dat houdt de testwidget werkend en sluit de
+rest uit; een vergeten var zet de deur dus niet open. Zodra de widget op een
+echte site staat, horen die domeinen erin.
+
+Een geweigerd bericht wordt géén Signal en start dus geen lus. De bezoeker
+krijgt een `notice` over de socket — een eigen berichttype, zodat een widget het
+anders kan tonen dan een antwoord van de agent, en het niet in de logging belandt.
 
 ### De gate die nog moet vallen
 

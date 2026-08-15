@@ -84,6 +84,28 @@
     "MAIL_SEND_VIA": "graph",
     // Prefix voor ticketnummers (PREFIX-JJMM-NNNN). Drie letters.
     "TICKET_PREFIX": "TIC"
+
+    // ---------------------------------------------------------------------
+    // CHAT-BEWAKING — alle vier optioneel; de defaults hieronder gelden als je
+    // ze weglaat. Zet ze zodra de widget op een publieke site staat.
+    //
+    // CHAT_ALLOWED_ORIGINS  Welke sites de widget mogen insluiten, komma-
+    //                       gescheiden. Ongezet = alleen deze Worker zelf, dus
+    //                       de testwidget werkt en verder niemand. Zet hier de
+    //                       echte domeinen zodra de widget ergens anders staat:
+    //                         "https://shop.klant.nl,https://www.klant.nl"
+    //                       `*` schakelt de check uit — alleen lokaal.
+    // CHAT_RATE_PER_MIN     Berichten per minuut per sessie.        (10)
+    // CHAT_MAX_PER_SESSION  Harde bovengrens per sessie.            (100)
+    // CHAT_MAX_MESSAGE_CHARS Max lengte van één bericht.            (2000)
+    //
+    // De origin-check houdt andere sites tegen, geen scripts — die zetten de
+    // Origin-header zelf. De rate limiting is wat de rekening begrenst.
+    // ---------------------------------------------------------------------
+    // "CHAT_ALLOWED_ORIGINS": "https://shop.klant.nl",
+    // "CHAT_RATE_PER_MIN": "10",
+    // "CHAT_MAX_PER_SESSION": "100",
+    // "CHAT_MAX_MESSAGE_CHARS": "2000"
   },
   // ---------------------------------------------------------------------------
   // STAGING — aparte Worker om nieuwe branches te testen zonder prod te raken.

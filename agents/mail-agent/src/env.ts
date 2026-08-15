@@ -34,6 +34,27 @@ export interface Env {
   DEMO_MODE?: string;
 
   /**
+   * Komma-gescheiden lijst van origins die een chatsessie mogen openen, bv.
+   * `https://shop.klant.nl,https://www.klant.nl`.
+   *
+   * Ongezet → alleen de Worker zelf, zodat de testwidget blijft werken en geen
+   * enkele andere site de widget kan insluiten. Bewust geen fail-open: een
+   * vergeten var mag de deur niet openzetten. `*` schakelt de check uit en
+   * hoort alleen in lokale ontwikkeling.
+   *
+   * Let op de reikwijdte: dit houdt insluiting door andere sites tegen, geen
+   * scripts — die zetten de `Origin`-header zelf. Daarvoor is de rate limiting.
+   */
+  CHAT_ALLOWED_ORIGINS?: string;
+
+  /** Berichten per minuut per chatsessie. Ongeldig/ontbrekend → 10. */
+  CHAT_RATE_PER_MIN?: string;
+  /** Harde bovengrens per chatsessie. Ongeldig/ontbrekend → 100. */
+  CHAT_MAX_PER_SESSION?: string;
+  /** Maximale lengte van één bezoekersbericht. Ongeldig/ontbrekend → 2000. */
+  CHAT_MAX_MESSAGE_CHARS?: string;
+
+  /**
    * Prefix voor ticketnummers, drie letters (PREFIX-JJMM-NNNN). Ontbreekt of
    * ongeldig → "TIC". Hoort per tenant in het control plane; hier als var.
    */
