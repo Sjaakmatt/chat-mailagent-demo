@@ -92,7 +92,9 @@ export async function deliverChatReply(
     const stub = env.CHAT_SESSION.get(env.CHAT_SESSION.idFromName(sessionId));
     await stub.fetch('https://chat.internal/push', {
       method: 'POST',
-      body: JSON.stringify({ body }),
+      // Het bericht-id gaat mee zodat de widget er een duim aan kan hangen.
+      // Zonder id kan de bezoeker wel oordelen maar weten we niet waarover.
+      body: JSON.stringify({ body, messageId: id }),
     });
   } catch (err) {
     console.warn(

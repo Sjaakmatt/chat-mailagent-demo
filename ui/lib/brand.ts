@@ -10,14 +10,15 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  Inbox,
   BarChart3,
-  Settings,
-  FileClock,
-  ShieldCheck,
-  PlayCircle,
   ClipboardList,
+  FileClock,
+  Inbox,
   MessagesSquare,
+  PlayCircle,
+  Settings,
+  ShieldCheck,
+  ThumbsUp,
 } from "lucide-react";
 
 export interface NavItem {
@@ -51,12 +52,14 @@ export interface Brand {
 
 /**
  * Kern-navigatie. Een verse klant-agent heeft precies deze schermen:
- * werkbak → analytics → auditlog → beleid → toegang.
+ * werkbak → tickets → gesprekken → feedback → analytics → auditlog → beleid →
+ * toegang.
  */
 const CORE_NAV: NavItem[] = [
   { href: "/", label: "Werkbak", icon: Inbox },
   { href: "/tickets", label: "Tickets", icon: ClipboardList },
   { href: "/gesprekken", label: "Gesprekken", icon: MessagesSquare },
+  { href: "/feedback", label: "Feedback", icon: ThumbsUp },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/audit", label: "Auditlog", icon: FileClock },
   { href: "/policy", label: "Beleid", icon: Settings, adminOnly: true },

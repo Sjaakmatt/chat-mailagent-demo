@@ -199,15 +199,38 @@ export class ChatSession extends DurableObject<Env> {
     // De Execute-Workflow duwt het goedgekeurde antwoord hierlangs naar de
     // bezoeker. Losse route, want die draait in een andere isolate.
     if (url.pathname.endsWith('/push') && request.method === 'POST') {
-      const { body } = (await request.json()) as { body?: string };
+      const { body, messageId } = (await request.json()) as {
+        body?: string;
+        messageId?: string;
+      };
       if (body) {
-        this.broadcast({ type: 'message', body });
+        this.broadcast({ type: 'message', body, messageId });
         // Ook het antwoord hoort in het venster. Anders ziet de agent bij de
         // volgende beurt alleen de vragen van de klant en niet wat hij zelf al
         // heeft toegezegd — en herhaalt hij zichzelf of spreekt hij zichzelf tegen.
         await this.remember({ role: 'agent', body });
       }
       return new Response(null, { status: 204 });
+    }
+
+    // Duim omhoog/omlaag van de bezoeker op één antwoord.
+    //
+    // Waarom hier en niet als losse route op de Worker: dit object is de
+    // autoriteit over deze sessie. Het weet welk gesprek erbij hoort, dus een
+    // bezoeker kan geen oordeel achterlaten op het antwoord van iemand anders —
+    // het bericht-id wordt tegen dít gesprek gecontroleerd voordat er iets
+    // wordt weggeschreven.
+    if (url.pathname.endsWith('/feedback') && request.method === 'POST') {
+      const { messageId, rating, comment } = (await request.json()) as {
+        messageId?: string;
+        rating?: string;
+        comment?: string;
+      };
+      if (!messageId || (rating !== 'up' && rating !== 'down')) {
+        return new Response('messageId en rating (up|down) zijn verplicht', { status: 400 });
+      }
+      const opgeslagen = await this.saveFeedback(messageId, rating, comment);
+      return new Response(null, { status: opgeslagen ? 204 : 404 });
     }
 
     if (url.pathname.endsWith('/close') && request.method === 'POST') {
@@ -445,6 +468,67 @@ export class ChatSession extends DurableObject<Env> {
       `[chat] ${this.sessionId()}: langer dan ${Math.round(CHAPTER_GAP_MS / 60000)} min stil — ` +
         'nieuw gesprek, werkgeheugen leeg',
     );
+  }
+
+  /**
+   * Bewaart het oordeel van de bezoeker over één antwoord.
+   *
+   * Geeft `false` als het bericht niet bij dit gesprek hoort. Dat is de hele
+   * autorisatie en ze is genoeg: het sessie-id bepaalt welk Durable Object je
+   * krijgt, en dit object accepteert alleen berichten uit zijn eigen gesprek.
+   *
+   * De opmerking van de bezoeker wordt opgeslagen als DATA en gaat nergens een
+   * prompt in. Wat ermee gebeurt, beslist een mens in de werkbak.
+   */
+  private async saveFeedback(
+    messageId: string,
+    rating: 'up' | 'down',
+    comment?: string,
+  ): Promise<boolean> {
+    const db = this.db();
+    const conversationId = this.conversationId();
+
+    // Hoort dit bericht bij dit gesprek, en is het van de agent? Een duim op je
+    // eigen vraag zegt niets.
+    const check = db.tableUrl('aios_messages');
+    check.searchParams.set('id', `eq.${messageId}`);
+    check.searchParams.set('conversation_id', `eq.${conversationId}`);
+    check.searchParams.set('direction', 'eq.outbound');
+    check.searchParams.set('select', 'id,signal_id');
+    const rows = await db.request<Array<{ id: string; signal_id: string | null }>>(
+      this.tenantCtx(),
+      check,
+      { method: 'GET' },
+    );
+    const bericht = Array.isArray(rows) ? rows[0] : undefined;
+    if (!bericht) {
+      console.warn(`[chat] feedback op onbekend bericht ${messageId} in ${conversationId}`);
+      return false;
+    }
+
+    // `msg-out-<reviewItemId>` — zo komt een medewerker vanuit de feedback bij
+    // de run die dit antwoord maakte: de categorie, de bronnen, het beleid.
+    const reviewItemId = messageId.startsWith('msg-out-')
+      ? messageId.slice('msg-out-'.length)
+      : null;
+
+    await db.request<unknown>(this.tenantCtx(), db.tableUrl('aios_message_feedback'), {
+      method: 'POST',
+      body: JSON.stringify({
+        id: `fb-${messageId}`,
+        organization_id: this.env.AIOS_ORG_ID,
+        conversation_id: conversationId,
+        message_id: messageId,
+        rating,
+        comment: comment?.trim() ? comment.trim().slice(0, 2000) : null,
+        signal_id: bericht.signal_id,
+        review_item_id: reviewItemId,
+        updated_at: new Date().toISOString(),
+      }),
+      // Van gedachten veranderen mag: opnieuw stemmen werkt de rij bij.
+      prefer: 'return=minimal,resolution=merge-duplicates',
+    });
+    return true;
   }
 
   /** Het gespreksvenster zoals het nu in de opslag staat. */
