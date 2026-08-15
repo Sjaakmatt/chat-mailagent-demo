@@ -3,6 +3,7 @@ import { orchestrate, type DecisionLog } from '@factumai/agent-core';
 import type { Env, OrchestrationParams } from '../env.js';
 import { createPlatformStore } from '../store.js';
 import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from '../steps.js';
+import { finishChatTurn } from '../chat/turn.js';
 
 /**
  * Orchestration-Workflow (Build Document A6/C4):
@@ -61,6 +62,31 @@ export class OrchestrationWorkflow extends WorkflowEntrypoint<Env, Orchestration
         confidence: result.reviewItem.confidence ?? null,
         createdAt: new Date().toISOString(),
       };
+      // Chat is realtime: er zit iemand te wachten, dus de beurt wordt hier
+      // afgerond in plaats van in de werkbak. Wát de bezoeker krijgt, hangt af
+      // van de uitkomst — zie chat/turn.ts. Bij mail gebeurt dit niet: daar
+      // blijft het ReviewItem staan tot een mens 'm goedkeurt.
+      if (signal.domain === 'chat') {
+        const payload = (signal.payload ?? {}) as { conversationId?: string };
+        if (payload.conversationId) {
+          try {
+            const turn = await finishChatTurn(this.env, result.reviewItem, result.outcome, {
+              outOfDomain: Boolean(outOfDomain),
+              conversationId: payload.conversationId,
+              category: result.classification.category,
+            });
+            if (turn) {
+              log.steps.push({ step: 'chat-turn', outcome: turn.reason });
+            }
+          } catch (err) {
+            // De bezoeker krijgt dan niets terug, maar het ReviewItem staat
+            // in de werkbak — een mens kan het alsnog oppakken.
+            console.error('[chat] beurt afronden mislukt:', err);
+            log.steps.push({ step: 'chat-turn', outcome: 'mislukt — staat in de werkbak' });
+          }
+        }
+      }
+
       await store.saveDecisionLog(log);
     });
   }

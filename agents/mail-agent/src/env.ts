@@ -28,6 +28,12 @@ export interface Env {
   DOMAIN_GATE?: string;
 
   /**
+   * Zet de chat-testwidget aan op `GET /chat`. Alleen voor demo- en
+   * testomgevingen; op een productie-Worker hoort deze var niet gezet te zijn.
+   */
+  DEMO_MODE?: string;
+
+  /**
    * Prefix voor ticketnummers, drie letters (PREFIX-JJMM-NNNN). Ontbreekt of
    * ongeldig → "TIC". Hoort per tenant in het control plane; hier als var.
    */

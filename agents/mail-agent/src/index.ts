@@ -17,6 +17,7 @@ import { RouterWorkflow } from './workflows/router.js';
 import { SpecialistWorkflow } from './workflows/specialist.js';
 import { AggregatorWorkflow } from './workflows/aggregator.js';
 import { ChatSession } from './chat/session-do.js';
+import { chatWidgetResponse } from './chat/widget.js';
 import type { Env } from './env.js';
 
 export {
@@ -69,6 +70,15 @@ export default {
         status: 202,
       });
     }
+    // Testwidget: één pagina om de hele chat-keten in een browser te lopen.
+    // Alleen als DEMO_MODE aan staat — dit hoort niet op een productie-Worker.
+    if (url.pathname === '/chat' && request.method === 'GET') {
+      if (env.DEMO_MODE !== 'true') {
+        return new Response('Testwidget staat uit (zet DEMO_MODE=true).', { status: 404 });
+      }
+      return chatWidgetResponse();
+    }
+
     // Chat: de bezoeker verbindt met /chat/<sessie>/ws. Elke sessie is een
     // eigen Durable Object, zodat snel achter elkaar getypte berichten niet
     // op elkaars gespreksstand botsen.
