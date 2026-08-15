@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATEGORY_SLUGS } from "@factumai/agent-core";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { requireRole } from "@/lib/auth/require-role";
 import { labelFeedback, EVAL_LABELS, type EvalLabel, type TriageStatus } from "@/lib/visitor-feedback";
@@ -48,10 +49,19 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  // "other" zonder toelichting is geen testcase maar een lege doos.
-  if (label === "other" && (typeof expected !== "string" || !expected.trim())) {
+  // Zonder verwachting is er niets te asserten: dan is het geen testcase maar
+  // een lege doos. Bij `routing` moet het bovendien een bestaande categorie
+  // zijn — een typefout levert een test op die nooit kan slagen.
+  if ((label === "other" || label === "routing") &&
+      (typeof expected !== "string" || !expected.trim())) {
     return NextResponse.json(
-      { error: 'Bij label "other" is een toelichting verplicht' },
+      { error: `Bij label "${label}" is een verwachting verplicht` },
+      { status: 400 },
+    );
+  }
+  if (label === "routing" && !CATEGORY_SLUGS.includes(expected as string)) {
+    return NextResponse.json(
+      { error: `"${expected}" is geen bestaande categorie` },
       { status: 400 },
     );
   }
