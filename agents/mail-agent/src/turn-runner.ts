@@ -36,9 +36,14 @@ import { finishChatTurn } from './chat/turn.js';
  * ## Precies één keer, ook met twee routes
  *
  * De chat-DO draait dit inline én het signaal staat op de wachtrij. Zonder
- * bescherming zou de poller de beurt een tweede keer draaien en de bezoeker een
- * tweede antwoord sturen. Daarom zet deze functie na afloop `status = DONE`, en
- * slaat de Workflow een signaal over dat al verwerkt is.
+ * bescherming draaien beide routes de hele lus en krijgt de bezoeker twee
+ * antwoorden.
+ *
+ * Daarom claimt deze functie het signaal **vóór** het werk, met één UPDATE die
+ * NEW naar PROCESSING zet. Postgres serialiseert dat, dus precies één van de
+ * twee krijgt een rij terug; de ander stopt en geeft `null` terug. Achteraf
+ * markeren volstaat niet — tussen het lezen en het klaar zijn zitten seconden,
+ * en dat is precies het venster waarin de tweede route begint.
  */
 export interface TurnResult {
   reviewItemId: string;
@@ -58,10 +63,31 @@ export async function runSignalTurn(
   env: Env,
   input: Signal,
   opts: TurnOptions = {},
-): Promise<TurnResult> {
+): Promise<TurnResult | null> {
   const store = createPlatformStore(env);
+
+  // Claimen vóór het werk, niet DONE zetten erna. Dat verschil is het hele
+  // punt: de chat-DO draait de beurt rechtstreeks en de poller start er een
+  // Workflow op vanaf de wachtrij. Markeer je pas achteraf, dan is er een
+  // venster van enkele seconden waarin allebei een signaal zien dat nog op NEW
+  // staat — en dan krijgt de bezoeker twee antwoorden.
+  if (!(await store.claimSignal(input.id))) {
+    console.log(`[turn] ${input.id} was al geclaimd door de andere route — overgeslagen`);
+    return null;
+  }
+
   const llm = buildLlmClient(env);
 
+  try {
+    return await voerUit();
+  } catch (err) {
+    // De claim teruggeven, anders blijft dit signaal op PROCESSING staan en
+    // pakt niemand het meer op. Nu kan de poller het opnieuw proberen.
+    await store.markSignal(input.id, 'NEW').catch(() => {});
+    throw err;
+  }
+
+  async function voerUit(): Promise<TurnResult> {
   // Bij mail haalt dit onderwerp en tekst op uit de mailbox; bij chat zit de
   // inhoud al in de payload en komt het signaal ongewijzigd terug.
   const signal = await hydrateSignal(env, input);
@@ -150,4 +176,5 @@ export async function runSignalTurn(
   await store.markSignal(signal.id, 'DONE');
 
   return { reviewItemId: result.reviewItem.id, reply };
+  }
 }
