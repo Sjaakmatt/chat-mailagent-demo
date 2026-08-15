@@ -47,43 +47,23 @@ beide kanalen dezelfde kern delen.
   `domain-gate.test.ts` meten de mechaniek, niet het oordeel. Dit is de gate
   uit bouwbriefing §6 en die staat nog open.
 
-### 2. Signalen laten binnenkomen
-
-De chat-MCP emit `chat.message`-signalen via dezelfde `aios_emit_signal`-RPC als
-de mail-MCP. De poller pikt ze op zonder aanpassing — de queue is kanaal-agnostisch.
-
-Payload-velden die de plan-stap verwacht: een tekst (`bodyText`) en genoeg
-context om de afzender te herkennen. Houd de shape zo dicht mogelijk bij die van
-mail, dan werkt `resolve` ongewijzigd.
-
-### 3. Bezorgroutine schrijven
-
-Voeg in `agents/mail-agent/src/channels.ts` een regel toe:
-
-```ts
-const DELIVERY: Record<string, DeliveryFn> = {
-  draft_email: deliverMailReply,
-  draft_chat_reply: deliverChatReply,
-};
-```
-
-`deliverChatReply` post het goedgekeurde antwoord via de chat-MCP. Idempotent,
-net als de mailvariant: bij een herhaalde Workflow-step mag er geen tweede
-bericht in de conversatie verschijnen.
-
-### 4. Cockpit-weergave
-
-Het detailscherm (`ui/app/(dashboard)/mail/[id]/page.tsx`) toont mailvelden.
-Voor chat wil je een conversatieweergave. Splits op `item.kind` en render per
-kanaal; de werkbak-kaarten en de goedkeuringsknoppen kunnen blijven zoals ze zijn.
-
-### 5. De vraag die je eerst moet beantwoorden
+## De autonomie-vraag — beantwoord
 
 Chat is realtime en mail niet. Dat is geen technisch detail maar de kern van het
 ontwerp: bij mail is een mens-in-de-lus vanzelfsprekend, want een paar minuten
 wachttijd valt niemand op. Bij chat zit er iemand te wachten.
 
-Drie werkbare antwoorden:
+Er zijn drie werkbare antwoorden. **Gekozen is nummer 2, strak begrensd:**
+`kennis` en `systeem` mogen direct naar de bezoeker, `taak` en `onbekend` niet.
+Dat staat in `mayRespondWithoutHuman()` en wordt afgedwongen door tests.
+
+Wat die keuze houdbaar maakt, is dat er drie dingen vóór staan: de domeingrens
+blokkeert alles buiten het domein, de grounding-check weigert claims zonder
+dekking, en `systeem` degradeert naar `taak` zodra identificatie of
+systeemantwoord ontbreekt. Valt één daarvan weg, dan is deze keuze niet meer
+verdedigbaar.
+
+De alternatieven, voor als je erop terug wilt komen:
 
 1. **Chat afhandelen als asynchroon kanaal.** De agent bevestigt direct ("we
    zoeken het uit"), het echte antwoord gaat langs review. Traag maar veilig, en
@@ -95,5 +75,5 @@ Drie werkbare antwoorden:
    grijpen; daarna gaat het voorstel eruit. Vereist een cockpit die realtime
    duwt in plaats van pollt.
 
-Kies er één bewust en leg 'm vast in `client.manifest.yaml`. Bouw geen chat
-zonder dat die keuze is gemaakt — dan sluipt optie 2 er per ongeluk in.
+Wil een klant een ander regime, leg dat dan vast in `client.manifest.yaml` en
+pas `mayRespondWithoutHuman()` aan — niet de prompts.
