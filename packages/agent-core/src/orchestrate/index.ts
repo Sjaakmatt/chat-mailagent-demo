@@ -28,6 +28,7 @@ import {
 } from '../grounding/index.js';
 import { getIntentConfig, type IntentConfig } from '../specialists/index.js';
 import { DOMAIN } from '../domain-gate/index.js';
+import type { Outcome } from '../outcomes/index.js';
 
 export interface Classification {
   /** Categorie/triage-label (klant-specifiek). */
@@ -39,6 +40,13 @@ export interface Classification {
    * `outOfDomainReviewItem()` te gebruiken in plaats van door te routeren.
    */
   outOfDomain?: { reason: string } | null;
+  /**
+   * Voorlopige uitkomst uit de router (kennis | systeem | taak | onbekend).
+   * Staat los van `specialist`: de uitkomst bepaalt de route, de specialist
+   * schrijft de tekst. `systeem` is voorlopig tot `finalizeOutcome()` 'm na de
+   * tool-calls bevestigt — zie `outcomes/index.ts`.
+   */
+  outcome?: Outcome;
   /** 0..1 vertrouwen van de classificatie. */
   confidence: number;
   /** Heeft deze casus de RAG/memory-stap nodig? */
