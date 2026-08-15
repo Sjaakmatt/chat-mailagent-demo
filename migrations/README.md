@@ -28,6 +28,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0021_revoke_security_definer` | RPC-grants dichtzetten — **verplicht** op bestaande DB's |
 | `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
 | `0023_demo_context`         | beleidsregels per categorie — **demo**, verzonnen cijfers |
+| `0024_demo_catalogus`       | assortiment + trajecten — **gegenereerd**, zie hieronder |
 
 ## Waarom de gaten in de nummering
 
@@ -45,3 +46,15 @@ Volgende vrije nummer, beschrijvende naam, en houd 'm idempotent
 (`create table if not exists`, `add column if not exists`, `on conflict do
 nothing`). Een migratie die maar één keer kan draaien, gaat een keer stuk op het
 verkeerde moment.
+
+## `0024_demo_catalogus` niet met de hand bewerken
+
+Dat bestand wordt gegenereerd uit `data/catalog.mjs` in de **factum-webshop**-repo:
+
+```bash
+node scripts/seed-sql.mjs > ../chat-mailagent-demo/migrations/0024_demo_catalogus.sql
+```
+
+De winkel en de agent moeten hetzelfde assortiment kennen. Bewerk je de SQL met
+de hand, dan noemt de chatbot vroeg of laat een prijs die de bezoeker naast zich
+op het scherm ziet tegenspreken. Pas de catalogus aan en genereer opnieuw.

@@ -74,40 +74,39 @@ export interface DomainConfig {
  */
 export const DOMAIN: DomainConfig = {
   description:
-    'Factum Webshop, een Nederlandse webwinkel in werkplekartikelen ' +
-    '(monitorarmen, bureaulampen, zit-sta-bureaus). Bezoekers zijn klanten met ' +
-    'een vraag over hun bestelling, een retour, garantie of een product. De ' +
-    'winkel is tegelijk de demo-omgeving van FactumAI, het bureau dat deze ' +
-    'agent bouwt; vragen over FactumAI en wat het levert horen er daarom ook ' +
-    'bij.',
+    'Factum Webshop, de winkel waarin FactumAI zijn modulaire AI- en ' +
+    'softwareproducten verkoopt: agents die klantcontact voorbereiden (mail, ' +
+    'chat, WhatsApp, documenten), koppelingen naar bestaande systemen, modules ' +
+    'als kennisbank en ticketing, en de diensten eromheen. Bezoekers zijn ' +
+    'prospects die het assortiment bekijken, of klanten met een lopend ' +
+    'implementatietraject of abonnement.',
   inScope: [
-    // --- de winkel ---
-    'bestellingen: status, levertijd, track & trace, bezorging',
-    'voorraad en beschikbaarheid van artikelen, en wanneer iets terugkomt',
-    'verzendkosten, bezorgopties, bezorgen in het buitenland, afhalen',
-    'een bestelling wijzigen, aanvullen of annuleren',
-    'retourneren, ruilen, herroepingsrecht, terugbetaling',
-    'garantie, defecten, ontbrekende of verkeerd geleverde onderdelen',
-    'een pakket dat niet is aangekomen of beschadigd binnenkwam',
-    'productvragen: maten, materialen, compatibiliteit, montage, gebruik',
-    'facturen, betaalmethoden, btw, zakelijk bestellen',
-    'klachten over een product, een bezorging of de afhandeling ervan',
-    'de winkel zelf: openingstijden, bereikbaarheid, adres, voorwaarden',
-    'privacy- en AVG-verzoeken over de eigen gegevens van de klant',
-    // --- FactumAI ---
-    'FactumAI: wat het bureau doet en wat het levert',
-    'de mailagent en de chatbot: wat ze doen en hoe ze werken',
+    // --- oriënteren ---
+    'wat een artikel doet, wat erin zit en wat het niet doet',
+    'beschikbaarheid, levertijd en doorlooptijd tot in gebruik',
+    'koppelingen met bestaande systemen (mail, webshop, CRM, ERP, boekhouding)',
+    'of een systeem dat er niet bij staat toch te koppelen is',
+    'prijzen, staffels, inbegrepen volumes, contractduur en opzegtermijn',
+    'hoe het werkt: de lus van bericht tot goedgekeurde actie',
     'de mens-in-de-lus: wat de agent zelf mag en wat langs een mens gaat',
-    'koppelingen met bestaande systemen (mail, webshop, CRM, ERP, agenda)',
-    'prijzen, staffels, contractduur en opzegtermijn van FactumAI',
-    'beveiliging, datalocatie, AVG en verwerkersovereenkomsten',
-    'implementatie: doorlooptijd, wat FactumAI doet en wat de klant doet',
+    'implementatie: doorlooptijd, wat wij doen en wat de klant doet',
+    'beveiliging, datalocatie, AVG, verwerkersovereenkomsten, dataretentie',
     'wat het oplevert — tijdwinst, doorlooptijd, kwaliteit',
-    'hoe het zich verhoudt tot een chatbot van de plank of zelf bouwen',
-    'een demo, offerte of kennismaking met FactumAI aanvragen',
+    'hoe het zich verhoudt tot een bot van de plank of zelf bouwen',
+    'een offerte, demo of kennismaking aanvragen',
+    // --- klant zijn ---
+    'de status van een lopend implementatietraject en de eerstvolgende stap',
+    'een abonnement wijzigen: module erbij, eraf, upgraden',
+    'opzeggen, de proefperiode, wat er met je gegevens gebeurt als je stopt',
+    'storingen, reactietijden en de SLA-niveaus',
+    'iets dat niet werkt zoals verwacht',
+    'facturen, betaalmethoden, btw, betaaltermijn, zakelijk afnemen',
+    'klachten over een product, een traject of de afhandeling ervan',
+    'de winkel zelf: bereikbaarheid, voorwaarden, contact',
+    'privacy- en AVG-verzoeken over de eigen gegevens van de bezoeker',
   ],
   outOfScope: [
-    'algemene AI-vragen zonder verband met deze winkel of met FactumAI',
+    'algemene AI- of techniekvragen zonder verband met wat wij leveren',
     'advies over of vergelijkingen met met naam genoemde concurrenten',
     'juridisch, fiscaal, medisch of financieel advies',
     'code schrijven, debuggen of prompts opstellen voor de bezoeker',
@@ -118,9 +117,9 @@ export const DOMAIN: DomainConfig = {
       'die zelf noemt',
   ],
   rejectionText:
-    'Daar ga ik niet over — ik help met vragen over je bestelling, onze ' +
-    'producten en de service van Factum Webshop, en met vragen over FactumAI ' +
-    'zelf. Waar kan ik je daarin verder mee helpen?',
+    'Daar ga ik niet over — ik help met vragen over ons assortiment, je ' +
+    'implementatie of je abonnement bij Factum Webshop. Waar kan ik je daarin ' +
+    'verder mee helpen?',
 };
 
 export interface DomainGateResult {

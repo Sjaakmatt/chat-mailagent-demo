@@ -60,7 +60,7 @@ describe('parseClassification', () => {
 
   it('mapt de categorieën uit de taxonomie naar de juiste specialist', () => {
     expect(parseClassification('{"category":"levertijd_status"}').specialist).toBe('simple_reply');
-    expect(parseClassification('{"category":"retour_ruilen"}').specialist).toBe('order_change');
+    expect(parseClassification('{"category":"opzegging_proef"}').specialist).toBe('order_change');
     expect(parseClassification('{"category":"klacht"}').specialist).toBe('complaint');
     expect(parseClassification('{"category":"technisch_probleem"}').specialist).toBe('technical');
     expect(parseClassification('{"category":"gdpr_verzoek"}').specialist).toBe('gdpr');

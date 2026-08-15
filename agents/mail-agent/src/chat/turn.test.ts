@@ -73,13 +73,13 @@ describe('wat de bezoeker terugkrijgt', () => {
   it('taak: ticket plus bevestiging, niet het opgestelde antwoord', async () => {
     const res = await finishChatTurn(
       env,
-      item('Ik regel je retour meteen.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
+      item('Ik zeg je abonnement meteen op.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
       uitkomst('taak'),
-      { conversationId: 'conv_1', category: 'retour_ruilen' },
+      { conversationId: 'conv_1', category: 'opzegging_proef' },
     );
     expect(res?.ticketNumber).toBe('TIC-2608-0001');
     expect(pushed).toEqual(['Ticket TIC-2608-0001.']);
-    expect(pushed[0]).not.toContain('regel je retour');
+    expect(pushed[0]).not.toContain('zeg je abonnement');
   });
 
   it('taak zonder bruikbare identificatie: om gegevens vragen, geen ticket', async () => {

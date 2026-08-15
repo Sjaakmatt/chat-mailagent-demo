@@ -11,8 +11,8 @@
  * inbox (geanonimiseerd). Een demo werkt pas als de prospect z'n eigen
  * werkelijkheid herkent — kies de mails die intern het meeste tijd kosten.
  *
- * De `orderNumber`-verwijzingen matchen de seed in de demo-migratie, zodat de
- * agent echte order/tracking-lookups doet en de grounding-check iets te
+ * De ordernummers matchen de trajecten uit `migrations/0024_demo_catalogus.sql`,
+ * zodat de agent echte lookups doet en de grounding-check iets te
  * verifiëren heeft.
  */
 
@@ -29,34 +29,35 @@ export interface DemoScenario {
 
 export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
   {
-    key: "levertijd",
+    key: "status",
     purpose:
-      "Simpele statusvraag met ordernummer — toont de order-lookup en de grounding-check op track & trace.",
+      "Statusvraag met ordernummer — toont de trajectlookup en de grounding-check op de mijlpalen.",
     from: "j.dekker@example.com",
     fromName: "Jeroen Dekker",
-    subject: "Waar blijft mijn bestelling?",
+    subject: "Hoe ver staat onze implementatie?",
     body: [
       "Goedemiddag,",
       "",
-      "Vorige week heb ik order DEMO-1001 geplaatst en ik heb nog niks ontvangen.",
-      "Kunnen jullie me vertellen wanneer het geleverd wordt?",
+      "We zijn eind juli gestart met traject DEMO-1001 en ik hoor intern de vraag",
+      "wanneer we live gaan. Kunnen jullie me vertellen waar we nu staan?",
       "",
       "Met vriendelijke groet,",
       "Jeroen Dekker",
     ].join("\n"),
   },
   {
-    key: "retour",
+    key: "uitbreiding",
     purpose:
-      "Retouraanvraag binnen de termijn — laat zien hoe een beleidsregel de toon en de voorgestelde actie stuurt.",
+      "Wijziging op een lopend abonnement — laat zien hoe een beleidsregel de toon en de voorgestelde actie stuurt, en dat de agent het niet zelf doorvoert.",
     from: "m.vandenberg@example.com",
     fromName: "Marieke van den Berg",
-    subject: "Retour aanmelden order DEMO-1002",
+    subject: "Ticketing erbij op DEMO-1002",
     body: [
       "Hallo,",
       "",
-      "Ik wil graag een artikel uit order DEMO-1002 retourneren. Het voldoet niet",
-      "aan wat ik verwachtte. Hoe pak ik dit aan?",
+      "We draaien nu de chatbot met de kennisbank (DEMO-1002) en we willen de",
+      "ticketing-module erbij. Kan dat per direct, en wat wordt dan het",
+      "maandbedrag?",
       "",
       "Groet, Marieke",
     ].join("\n"),
@@ -71,28 +72,46 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
     body: [
       "Beste,",
       "",
-      "Dit is inmiddels mijn derde mail over order DEMO-1003 en ik krijg steeds",
-      "geen antwoord. Ik vind dit ronduit slechte service en verwacht vandaag nog",
-      "een reactie, anders stap ik naar de geschillencommissie.",
+      "Dit is inmiddels mijn derde mail over traject DEMO-1003 en ik krijg steeds",
+      "geen antwoord. We hebben in juli getekend en er is nog geen aftrap geweest.",
+      "Ik verwacht vandaag nog een reactie.",
       "",
       "Peter Jansen",
     ].join("\n"),
   },
   {
-    key: "technisch",
+    key: "storing",
     purpose:
-      "Technische vraag — routeert naar de technische specialist (zwaardere modeltier).",
+      "Storingsmelding bij een bestaande klant — routeert naar de technische specialist en moet de SLA-reactietermijn noemen.",
     from: "s.bakker@example.com",
     fromName: "Sanne Bakker",
-    subject: "Product werkt niet zoals verwacht",
+    subject: "Chatbot geeft sinds vanochtend geen antwoord",
     body: [
       "Goedemorgen,",
       "",
-      "Ik heb het artikel uit order DEMO-1001 geïnstalleerd volgens de handleiding,",
-      "maar het schakelt steeds na een paar minuten uit. Wat kan ik nog proberen?",
+      "De chatbot op onze site (traject DEMO-1002) reageert sinds vanochtend",
+      "nergens meer op. De knop verschijnt wel, maar er komt niets terug.",
+      "Wanneer kunnen jullie hiernaar kijken?",
       "",
       "Vriendelijke groet,",
       "Sanne Bakker",
+    ].join("\n"),
+  },
+  {
+    key: "prospect",
+    purpose:
+      "Prospect zonder traject — toont dat de agent over het assortiment kan praten zonder klantgegevens, en waar hij doorverwijst naar een mens.",
+    from: "d.koster@example.com",
+    fromName: "Daan Koster",
+    subject: "Vraag over de mailagent",
+    body: [
+      "Hoi,",
+      "",
+      "We draaien Exact Online en Microsoft 365. Wat kost de mailagent bij ons",
+      "ongeveer, en gaat er echt altijd iemand overheen voordat er iets naar een",
+      "klant gaat?",
+      "",
+      "Daan Koster",
     ].join("\n"),
   },
   {
@@ -121,9 +140,9 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
     body: [
       "Hoi,",
       "",
-      "Ten eerste: wanneer wordt order DEMO-1002 geleverd?",
-      "En ten tweede: ik wil op order DEMO-1001 het afleveradres wijzigen naar",
-      "mijn werkadres. Kan dat nog?",
+      "Ten eerste: wanneer gaat traject DEMO-1002 over naar de maandelijkse",
+      "bijsturing? En ten tweede: kunnen we op DEMO-1001 de kennisbank nog",
+      "toevoegen voordat we live gaan?",
       "",
       "Dank alvast, Linda",
     ].join("\n"),

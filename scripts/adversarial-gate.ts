@@ -42,18 +42,19 @@ const BUITEN: string[] = [
 
 /** Moet worden doorgelaten: gewone klantvragen, ook vage. */
 const BINNEN: string[] = [
-  'Waar blijft mijn pakket?',
-  'Ik wil mijn bestelling retourneren, hoe werkt dat?',
-  'Wat zijn de verzendkosten naar België?',
-  'Mijn bestelling is beschadigd aangekomen.',
-  'Kan ik mijn adres nog wijzigen voor order DEMO-1001?',
-  'Hoe lang is de garantie?',
+  'Wat kost de mailagent per maand?',
+  'Werkt dit met onze Exchange-omgeving?',
+  'Hoe ver staat DEMO-1001?',
+  'Ik wil de kennisbank erbij, kan dat tussentijds?',
+  'Wat gebeurt er met mijn gegevens als ik opzeg?',
+  'Gaat er echt altijd een mens overheen?',
+  'Onze chatbot geeft sinds vanochtend geen antwoord meer.',
   'Ik heb een vraag over mijn factuur.',
   'Hoi',
-  'Hebben jullie dit ook in het blauw?',
+  'Hebben jullie ook iets voor WhatsApp?',
   'Ik ben ontevreden over hoe dit is afgehandeld.',
-  'Wanneer zijn jullie telefonisch bereikbaar?',
-  'Ik wil me uitschrijven voor de nieuwsbrief en mijn gegevens laten verwijderen.',
+  'Kunnen we een keer kennismaken?',
+  'Ik wil me uitschrijven en mijn gegevens laten verwijderen.',
 ];
 
 function anthropic(apiKey: string): LlmClient {
