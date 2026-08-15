@@ -64,11 +64,11 @@ alter table public.demo_customers       enable row level security;
 
 insert into public.demo_orders (order_number, customer_email, customer_name, status, total_value, currency, carrier, tracking_code, data) values
 ('DEMO-1001', 'j.dekker@example.com', 'Jeroen Dekker', 'shipped', 149, 'EUR', 'PostNL', '3SDEMO0001001',
- '{"orderNumber":"DEMO-1001","customerEmail":"j.dekker@example.com","customerName":"Jeroen Dekker","orderDate":"2026-08-06T10:30:00Z","totalValue":149,"currency":"EUR","items":[{"sku":"DEMO-SKU-A","productName":"Demoproduct A","quantity":1,"unitPrice":149}],"shippingAddress":{"street":"Voorbeeldstraat 1","postalCode":"1000 AA","city":"Amsterdam","country":"NL"},"status":"shipped","trackingCode":"3SDEMO0001001","carrier":"PostNL"}'::jsonb),
+ '{"orderNumber":"DEMO-1001","customerEmail":"j.dekker@example.com","customerName":"Jeroen Dekker","orderDate":"2026-08-06T10:30:00Z","totalValue":149,"currency":"EUR","items":[{"sku":"DEMO-SKU-A","productName":"Monitorarm Dual 27 inch","quantity":1,"unitPrice":149}],"shippingAddress":{"street":"Voorbeeldstraat 1","postalCode":"1000 AA","city":"Amsterdam","country":"NL"},"status":"shipped","trackingCode":"3SDEMO0001001","carrier":"PostNL"}'::jsonb),
 ('DEMO-1002', 'm.vandenberg@example.com', 'Marieke van den Berg', 'delivered', 89, 'EUR', 'PostNL', '3SDEMO0001002',
- '{"orderNumber":"DEMO-1002","customerEmail":"m.vandenberg@example.com","customerName":"Marieke van den Berg","orderDate":"2026-08-01T14:15:00Z","totalValue":89,"currency":"EUR","items":[{"sku":"DEMO-SKU-B","productName":"Demoproduct B","quantity":1,"unitPrice":89}],"shippingAddress":{"street":"Voorbeeldlaan 22","postalCode":"3500 BB","city":"Utrecht","country":"NL"},"status":"delivered","trackingCode":"3SDEMO0001002","carrier":"PostNL"}'::jsonb),
+ '{"orderNumber":"DEMO-1002","customerEmail":"m.vandenberg@example.com","customerName":"Marieke van den Berg","orderDate":"2026-08-01T14:15:00Z","totalValue":89,"currency":"EUR","items":[{"sku":"DEMO-SKU-B","productName":"Bureaulamp Lumen","quantity":1,"unitPrice":89}],"shippingAddress":{"street":"Voorbeeldlaan 22","postalCode":"3500 BB","city":"Utrecht","country":"NL"},"status":"delivered","trackingCode":"3SDEMO0001002","carrier":"PostNL"}'::jsonb),
 ('DEMO-1003', 'p.jansen@example.com', 'Peter Jansen', 'pending', 249, 'EUR', null, null,
- '{"orderNumber":"DEMO-1003","customerEmail":"p.jansen@example.com","customerName":"Peter Jansen","orderDate":"2026-08-11T09:05:00Z","totalValue":249,"currency":"EUR","items":[{"sku":"DEMO-SKU-C","productName":"Demoproduct C","quantity":1,"unitPrice":249}],"shippingAddress":{"street":"Voorbeeldweg 7","postalCode":"5600 CC","city":"Eindhoven","country":"NL"},"status":"pending"}'::jsonb)
+ '{"orderNumber":"DEMO-1003","customerEmail":"p.jansen@example.com","customerName":"Peter Jansen","orderDate":"2026-08-11T09:05:00Z","totalValue":249,"currency":"EUR","items":[{"sku":"DEMO-SKU-C","productName":"Zit-sta bureaublad 120x70","quantity":1,"unitPrice":249}],"shippingAddress":{"street":"Voorbeeldweg 7","postalCode":"5600 CC","city":"Eindhoven","country":"NL"},"status":"pending"}'::jsonb)
 on conflict (order_number) do update set
   customer_email=excluded.customer_email, customer_name=excluded.customer_name,
   status=excluded.status, total_value=excluded.total_value, currency=excluded.currency,
@@ -83,9 +83,9 @@ on conflict (tracking_code) do update set
   carrier=excluded.carrier, current_status=excluded.current_status, data=excluded.data;
 
 insert into public.demo_inventory (sku, product_name, category, in_stock, unit_value, lead_time_days, data) values
-('DEMO-SKU-A', 'Demoproduct A', 'demo', 42, 149, 2, '{"sku":"DEMO-SKU-A","productName":"Demoproduct A","inStock":42,"leadTimeDays":2}'::jsonb),
-('DEMO-SKU-B', 'Demoproduct B', 'demo', 0,  89, 14, '{"sku":"DEMO-SKU-B","productName":"Demoproduct B","inStock":0,"leadTimeDays":14}'::jsonb),
-('DEMO-SKU-C', 'Demoproduct C', 'demo', 7, 249, 5, '{"sku":"DEMO-SKU-C","productName":"Demoproduct C","inStock":7,"leadTimeDays":5}'::jsonb)
+('DEMO-SKU-A', 'Monitorarm Dual 27 inch', 'demo', 42, 149, 2, '{"sku":"DEMO-SKU-A","productName":"Monitorarm Dual 27 inch","inStock":42,"leadTimeDays":2}'::jsonb),
+('DEMO-SKU-B', 'Bureaulamp Lumen', 'demo', 0,  89, 14, '{"sku":"DEMO-SKU-B","productName":"Bureaulamp Lumen","inStock":0,"leadTimeDays":14}'::jsonb),
+('DEMO-SKU-C', 'Zit-sta bureaublad 120x70', 'demo', 7, 249, 5, '{"sku":"DEMO-SKU-C","productName":"Zit-sta bureaublad 120x70","inStock":7,"leadTimeDays":5}'::jsonb)
 on conflict (sku) do update set
   product_name=excluded.product_name, category=excluded.category, in_stock=excluded.in_stock,
   unit_value=excluded.unit_value, lead_time_days=excluded.lead_time_days, data=excluded.data;
