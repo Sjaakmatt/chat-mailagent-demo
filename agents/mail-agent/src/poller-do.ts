@@ -11,12 +11,23 @@ const LAST_KEY = 'lastRun';
 
 /**
  * Poller (Build Document A4 — "de seam"). Een Durable Object met alarm leest
- * de pgmq-queue en start per message de Orchestration-Workflow met
- * idempotency-key = msg_id; archiveert pas ná succesvolle start.
+ * de pgmq-queue en start per message de Orchestration-Workflow op `signalId`;
+ * archiveert pas ná succesvolle start.
  *
  * Back-off: bij werk weer snel pollen (MIN_DELAY_MS); bij een lege queue
  * exponentieel oplopen tot MAX_DELAY_MS — te frequent pollen knabbelt aan
  * scale-to-zero.
+ *
+ * ## Wat hier wél en niet doorheen loopt
+ *
+ * Mail: alles. Er zit niemand te wachten, dus de wachtrij met back-off is
+ * precies goed — hij vangt pieken op en levert at-least-once.
+ *
+ * Chat: als vangnet. De chat-DO start de lus zelf zodra er een bericht
+ * binnenkomt, want daar staat een bezoeker naar een leeg venster te kijken. Dit
+ * blijft de tweede route voor het geval die directe start mislukt. Beide
+ * gebruiken `signalId` als instance-id, dus wie er ook eerst is, de tweede
+ * start doet niets.
  *
  * ## Waarom hier een try/catch omheen zit
  *
@@ -41,22 +52,6 @@ export class MailPoller extends DurableObject<Env> {
     const existing = await this.ctx.storage.getAlarm();
     if (existing === null || existing <= Date.now()) {
       await this.ctx.storage.setAlarm(Date.now() + MIN_DELAY_MS);
-    }
-  }
-
-  /**
-   * Er is zojuist werk binnengekomen — poll nu in plaats van bij het volgende
-   * alarm. Roept de chat-DO aan direct na het emitten van een Signal.
-   *
-   * Zonder dit is de wachttijd van een chatbezoeker de back-off van de poller
-   * (tot 30 seconden) of, als het alarm stilviel, de Cron (tot 5 minuten). Voor
-   * mail is dat prima; voor iemand die in een chatvenster zit te wachten niet.
-   */
-  async wake(): Promise<void> {
-    const soon = Date.now() + 100;
-    const existing = await this.ctx.storage.getAlarm();
-    if (existing === null || existing > soon) {
-      await this.ctx.storage.setAlarm(soon);
     }
   }
 
@@ -88,15 +83,20 @@ export class MailPoller extends DurableObject<Env> {
       const useMultiAgent = this.env.USE_MULTI_AGENT_ROUTER === 'true';
 
       const result = await runPoll(consumer, async (job) => {
-        // idempotency-key = msg_id → dubbele start is een no-op.
+        // Instance-id op `signalId` en niet op msg_id. Dat is geen detail: de
+        // chat-DO start dezelfde lus rechtstreeks zodra er een bericht binnenkomt
+        // (zie `chat/session-do.ts`), en die kent alleen het signaal. Delen ze
+        // dezelfde sleutel, dan is de tweede start een no-op en kunnen beide
+        // routes naast elkaar bestaan — de snelle voor chat, de wachtrij als
+        // vangnet. Op msg_id zouden het twee runs op één bericht worden.
         if (useMultiAgent) {
           await this.env.ROUTER.create({
-            id: `route-${job.idempotencyKey}`,
+            id: `route-${job.signalId}`,
             params: { signalId: job.signalId },
           });
         } else {
           await this.env.ORCHESTRATION.create({
-            id: `orch-${job.idempotencyKey}`,
+            id: `orch-${job.signalId}`,
             params: { signalId: job.signalId },
           });
         }

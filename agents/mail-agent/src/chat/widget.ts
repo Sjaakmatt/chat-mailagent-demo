@@ -77,8 +77,6 @@ const PAGE = String.raw`<!doctype html>
   </header>
 
   <div class="setup">
-    <label for="email">E-mailadres</label>
-    <input id="email" type="email" placeholder="klant@example.com" style="flex:1">
     <span class="hint">Nodig voor <code>systeem</code>-antwoorden en tickets.</span>
   </div>
 
@@ -109,7 +107,6 @@ const PAGE = String.raw`<!doctype html>
   var form = document.getElementById('form');
   var input = document.getElementById('input');
   var send = document.getElementById('send');
-  var email = document.getElementById('email');
 
   function add(text, cls) {
     var el = document.createElement('div');
@@ -158,7 +155,9 @@ const PAGE = String.raw`<!doctype html>
     e.preventDefault();
     var body = input.value.trim();
     if (!body || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ body: body, email: email.value.trim() || null }));
+    // Zelfde gedrag als de productiewidget: alleen tekst. Een adres in het
+    // bericht haalt de server er zelf uit.
+    ws.send(JSON.stringify({ body: body }));
     add(body, 'msg in');
     input.value = '';
     // De agent doet z'n werk buiten de sessie om; even zichtbaar maken dat er

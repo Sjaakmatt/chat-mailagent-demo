@@ -257,40 +257,65 @@ export class ChatSession extends DurableObject<Env> {
     // in plaats van bij een nieuw geval. De lus krijgt het mee als hint.
     const ticketNumber = findTicketNumber(body);
 
-    await db.request<unknown>(this.tenantCtx(), db.rpcUrl('aios_emit_signal'), {
-      method: 'POST',
-      body: JSON.stringify({
-        p_org: this.env.AIOS_ORG_ID,
-        p_domain: 'chat',
-        p_type: 'chat.message',
-        p_payload: {
-          bodyText: body,
-          from: contactEmail,
-          conversationId,
-          sessionId: this.sessionId(),
-          ticketNumber,
-          receivedDateTime: new Date().toISOString(),
-        },
-        // Eén signaal per bericht; de volgorde binnen de sessie is de
-        // volgorde waarin de DO ze afhandelt.
-        p_idempotency_key: `chat:${conversationId}:${seq}`,
-      }),
-    });
+    const emitted = await db.request<Array<{ signal_id?: string }>>(
+      this.tenantCtx(),
+      db.rpcUrl('aios_emit_signal'),
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          p_org: this.env.AIOS_ORG_ID,
+          p_domain: 'chat',
+          p_type: 'chat.message',
+          p_payload: {
+            bodyText: body,
+            from: contactEmail,
+            conversationId,
+            sessionId: this.sessionId(),
+            ticketNumber,
+            receivedDateTime: new Date().toISOString(),
+          },
+          // Eén signaal per bericht; de volgorde binnen de sessie is de
+          // volgorde waarin de DO ze afhandelt.
+          p_idempotency_key: `chat:${conversationId}:${seq}`,
+        }),
+      },
+    );
 
-    // De poller meteen wekken. Zonder dit is de wachttijd van de bezoeker de
-    // back-off van de poller (tot 30 seconden) of, als het alarm ooit stilviel,
-    // die van de Cron (tot 5 minuten). Bij mail merkt niemand dat; hier zit
-    // iemand in een chatvenster te kijken.
-    //
-    // Best-effort: mislukt het wekken, dan pikt het gewone alarm of de Cron het
-    // alsnog op. Een bericht mag niet verloren gaan omdat de wekker het niet deed.
+    const signalId = Array.isArray(emitted) ? emitted[0]?.signal_id : undefined;
+    if (signalId) await this.startTurn(signalId);
+  }
+
+  /**
+   * Start de lus meteen voor dit bericht, in plaats van te wachten tot de
+   * poller de wachtrij leest.
+   *
+   * ## Waarom chat niet op de poller wacht
+   *
+   * Bij mail is de wachtrij precies goed: er zit niemand te kijken, en de
+   * back-off van de poller (1–30 s) plus de Cron als vangnet kost niets. Bij
+   * chat wél — daar staat een bezoeker naar "de agent kijkt ernaar…" te staren.
+   * De omweg via de wachtrij levert daar alleen latency op en een extra
+   * onderdeel dat stuk kan, en als dat onderdeel stilvalt gebeurt er helemaal
+   * niets meer.
+   *
+   * Het signaal gaat nog steeds naar de bus. Dat blijft de duurzame vastlegging
+   * en het vangnet: mislukt de start hieronder, dan pakt de poller 'm alsnog op.
+   * Beide routes gebruiken `signalId` als instance-id, dus wie er ook eerst is,
+   * de tweede start is een no-op. Dat is de hele reden dat dit veilig kan.
+   */
+  private async startTurn(signalId: string): Promise<void> {
     try {
-      await this.env.AIOS_POLLER.get(
-        this.env.AIOS_POLLER.idFromName('aios-poller'),
-      ).wake();
+      if (this.env.USE_MULTI_AGENT_ROUTER === 'true') {
+        await this.env.ROUTER.create({ id: `route-${signalId}`, params: { signalId } });
+      } else {
+        await this.env.ORCHESTRATION.create({ id: `orch-${signalId}`, params: { signalId } });
+      }
     } catch (err) {
+      // Niet fataal en niet doorgooien: het signaal staat op de bus, dus de
+      // poller pakt het op. Wel luid loggen — een chat die stil op de wachtrij
+      // valt terug is trager dan de bezoeker verwacht, en dat wil je zien.
       console.warn(
-        '[chat] poller wekken mislukt:',
+        '[chat] directe start mislukt, valt terug op de poller:',
         err instanceof Error ? err.message : String(err),
       );
     }

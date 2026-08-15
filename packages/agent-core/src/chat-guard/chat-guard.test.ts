@@ -5,6 +5,7 @@ import {
   evaluateRate,
   emptyRateState,
   parseVisitorMessage,
+  extractEmail,
   readLimit,
   type ChatRateLimits,
 } from './index.js';
@@ -168,6 +169,18 @@ describe('parseVisitorMessage', () => {
     expect(m && 'email' in m).toBe(false);
   });
 
+  // De widget heeft geen e-mailveld meer: de agent vraagt erom zodra hij iets
+  // moet opzoeken, en de bezoeker typt het in zijn antwoord.
+  it('haalt een adres uit de tekst als er geen veld is meegestuurd', () => {
+    const m = parseVisitorMessage('{"body":"Dat is Jan@Example.com, order DEMO-1001"}', 100);
+    expect(m).toEqual({ body: 'Dat is Jan@Example.com, order DEMO-1001', email: 'jan@example.com' });
+  });
+
+  it('laat een expliciet meegestuurd veld voorgaan op de tekst', () => {
+    const m = parseVisitorMessage('{"body":"schrijf naar b@example.com","email":"a@example.com"}', 100);
+    expect(m?.email).toBe('a@example.com');
+  });
+
   it('geeft null bij leeg of alleen witruimte', () => {
     expect(parseVisitorMessage('', 100)).toBeNull();
     expect(parseVisitorMessage('    ', 100)).toBeNull();
@@ -204,5 +217,35 @@ describe('readLimit', () => {
   it('valt terug bij nul of negatief — nooit "geen limiet"', () => {
     expect(readLimit('0', 10)).toBe(10);
     expect(readLimit('-5', 10)).toBe(10);
+  });
+});
+
+describe('extractEmail', () => {
+  it('vindt een adres midden in een zin', () => {
+    expect(extractEmail('mijn adres is jan.de.vries@voorbeeld.nl hoor')).toBe(
+      'jan.de.vries@voorbeeld.nl',
+    );
+  });
+
+  // Anders wordt "jan@example.com." een adres met een punt erachter, en dan
+  // matcht de lookup nergens op.
+  it('laat leestekens aan het eind buiten het adres', () => {
+    expect(extractEmail('mail me op jan@example.com.')).toBe('jan@example.com');
+    expect(extractEmail('is dat piet@example.co.uk?')).toBe('piet@example.co.uk');
+  });
+
+  it('normaliseert naar kleine letters', () => {
+    expect(extractEmail('JAN@EXAMPLE.COM')).toBe('jan@example.com');
+  });
+
+  it('pakt het eerste adres als er meerdere staan', () => {
+    expect(extractEmail('a@example.com of b@example.com')).toBe('a@example.com');
+  });
+
+  it('geeft null als er geen adres in staat', () => {
+    expect(extractEmail('waar blijft mijn bestelling')).toBeNull();
+    expect(extractEmail('geen apenstaartje hier')).toBeNull();
+    expect(extractEmail('kapot@ adres')).toBeNull();
+    expect(extractEmail('user@localhost')).toBeNull();
   });
 });

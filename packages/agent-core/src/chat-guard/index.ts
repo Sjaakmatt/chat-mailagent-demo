@@ -171,19 +171,46 @@ export function evaluateRate(
 
 export interface ParsedVisitorMessage {
   body: string;
-  /** Alleen gezet als de bezoeker een adres meestuurde. */
+  /** Alleen gezet als er een adres in het bericht stond of werd meegestuurd. */
   email?: string;
+}
+
+/**
+ * Adres in vrije tekst. Bewust conservatief: één `@`, een domein met minstens
+ * één punt, en geen leestekens aan het eind — anders wordt "mail me op
+ * jan@example.com." een adres met een punt erachter.
+ */
+const EMAIL_IN_TEXT =
+  /[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+/;
+
+/**
+ * Haalt het eerste e-mailadres uit een tekst. `null` als er geen in staat.
+ *
+ * Waarom dit hier hoort en niet in een formulierveld: de widget vraagt niet
+ * vooraf om een adres. Dat zou een drempel opwerpen vóór de eerste vraag,
+ * terwijl de meeste gesprekken 'm helemaal niet nodig hebben — een vraag over
+ * een prijs of een koppeling gaat niemand aan. Pas als de agent iets moet
+ * opzoeken dat aan een persoon hangt, vraagt hij erom (zie
+ * `CONFIRMATION.needsIdentityText`), en dan typt de bezoeker het gewoon in zijn
+ * antwoord. Dit is wat dat antwoord bruikbaar maakt.
+ */
+export function extractEmail(text: string): string | null {
+  const match = text.match(EMAIL_IN_TEXT);
+  return match ? match[0].toLowerCase() : null;
 }
 
 /**
  * Normaliseert wat er over de socket binnenkomt tot een bericht, of `null` als
  * er niets bruikbaars in zit.
  *
- * Accepteert JSON (`{ body, email }`) én platte tekst, want de widget stuurt
- * het eerste en handmatig testen doet vaak het tweede. Berichten langer dan
- * `maxChars` worden **geweigerd** en niet afgekapt: stil inkorten levert een
- * half bericht op waar de agent op antwoordt, en dat is verwarrender dan een
- * duidelijke afwijzing.
+ * Accepteert JSON (`{ body }`) én platte tekst, want de widget stuurt het
+ * eerste en handmatig testen doet vaak het tweede. Een expliciet `email`-veld
+ * wordt nog geaccepteerd voor aanroepers die het meesturen, maar de widget doet
+ * dat niet meer; staat het er niet, dan kijken we in de tekst zelf.
+ *
+ * Berichten langer dan `maxChars` worden **geweigerd** en niet afgekapt: stil
+ * inkorten levert een half bericht op waar de agent op antwoordt, en dat is
+ * verwarrender dan een duidelijke afwijzing.
  */
 export function parseVisitorMessage(
   raw: string,
@@ -195,7 +222,9 @@ export function parseVisitorMessage(
   try {
     const parsed = JSON.parse(raw) as { body?: unknown; email?: unknown };
     if (typeof parsed.body === 'string') text = parsed.body;
-    if (typeof parsed.email === 'string') email = parsed.email;
+    if (typeof parsed.email === 'string' && parsed.email.trim()) {
+      email = parsed.email.trim().toLowerCase();
+    }
   } catch {
     // Platte tekst mag ook.
   }
@@ -203,6 +232,8 @@ export function parseVisitorMessage(
   const body = text.trim();
   if (!body) return null;
   if (body.length > maxChars) return null;
+
+  email ??= extractEmail(body) ?? undefined;
 
   return email ? { body, email } : { body };
 }

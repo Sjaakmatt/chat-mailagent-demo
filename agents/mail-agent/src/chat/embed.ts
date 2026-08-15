@@ -203,9 +203,8 @@ const FRAME = String.raw`<!doctype html>
   input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   button.send { background: var(--accent); color: #fff; border-color: transparent; cursor: pointer; }
   button.send[disabled] { opacity: .5; cursor: default; }
-  .ident { padding: 0 10px 10px; flex: none; }
-  .ident input { width: 100%; }
-  .ident label { display: block; font-size: 12px; color: var(--ink-soft); margin: 0 0 4px; }
+  /* Bewust géén identificatieveld in de widget. Zie de toelichting bij het
+     formulier hieronder. */
 </style>
 </head>
 <body>
@@ -217,11 +216,11 @@ const FRAME = String.raw`<!doctype html>
 
   <div id="log" role="log" aria-live="polite"></div>
 
-  <div class="ident">
-    <label for="email">E-mailadres (nodig voor statusvragen over een bestelling)</label>
-    <input id="email" type="email" autocomplete="email" placeholder="jij@voorbeeld.nl">
-  </div>
-
+  <!-- Geen e-mailveld. Een identificatievraag vóór de eerste vraag is een
+       drempel voor een gesprek dat 'm meestal niet nodig heeft: een vraag over
+       een prijs of een koppeling gaat niemand aan. Moet de agent iets opzoeken
+       dat aan een persoon hangt, dan vraagt hij er zelf om en typt de bezoeker
+       het in zijn antwoord; de sessie onthoudt het daarna. -->
   <form id="form">
     <input id="input" placeholder="Typ je vraag…" autocomplete="off" aria-label="Bericht">
     <button type="submit" class="send" id="send" disabled>Stuur</button>
@@ -248,7 +247,6 @@ const FRAME = String.raw`<!doctype html>
   var form = document.getElementById('form');
   var input = document.getElementById('input');
   var send = document.getElementById('send');
-  var email = document.getElementById('email');
 
   var ws = null;
   var attempt = 0;
@@ -317,7 +315,9 @@ const FRAME = String.raw`<!doctype html>
     e.preventDefault();
     var body = input.value.trim();
     if (!body || !ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ body: body, email: email.value.trim() || null }));
+    // Alleen de tekst. Staat er een adres in, dan haalt de server het er zelf
+    // uit (extractEmail) — de bezoeker hoeft niets in een apart veld te zetten.
+    ws.send(JSON.stringify({ body: body }));
     add(body, 'msg in');
     input.value = '';
     add('de agent kijkt ernaar…', 'meta');
