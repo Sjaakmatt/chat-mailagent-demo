@@ -130,9 +130,19 @@ export interface ConfirmationConfig {
 }
 
 export const CONFIRMATION: ConfirmationConfig = {
+  // Drie dingen die een bezoeker op dit moment wil weten, en niet meer: wat er
+  // met zijn vraag gebeurt, waar dat nummer voor dient, en dat het gesprek nog
+  // openstaat. Een bevestiging die alleen een nummer noemt voelt als een
+  // afgesloten loket.
+  //
+  // Nog steeds géén doorlooptijd: dat is een afspraak per klant en hoort een
+  // bewuste instelling te zijn, geen bijwerking van de standaardtekst.
   template:
-    'Dit is uitzoekwerk voor een collega. Ik heb er ticket {number} voor ' +
-    'aangemaakt; je hoort zo snel mogelijk van ons.',
+    'Dat zoekt een collega voor je uit — hier kan ik zelf niet over beslissen. ' +
+    'Ik heb je vraag genoteerd onder ticket {number}. Bewaar dat nummer: noem ' +
+    'je het in een volgend bericht, dan pak ik dit gesprek er meteen bij. Je ' +
+    'krijgt bericht op het mailadres dat je hebt opgegeven.\n\n' +
+    'Kan ik je ondertussen ergens anders mee helpen?',
   needsIdentityText:
     'Om dit voor je uit te zoeken heb ik je e-mailadres nodig, en als je het ' +
     'bij de hand hebt ook je ordernummer.',
