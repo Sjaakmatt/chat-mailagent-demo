@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { CATEGORY_SLUGS } from "@factumai/agent-core";
 import { EVAL_LABELS, type EvalLabel, type FeedbackItem } from "@/lib/visitor-feedback";
 import { cn, timeAgoNL } from "@/lib/utils";
 
@@ -127,9 +128,16 @@ export function FeedbackList({
                   type="button"
                   title={l.uitleg}
                   disabled={busy === item.id}
-                  onClick={() =>
-                    l.key === "other" ? setOpen(item.id) : label(item.id, l.key, "LABELED")
-                  }
+                  onClick={() => {
+                    // Routering en "anders" hebben een verwachting nodig: zonder
+                    // "had X moeten zijn" valt er in de eval niets te asserten.
+                    if (l.key === "routing" || l.key === "other") {
+                      setExpected("");
+                      setOpen(`${item.id}:${l.key}`);
+                    } else {
+                      label(item.id, l.key, "LABELED");
+                    }
+                  }}
                   className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-line hover:bg-surface-muted disabled:opacity-50"
                 >
                   {l.label}
@@ -151,19 +159,40 @@ export function FeedbackList({
             </div>
           )}
 
-          {open === item.id && (
+          {open?.startsWith(`${item.id}:`) && (
             <div className="flex gap-2 pt-1">
-              <input
-                autoFocus
-                value={expected}
-                onChange={(e) => setExpected(e.target.value)}
-                placeholder="Wat had het moeten zijn?"
-                className="flex-1 min-w-0 text-sm border border-line rounded-lg px-3 py-2"
-              />
+              {open.endsWith(":routing") ? (
+                // Een keuzelijst en geen tekstveld: de eval vergelijkt straks op
+                // exacte slug, dus een typefout hier is een testcase die nooit
+                // slaagt.
+                <select
+                  autoFocus
+                  value={expected}
+                  onChange={(e) => setExpected(e.target.value)}
+                  className="flex-1 min-w-0 text-sm border border-line rounded-lg px-3 py-2 bg-surface"
+                >
+                  <option value="">Had moeten zijn…</option>
+                  {CATEGORY_SLUGS.map((slug) => (
+                    <option key={slug} value={slug}>
+                      {slug}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  autoFocus
+                  value={expected}
+                  onChange={(e) => setExpected(e.target.value)}
+                  placeholder="Wat had het moeten zijn?"
+                  className="flex-1 min-w-0 text-sm border border-line rounded-lg px-3 py-2"
+                />
+              )}
               <button
                 type="button"
-                disabled={busy === item.id}
-                onClick={() => label(item.id, "other", "LABELED")}
+                disabled={busy === item.id || !expected.trim()}
+                onClick={() =>
+                  label(item.id, open.endsWith(":routing") ? "routing" : "other", "LABELED")
+                }
                 className="text-sm font-medium px-3 py-2 rounded-lg bg-accent-500 text-white disabled:opacity-50"
               >
                 Opslaan
