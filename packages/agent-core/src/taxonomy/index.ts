@@ -28,6 +28,21 @@ export interface CategoryDef {
    * kiest. Conservatief invullen: bij twijfel `escalate` (naar een mens).
    */
   specialist: SpecialistId;
+  /**
+   * Eén regel voor de classifier: wanneer hoort een bericht hier, en — vaak
+   * belangrijker — wanneer níét.
+   *
+   * Dit is geen documentatie maar werkende configuratie. Een kale lijst slugs
+   * laat het model raden wat een naam betekent, en dan belandt "ik zie een
+   * mailagent op de website" onder `demo_aanvraag` omdat het woord "mailagent"
+   * commercieel klinkt. Vervolgens vraagt de agent netjes om naam en bedrijf,
+   * precies zoals het beleid voor die categorie voorschrijft, op een vraag die
+   * gewoon een productvraag was.
+   *
+   * Schrijf de afbakening op, niet de omschrijving. "Alleen als de bezoeker zelf
+   * om een gesprek vraagt" stuurt beter dan "demo-aanvragen".
+   */
+  hint?: string;
 }
 
 /**
@@ -65,32 +80,44 @@ export interface CategoryDef {
  */
 export const CATEGORIES: readonly CategoryDef[] = Object.freeze([
   // --- Oriënteren: iemand die nog niets heeft --------------------------
-  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply' },
-  { slug: 'beschikbaarheid', label: 'Beschikbaarheid / levertijd', specialist: 'simple_reply' },
-  { slug: 'koppelingen', label: 'Koppelingen', specialist: 'technical' },
-  { slug: 'prijs_voorwaarden', label: 'Prijs / voorwaarden', specialist: 'simple_reply' },
-  { slug: 'werkwijze', label: 'Werkwijze / platform', specialist: 'simple_reply' },
-  { slug: 'implementatie', label: 'Implementatie', specialist: 'simple_reply' },
-  { slug: 'beveiliging_avg', label: 'Beveiliging / AVG', specialist: 'simple_reply' },
-  { slug: 'resultaat_roi', label: 'Resultaat / ROI', specialist: 'simple_reply' },
-  { slug: 'vergelijking', label: 'Vergelijking met alternatieven', specialist: 'simple_reply' },
-  { slug: 'offerte_aanvraag', label: 'Offerte', specialist: 'escalate' },
-  { slug: 'demo_aanvraag', label: 'Demo / kennismaking', specialist: 'escalate' },
+  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply', hint: 'wat een artikel doet, kost of kan — ook als de bezoeker enthousiast klinkt. Dit is de standaard voor elke inhoudelijke vraag over het assortiment' },
+  { slug: 'beschikbaarheid', label: 'Beschikbaarheid / levertijd', specialist: 'simple_reply', hint: 'kan ik dit krijgen en wanneer draait het; levertijd van een artikel dat nog niet is afgenomen' },
+  { slug: 'koppelingen', label: 'Koppelingen', specialist: 'technical', hint: 'past dit op systeem X, is er een koppeling met Y, kan het op onze omgeving' },
+  { slug: 'prijs_voorwaarden', label: 'Prijs / voorwaarden', specialist: 'simple_reply', hint: 'wat kost het, staffels, wat zit erin, contractduur, opzegtermijn' },
+  { slug: 'werkwijze', label: 'Werkwijze / platform', specialist: 'simple_reply', hint: 'hoe werkt het onder water, gaat er een mens overheen, wat gebeurt er met een bericht' },
+  { slug: 'implementatie', label: 'Implementatie', specialist: 'simple_reply', hint: 'hoe verloopt de invoering, hoe lang duurt het, wat moet ik zelf doen' },
+  { slug: 'beveiliging_avg', label: 'Beveiliging / AVG', specialist: 'simple_reply', hint: 'waar staat de data, wordt er getraind op onze gegevens, verwerkersovereenkomst. NIET een verzoek over de eigen gegevens van de schrijver' },
+  { slug: 'resultaat_roi', label: 'Resultaat / ROI', specialist: 'simple_reply', hint: 'wat levert het op, hoeveel tijd bespaart het, verdient het zich terug' },
+  { slug: 'vergelijking', label: 'Vergelijking met alternatieven', specialist: 'simple_reply', hint: 'waarom dit en niet zelf bouwen of een bot van de plank' },
+  { slug: 'offerte_aanvraag', label: 'Offerte', specialist: 'escalate', hint: 'ALLEEN als de bezoeker zelf om een offerte of prijsopgave vraagt, of een samenstelling voorlegt. Niet bij een gewone prijsvraag' },
+  { slug: 'demo_aanvraag', label: 'Demo / kennismaking', specialist: 'escalate', hint: 'ALLEEN als de bezoeker zelf om een demo, gesprek, afspraak of terugbelverzoek vraagt. Interesse tonen in een product is dit NIET — dat is product_vraag' },
 
   // --- Klant zijn: iemand met een lopend traject of abonnement ---------
-  { slug: 'levertijd_status', label: 'Status van je implementatie', specialist: 'simple_reply' },
-  { slug: 'order_wijziging', label: 'Abonnement wijzigen', specialist: 'order_change' },
-  { slug: 'opzegging_proef', label: 'Opzeggen / proefperiode', specialist: 'order_change' },
-  { slug: 'storing_sla', label: 'Storing / SLA', specialist: 'complaint' },
-  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical' },
-  { slug: 'facturatie', label: 'Facturatie / betaling', specialist: 'simple_reply' },
+  { slug: 'levertijd_status', label: 'Status van je implementatie', specialist: 'simple_reply', hint: 'de stand van een lopend traject of bestelling, meestal met een ordernummer' },
+  { slug: 'order_wijziging', label: 'Abonnement wijzigen', specialist: 'order_change', hint: 'iets erbij, eraf of anders op een bestaand abonnement of bestelling' },
+  { slug: 'opzegging_proef', label: 'Opzeggen / proefperiode', specialist: 'order_change', hint: 'stoppen, opzeggen, geld terug, proefperiode' },
+  { slug: 'storing_sla', label: 'Storing / SLA', specialist: 'complaint', hint: 'iets dat werkte doet het niet meer, bij een bestaande klant' },
+  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical', hint: 'werkt niet zoals verwacht, maar er is nog niet vastgesteld dat er iets stuk is' },
+  { slug: 'facturatie', label: 'Facturatie / betaling', specialist: 'simple_reply', hint: 'facturen, betaaltermijn, btw, tenaamstelling, betaling die niet klopt' },
 
   // --- Altijd apart ----------------------------------------------------
-  { slug: 'klacht', label: 'Klacht', specialist: 'complaint' },
-  { slug: 'commercieel', label: 'Zakelijk / partner', specialist: 'escalate' },
-  { slug: 'gdpr_verzoek', label: 'Privacy / AVG-verzoek', specialist: 'gdpr' },
-  { slug: 'overig', label: 'Overig', specialist: 'escalate' },
+  { slug: 'klacht', label: 'Klacht', specialist: 'complaint', hint: 'ontevredenheid over een product, traject of afhandeling; boze of teleurgestelde toon' },
+  { slug: 'commercieel', label: 'Zakelijk / partner', specialist: 'escalate', hint: 'wederverkoop, partnerschap, meerdere vestigingen of merken' },
+  { slug: 'gdpr_verzoek', label: 'Privacy / AVG-verzoek', specialist: 'gdpr', hint: 'AVG-verzoek over de eigen gegevens van de schrijver: inzage, verwijdering, uitschrijven' },
+  { slug: 'overig', label: 'Overig', specialist: 'escalate', hint: 'te vaag om te routeren, of past nergens onder. Bij een losse begroeting hoort dit, ook als er eerder in het gesprek iets anders speelde' },
 ]);
+
+/**
+ * De categorielijst zoals de classifier 'm te zien krijgt: slug plus afbakening.
+ *
+ * Een kale opsomming van slugs laat het model de betekenis raden uit de naam.
+ * Dat gaat mis op precies de plek waar het duur is: "ik zie een mailagent op de
+ * website" belandde onder `demo_aanvraag` omdat dat commercieel klinkt, waarna
+ * de agent keurig om naam en bedrijf vroeg — het beleid voor die categorie.
+ */
+export const CATEGORY_GUIDE: string = CATEGORIES.map(
+  (c) => `- ${c.slug}${c.hint ? `: ${c.hint}` : ''}`,
+).join('\n');
 
 /** Alle slugs — voor de classify-prompt en validatie. */
 export const CATEGORY_SLUGS: readonly string[] = Object.freeze(
