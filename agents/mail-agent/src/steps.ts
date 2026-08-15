@@ -74,6 +74,112 @@ function storeCtx(env: Env) {
  * testcases met ordernummers werken zonder externe systemen. Later vervangt de
  * WooCommerce/ERP-MCP deze lookup (zie `plan`). Geeft de ruwe JSON terug.
  */
+/**
+ * Hoeveel artikelen er hooguit als feit meegaan. Bij een kleine catalogus is de
+ * hele lijst meesturen simpeler en betrouwbaarder dan zoeken: geen zoekterm die
+ * net misgaat, geen artikel dat de agent niet blijkt te kennen.
+ *
+ * Boven deze grens klopt die aanname niet meer en hoort hier een echte zoekstap
+ * of een product-MCP. Dan valt de lijst af en zie je dat in het log.
+ */
+const CATALOG_FACT_LIMIT = 40;
+
+/**
+ * De catalogus als geverifieerde feiten.
+ *
+ * Zonder dit had de agent wél beleidsregels die zeggen "werk vanaf de opgehaalde
+ * artikelgegevens", maar geen artikelgegevens — en dan slaat de terugvalregel
+ * uit het output-contract aan ("geen feiten → zeg dat een collega het oppakt").
+ * Het resultaat is een vaag verkooppraatje op een concrete productvraag.
+ *
+ * Compact gehouden: naam, prijs, beschikbaarheid, doorlooptijd en één zin. De
+ * volledige omschrijving hoort op de productpagina, niet in elke prompt.
+ */
+type CatalogRow = {
+  sku: string;
+  product_name: string;
+  category: string | null;
+  lead_time_days: number | null;
+  data: Record<string, unknown> | null;
+};
+
+async function lookupCatalogFromDb(
+  env: Env,
+): Promise<{ lijst: Array<Record<string, unknown>>; ruwe: CatalogRow[] }> {
+  const client = new SupabaseClient(
+    new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
+    { projectUrl: env.AIOS_SUPABASE_URL },
+  );
+  const url = client.tableUrl('demo_inventory');
+  url.searchParams.set('select', 'sku,product_name,category,lead_time_days,data');
+  url.searchParams.set('order', 'category.asc,product_name.asc');
+  // Eentje boven de grens vragen, zodat we kunnen zien dát er is afgekapt.
+  url.searchParams.set('limit', String(CATALOG_FACT_LIMIT + 1));
+  const rows = await client.request<CatalogRow[]>(storeCtx(env), url, { method: 'GET' });
+  if (!Array.isArray(rows)) return { lijst: [], ruwe: [] };
+
+  if (rows.length > CATALOG_FACT_LIMIT) {
+    console.warn(
+      `[catalogus] meer dan ${CATALOG_FACT_LIMIT} artikelen — de lijst gaat niet ` +
+        'meer volledig mee in de prompt. Bouw hier een zoekstap of een product-MCP.',
+    );
+  }
+
+  const gebruikt = rows.slice(0, CATALOG_FACT_LIMIT);
+  const lijst = gebruikt.map((r) => ({
+    sku: r.sku,
+    naam: r.product_name,
+    categorie: r.category,
+    prijs: r.data?.priceLabel ?? null,
+    prijsEenmalig: r.data?.priceOnce ?? null,
+    prijsPerMaand: r.data?.priceMonthly ?? null,
+    beschikbaarheid: r.data?.availabilityLabel ?? null,
+    doorlooptijdDagen: r.lead_time_days,
+    kort: r.data?.tagline ?? null,
+    heeftNodig: r.data?.requires ?? [],
+  }));
+  return { lijst, ruwe: gebruikt };
+}
+
+/**
+ * De volledige gegevens van de artikelen die in de tekst worden genoemd.
+ *
+ * Waarom naast de lijst hierboven: die lijst maakt de agent bewust van het
+ * assortiment, maar met een naam en een prijs kun je niet adviseren. Voor
+ * "past dit op onze Exchange?" of "wat is het verschil tussen die twee?" heb je
+ * de specificaties nodig. Alles van alles meesturen zou werken tot de catalogus
+ * groeit; alleen wat genoemd wordt, blijft ook daarna kloppen.
+ *
+ * De match is bewust ruw — losse woorden van vier letters of meer uit de vraag,
+ * naast productnaam en SKU. Een gemiste match kost een minder specifiek
+ * antwoord, geen fout: de agent heeft de lijst nog steeds.
+ */
+function selectMentioned(ruwe: CatalogRow[], tekst: string): Array<Record<string, unknown>> {
+  const laag = tekst.toLowerCase();
+  const treffers = ruwe.filter((r) => {
+    if (laag.includes(r.sku.toLowerCase())) return true;
+    const naam = r.product_name.toLowerCase();
+    if (laag.includes(naam)) return true;
+    // Deelwoorden: "mailagent" vindt "Mailagent", "kennisbank" vindt "Kennisbank".
+    return naam
+      .split(/[^a-z0-9]+/i)
+      .filter((w) => w.length >= 4)
+      .some((w) => laag.includes(w));
+  });
+  // Boven de drie wordt het een opsomming in plaats van een advies; dan is de
+  // vraag te breed en volstaat de lijst.
+  return treffers.slice(0, 3).map((r) => ({
+    sku: r.sku,
+    naam: r.product_name,
+    prijs: r.data?.priceLabel ?? null,
+    beschikbaarheid: r.data?.availabilityLabel ?? null,
+    specificaties: r.data?.specs ?? {},
+    kernpunten: r.data?.kernpunten ?? [],
+    heeftNodig: r.data?.requires ?? [],
+    meerInfo: r.data?.url ?? null,
+  }));
+}
+
 async function lookupOrderFromDb(
   env: Env,
   orderNumber: string,
@@ -769,6 +875,44 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
       // lookups vast voor numerical grounding. Later wordt dit de WooCommerce/
       // ERP-MCP — alleen deze lookup wisselt dan, de rest van plan blijft gelijk.
       const facts: Array<{ id: string; text: string }> = [];
+
+      // Geen ordernummer betekent bijna altijd: dit gaat over het assortiment,
+      // niet over een lopende bestelling. Dan is de catalogus het feitenmateriaal.
+      // Fail-soft: mislukt de lookup, dan valt de agent terug op de beleidsregel
+      // in plaats van stil te vallen.
+      if (!orderNumber) {
+        try {
+          const { lijst, ruwe } = await lookupCatalogFromDb(env);
+          if (lijst.length > 0) {
+            recorder.record({ toolCallId: 'db.catalog', tool: 'db.demo_inventory' });
+            facts.push({
+              id: 'db.catalog',
+              text: `Assortiment (${lijst.length} artikelen): ${JSON.stringify(lijst)}`,
+            });
+
+            // Wordt er een specifiek artikel genoemd, dan gaan de specificaties
+            // er ook in. Zonder die stap kan de agent wel opsommen maar niet
+            // adviseren — en dan valt hij terug op algemeenheden.
+            const genoemd = selectMentioned(
+              ruwe,
+              `${payload.subject ?? ''} ${payload.bodyText ?? ''}`,
+            );
+            if (genoemd.length > 0) {
+              recorder.record({ toolCallId: 'db.product', tool: 'db.demo_inventory' });
+              facts.push({
+                id: 'db.product',
+                text: `Genoemde artikelen, volledig: ${JSON.stringify(genoemd)}`,
+              });
+            }
+          }
+        } catch (err) {
+          console.warn(
+            '[catalogus] ophalen mislukt:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+
       if (orderNumber) {
         const { order, tracking } = await lookupOrderFromDb(env, orderNumber);
         if (order) {
