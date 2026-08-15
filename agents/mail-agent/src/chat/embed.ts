@@ -62,11 +62,14 @@ const LOADER = String.raw`(function () {
     session = 'w-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   }
 
-  var src = base + '/widget'
-    + '?session=' + encodeURIComponent(session)
-    + '&accent=' + encodeURIComponent(accent)
-    + '&title=' + encodeURIComponent(title)
-    + (greeting ? '&greeting=' + encodeURIComponent(greeting) : '');
+  function frameSrc(id) {
+    return base + '/widget'
+      + '?session=' + encodeURIComponent(id)
+      + '&accent=' + encodeURIComponent(accent)
+      + '&title=' + encodeURIComponent(title)
+      + (greeting ? '&greeting=' + encodeURIComponent(greeting) : '');
+  }
+  var src = frameSrc(session);
 
   var open = false;
 
@@ -122,6 +125,15 @@ const LOADER = String.raw`(function () {
   window.addEventListener('message', function (e) {
     if (e.origin !== base || !e.data) return;
     if (e.data.type === 'aios-close') setOpen(false);
+    // De iframe kan om een schoon gesprek vragen. Het sessie-id leeft hier in
+    // localStorage, dus wissen moet ook hier gebeuren; daarna herladen we de
+    // iframe met een vers id.
+    if (e.data.type === 'aios-reset') {
+      var vers = 'w-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      try { localStorage.setItem(KEY, vers); } catch (err) {}
+      session = vers;
+      frame.src = frameSrc(vers);
+    }
   });
 
   function mount() {
@@ -191,6 +203,16 @@ const FRAME = String.raw`<!doctype html>
   .msg.in { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
   .msg.out { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
   .meta { align-self: center; font-size: 12px; color: var(--ink-soft); font-style: italic; text-align: center; }
+  /* Eerder gesprek: bewaard maar dichtgeklapt. De bezoeker begint schoon en
+     kan zelf terugkijken; hij hoeft niet eerst langs een muur oude tekst. */
+  .earlier { align-self: stretch; margin: 0 0 4px; }
+  .earlier summary {
+    cursor: pointer; font-size: 12px; color: var(--ink-soft);
+    text-align: center; padding: 6px; border-radius: 8px; list-style: none;
+  }
+  .earlier summary::-webkit-details-marker { display: none; }
+  .earlier summary:hover { background: var(--surface); }
+  .earlier .items { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
   .notice {
     align-self: stretch; font-size: 13px; color: var(--alert);
     background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px;
@@ -211,6 +233,12 @@ const FRAME = String.raw`<!doctype html>
   <header>
     <h1 id="title">Chat</h1>
     <span class="state" id="state"></span>
+    <button type="button" id="reset" aria-label="Nieuw gesprek" title="Nieuw gesprek">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+    </button>
     <button type="button" id="close" aria-label="Sluiten">&times;</button>
   </header>
 
@@ -262,6 +290,31 @@ const FRAME = String.raw`<!doctype html>
     return el;
   }
 
+  // Het eerdere gesprek blijft bewaard, maar dichtgeklapt. Anders opent de
+  // widget met een muur oude tekst waar de bezoeker doorheen moet scrollen
+  // voordat hij iets kan vragen — en op een gedeeld apparaat leest de volgende
+  // persoon dat gewoon mee.
+  function showEarlier(messages) {
+    var box = document.createElement('details');
+    box.className = 'earlier';
+    var kop = document.createElement('summary');
+    kop.textContent = messages.length === 1
+      ? 'Eerder gesprek (1 bericht) — klik om te openen'
+      : 'Eerder gesprek (' + messages.length + ' berichten) — klik om te openen';
+    box.appendChild(kop);
+
+    var items = document.createElement('div');
+    items.className = 'items';
+    messages.forEach(function (m) {
+      var el = document.createElement('div');
+      el.className = 'msg ' + (m.direction === 'inbound' ? 'in' : 'out');
+      el.textContent = m.body;
+      items.appendChild(el);
+    });
+    box.appendChild(items);
+    log.appendChild(box);
+  }
+
   function setState(text) { stateEl.textContent = text; }
 
   // Een wachtregel per beurt: pending is het element zelf, zodat de tekst
@@ -309,12 +362,8 @@ const FRAME = String.raw`<!doctype html>
         // Bij een herverbinding staat het verloop er al; opnieuw tekenen zou
         // alles verdubbelen. Alleen vullen als het log nog leeg is.
         if (!log.children.length) {
-          data.messages.forEach(function (m) {
-            add(m.body, 'msg ' + (m.direction === 'inbound' ? 'in' : 'out'));
-          });
-        }
-        if (!greeted && greeting && !log.children.length) {
-          add(greeting, 'msg out');
+          if (data.messages.length) showEarlier(data.messages);
+          if (greeting) add(greeting, 'msg out');
         }
         greeted = true;
         return;
@@ -342,6 +391,15 @@ const FRAME = String.raw`<!doctype html>
 
   document.getElementById('close').onclick = function () {
     try { parent.postMessage({ type: 'aios-close' }, '*'); } catch (e) {}
+  };
+
+  // Nieuw gesprek. Het sessie-id leeft in de loader (localStorage), dus die
+  // moet het wissen; wij vragen er alleen om. De loader herlaadt deze iframe
+  // daarna met een vers id, en dan is dit venster leeg.
+  document.getElementById('reset').onclick = function () {
+    closedByUs = true;
+    try { ws.close(); } catch (e) {}
+    try { parent.postMessage({ type: 'aios-reset' }, '*'); } catch (e) {}
   };
 
   window.addEventListener('message', function (e) {
