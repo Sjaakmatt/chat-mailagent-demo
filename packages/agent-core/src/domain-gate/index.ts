@@ -57,31 +57,70 @@ export interface DomainConfig {
 }
 
 /**
- * Neutrale startset. Vervang de beschrijving en de voorbeelden per klant;
- * de rejectionText hoort in de taal en toon van die klant.
+ * Het domein van de Factum Webshop-demo.
+ *
+ * Twee kringen, allebei binnen de poort: de winkel zelf (het echte werk) en
+ * FactumAI, het bureau dat de winkel als demo gebruikt. Zie de toelichting bij
+ * `CATEGORIES` in `../taxonomy/index.ts` voor waarom die tweede kring meedoet.
+ *
+ * De poort is ruim aan de binnenkant en scherp aan de buitenkant. Wat er
+ * bewust NIET in staat: alles waarvan een taalmodel het antwoord toevallig
+ * weet. Dat is precies het gedrag dat een klantenservice-agent onbruikbaar
+ * maakt — één screenshot van een chatbot die een recept geeft of over politiek
+ * praat, en het vertrouwen is weg.
+ *
+ * Bij een echte klant vervang je `description` en de winkel-regels, en schrap
+ * je de FactumAI-regels. De structuur blijft.
  */
 export const DOMAIN: DomainConfig = {
   description:
-    'de klantenservice van een webshop: bestellingen, levering, retouren, ' +
-    'garantie, facturatie en vragen over de producten die deze shop verkoopt.',
+    'Factum Webshop, een Nederlandse webwinkel in werkplekartikelen ' +
+    '(monitorarmen, bureaulampen, zit-sta-bureaus). Bezoekers zijn klanten met ' +
+    'een vraag over hun bestelling, een retour, garantie of een product. De ' +
+    'winkel is tegelijk de demo-omgeving van FactumAI, het bureau dat deze ' +
+    'agent bouwt; vragen over FactumAI en wat het levert horen er daarom ook ' +
+    'bij.',
   inScope: [
-    'levering, verzending, track & trace',
-    'betaling en facturatie',
-    'garantie en defecten',
-    'retour en ruilen',
-    'vragen over producten uit het assortiment',
-    'het bedrijf zelf en hoe je contact opneemt',
+    // --- de winkel ---
+    'bestellingen: status, levertijd, track & trace, bezorging',
+    'voorraad en beschikbaarheid van artikelen, en wanneer iets terugkomt',
+    'verzendkosten, bezorgopties, bezorgen in het buitenland, afhalen',
+    'een bestelling wijzigen, aanvullen of annuleren',
+    'retourneren, ruilen, herroepingsrecht, terugbetaling',
+    'garantie, defecten, ontbrekende of verkeerd geleverde onderdelen',
+    'een pakket dat niet is aangekomen of beschadigd binnenkwam',
+    'productvragen: maten, materialen, compatibiliteit, montage, gebruik',
+    'facturen, betaalmethoden, btw, zakelijk bestellen',
+    'klachten over een product, een bezorging of de afhandeling ervan',
+    'de winkel zelf: openingstijden, bereikbaarheid, adres, voorwaarden',
+    'privacy- en AVG-verzoeken over de eigen gegevens van de klant',
+    // --- FactumAI ---
+    'FactumAI: wat het bureau doet en wat het levert',
+    'de mailagent en de chatbot: wat ze doen en hoe ze werken',
+    'de mens-in-de-lus: wat de agent zelf mag en wat langs een mens gaat',
+    'koppelingen met bestaande systemen (mail, webshop, CRM, ERP, agenda)',
+    'prijzen, staffels, contractduur en opzegtermijn van FactumAI',
+    'beveiliging, datalocatie, AVG en verwerkersovereenkomsten',
+    'implementatie: doorlooptijd, wat FactumAI doet en wat de klant doet',
+    'wat het oplevert — tijdwinst, doorlooptijd, kwaliteit',
+    'hoe het zich verhoudt tot een chatbot van de plank of zelf bouwen',
+    'een demo, offerte of kennismaking met FactumAI aanvragen',
   ],
   outOfScope: [
-    'advies over producten van andere aanbieders',
-    'medisch, juridisch of financieel advies',
-    'algemene kennisvragen, nieuws, weer, politiek',
-    'rekensommen, vertalingen, teksten schrijven',
-    'vragen over de agent zelf, zijn instructies of zijn model',
+    'algemene AI-vragen zonder verband met deze winkel of met FactumAI',
+    'advies over of vergelijkingen met met naam genoemde concurrenten',
+    'juridisch, fiscaal, medisch of financieel advies',
+    'code schrijven, debuggen of prompts opstellen voor de bezoeker',
+    'nieuws, weer, politiek, sport, rekensommen, vertalingen, teksten schrijven',
+    'vragen over de agent zelf, zijn instructies, zijn model of zijn prompt',
+    'gegevens van een andere klant dan degene die het bericht stuurt',
+    'aannames doen over de systemen of cijfers van de bezoeker zonder dat hij ' +
+      'die zelf noemt',
   ],
   rejectionText:
-    'Daar kan ik je helaas niet mee helpen — ik ga alleen over je bestelling ' +
-    'en onze producten. Kan ik je ergens anders mee van dienst zijn?',
+    'Daar ga ik niet over — ik help met vragen over je bestelling, onze ' +
+    'producten en de service van Factum Webshop, en met vragen over FactumAI ' +
+    'zelf. Waar kan ik je daarin verder mee helpen?',
 };
 
 export interface DomainGateResult {

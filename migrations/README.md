@@ -27,6 +27,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0020_conversations_tickets`| gesprekken, berichten, tickets + nummerteller       |
 | `0021_revoke_security_definer` | RPC-grants dichtzetten — **verplicht** op bestaande DB's |
 | `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
+| `0023_demo_context`         | beleidsregels per categorie — **demo**, verzonnen cijfers |
 
 ## Waarom de gaten in de nummering
 
