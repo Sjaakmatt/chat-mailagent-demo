@@ -24,6 +24,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0017_review_items_compound`| compound-vlag + per-taak samenvattingen             |
 | `0018_unknown_intent_log`   | router-misses, voedt latere intent-discovery        |
 | `0019_decision_logs`        | beslislog per run: poort, uitkomst, bronnen         |
+| `0020_conversations_tickets`| gesprekken, berichten, tickets + nummerteller       |
 
 ## Waarom de gaten in de nummering
 

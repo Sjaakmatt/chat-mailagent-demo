@@ -26,3 +26,4 @@ export * from './channels/index.js';
 export * from './domain-gate/index.js';
 export * from './outcomes/index.js';
 export * from './decision-log/index.js';
+export * from './tickets/index.js';

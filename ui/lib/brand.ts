@@ -16,6 +16,7 @@ import {
   FileClock,
   ShieldCheck,
   PlayCircle,
+  ClipboardList,
 } from "lucide-react";
 
 export interface NavItem {
@@ -53,6 +54,7 @@ export interface Brand {
  */
 const CORE_NAV: NavItem[] = [
   { href: "/", label: "Werkbak", icon: Inbox },
+  { href: "/tickets", label: "Tickets", icon: ClipboardList },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/audit", label: "Auditlog", icon: FileClock },
   { href: "/policy", label: "Beleid", icon: Settings, adminOnly: true },
