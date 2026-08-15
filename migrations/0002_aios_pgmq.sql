@@ -66,9 +66,16 @@ as $$
 $$;
 
 -- Alleen de service-role (Worker/MCP) mag de bus aanspreken; niet anon/authenticated.
-revoke all on function public.aios_emit_signal(text, text, text, jsonb, text) from public;
-revoke all on function public.aios_read_signals(int, int) from public;
-revoke all on function public.aios_archive_signal(bigint) from public;
+--
+-- `from public` alléén is NIET genoeg: Supabase zet default privileges die elke
+-- nieuwe functie in `public` een eigen EXECUTE-grant geven aan `anon` en
+-- `authenticated`. Die grants overleven een revoke op de PUBLIC-pseudorol, en
+-- dan kan iedereen met de (publieke!) anon-key deze SECURITY DEFINER-functies
+-- aanroepen — signalen injecteren voor een willekeurige organization_id, of de
+-- work-bus leegtrekken vóór de poller erbij is. Beide rollen expliciet erbij.
+revoke all on function public.aios_emit_signal(text, text, text, jsonb, text) from public, anon, authenticated;
+revoke all on function public.aios_read_signals(int, int) from public, anon, authenticated;
+revoke all on function public.aios_archive_signal(bigint) from public, anon, authenticated;
 grant execute on function public.aios_emit_signal(text, text, text, jsonb, text) to service_role;
 grant execute on function public.aios_read_signals(int, int) to service_role;
 grant execute on function public.aios_archive_signal(bigint) to service_role;

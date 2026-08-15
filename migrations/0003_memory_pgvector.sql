@@ -54,5 +54,9 @@ as $$
   limit greatest(p_limit, 1);
 $$;
 
-revoke all on function public.aios_match_memory(text, text, text, text, int) from public;
+-- Zie 0002: `from public` haalt de default EXECUTE-grants van anon/authenticated
+-- niet weg. Zonder die twee erbij kan iedereen met de anon-key de memory van
+-- elke tenant uitlezen — de functie is SECURITY DEFINER en neemt p_org als
+-- parameter, dus RLS beschermt hier niets.
+revoke all on function public.aios_match_memory(text, text, text, text, int) from public, anon, authenticated;
 grant execute on function public.aios_match_memory(text, text, text, text, int) to service_role;

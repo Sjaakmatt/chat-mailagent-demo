@@ -145,3 +145,9 @@ begin
   return p_prefix || '-' || p_period || '-' || lpad(v_next::text, 4, '0');
 end;
 $$;
+
+-- Alleen de service-role telt nummers uit. Zie 0002 voor waarom anon en
+-- authenticated hier expliciet bij moeten: zonder deze revoke kan iedereen met
+-- de anon-key de teller van een tenant ophogen en zo ticketnummers verbranden.
+revoke all on function public.aios_next_ticket_number(text, text, text) from public, anon, authenticated;
+grant execute on function public.aios_next_ticket_number(text, text, text) to service_role;
