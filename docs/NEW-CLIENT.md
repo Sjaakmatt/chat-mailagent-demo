@@ -29,6 +29,18 @@ git push -u origin main
 later kernverbeteringen op met één commando (zie *Fundament-updates ophalen*
 onderaan). Gooi die remote niet weg.
 
+Zet meteen de repo-secrets die de deploy-workflow nodig heeft (Settings →
+Secrets and variables → Actions):
+
+| Wat                            | Waarvoor                                    |
+| ------------------------------ | ------------------------------------------- |
+| secret `CLOUDFLARE_API_TOKEN`  | deployen vanuit GitHub Actions              |
+| secret `CLOUDFLARE_ACCOUNT_ID` | idem                                        |
+| variable `FUNDAMENT_REPO`      | wekelijkse fundament-sync                   |
+| secret `FUNDAMENT_DEPLOY_KEY`  | idem — zie *De deploy key aanmaken* onderaan |
+
+De laatste twee zijn optioneel: ontbreken ze, dan slaat de sync schoon over.
+
 **Controle:** `git remote -v` toont `origin` (de klant) en `upstream` (het
 fundament), en `git diff upstream/main` toont precies vier gewijzigde
 configbestanden — verder niets.
@@ -77,18 +89,59 @@ bedoeling: zonder tenant valt er niets zinnigs te deployen.
 
 ---
 
-## Stap 3 — Supabase + tenant
+## Stap 3 — Supabase-project van de klant
 
 1. Maak (of kies) het Supabase-project van de klant. Dit is **niet** de
-   dashboard-DB.
-2. Draai de migraties uit `migrations/` op volgorde. `0005_demo_testdata.sql`
-   is optioneel — alleen nodig als je de demo wilt gebruiken.
-3. Maak de FactumAI-org aan en noteer de cuid.
-4. Vul `org_id` in het manifest en vervang `__CLIENT_ORG_ID__` in
-   `agents/mail-agent/wrangler.jsonc` en `ui/wrangler.jsonc`.
+   dashboard-DB, en ook niet het project van een andere klant: één klant, één
+   database. Deelt de agent een database met een andere agent, dan botsen de
+   work-bus (`aios_signals`) en de RPC-namen op elkaar.
+2. Draai álle migraties uit `migrations/` op nummervolgorde.
+   `0005_demo_testdata.sql` is optioneel — alleen nodig voor de demo. De rest
+   niet: `0021` en `0022` zetten respectievelijk de RPC-grants dicht en maken
+   de allowlist compleet.
 
-**Controle:** `select count(*) from aios_signals;` geeft `0` in plaats van een
-foutmelding.
+**Controle:** drie dingen, in deze volgorde:
+
+```sql
+-- 1. Tabellen staan er.
+select count(*) from aios_signals;                       -- 0, geen fout
+
+-- 2. De RPC's zijn dicht voor anon/authenticated. Verwacht per functie
+--    alleen postgres en service_role — géén anon, géén authenticated.
+select proname, pg_catalog.array_to_string(proacl, ' | ')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and proname like 'aios%';
+
+-- 3. De allowlist kent invited_by (anders faalt de Toegang-pagina).
+select column_name from information_schema.columns
+ where table_name = 'allowed_emails';
+```
+
+Staat er bij (2) toch `anon=X`? Dan is `0021` niet gedraaid. Draai 'm alsnog
+voordat je verder gaat — met de publieke anon-key kan anders iedereen signalen
+injecteren en de work-bus leegtrekken.
+
+---
+
+## Stap 3b — tenant in het dashboard
+
+De agent haalt z'n MCP-credentials uit de vault in de dashboard-DB, niet uit de
+klant-database. Daarom moet de klant ook dáár bestaan.
+
+1. Maak de `Organization` aan in het FactumAI-dashboard en noteer het id.
+2. Activeer de MCP's die deze klant gebruikt (`TenantMcpActivation`).
+3. Zet de credentials per MCP in de vault (`OrganizationCredential`). De agent
+   stuurt nooit secrets mee; de MCP resolvet ze zelf op tenant-id.
+4. Vul `org_id` in `client.manifest.yaml` en vervang `__CLIENT_ORG_ID__` in
+   `agents/mail-agent/wrangler.jsonc` én `ui/wrangler.jsonc`.
+
+Het id uit stap 1 en de waarde in beide wrangler-configs moeten **exact** gelijk
+zijn. Wijken ze af, dan draait de agent op een tenant die niet bestaat: de
+cockpit blijft leeg zonder foutmelding, want alle queries filteren op een
+`organization_id` waar niets onder staat.
+
+**Controle:** `grep -n '__CLIENT_ORG_ID__' agents/mail-agent/wrangler.jsonc
+ui/wrangler.jsonc` geeft niets meer terug.
 
 ---
 
@@ -148,6 +201,24 @@ er staat nergens meer "FactumAI" waar de klantnaam hoort.
 
 ---
 
+## Stap 5b — modellen controleren
+
+De model-IDs staan als `vars` in `agents/mail-agent/wrangler.jsonc`, niet in de
+code. Controleer bij elke nieuwe klant of ze nog de huidige generatie zijn — het
+fundament loopt hier makkelijk achter, en een klant erft wat er op dat moment in
+staat.
+
+| Var                 | Waarvoor                                  |
+| ------------------- | ----------------------------------------- |
+| `MODEL_CLASSIFY`    | Haiku-tier: classificeren en de domeingrens |
+| `MODEL_PLAN`        | Sonnet-tier: plannen en opstellen          |
+| `MODEL_PLAN_HEAVY`  | Opus-tier, optioneel: alleen `plan-heavy`  |
+
+Zet `MODEL_PLAN_HEAVY` alleen als een specialist het echt nodig heeft; hij kost
+een veelvoud van de Sonnet-tier.
+
+---
+
 ## Stap 6 — secrets
 
 Deploy eerst één keer (anders bestaat de Worker nog niet), zet dan de secrets:
@@ -167,6 +238,48 @@ werkbak fail-closed op slot.
 Welke secrets er zijn en waarvoor, staat onderaan beide `wrangler.jsonc`-bestanden.
 
 **Controle:** `npx wrangler secret list` toont wat je verwacht.
+
+---
+
+## Stap 6b — toegang tot de werkbak
+
+Sla deze stap niet over: de cockpit is fail-closed, dus zonder deze stap kan
+**niemand** inloggen — jij ook niet, en je kunt jezelf ook niet via de UI
+toevoegen.
+
+**1. Eenmalig in Supabase** (project → Authentication → Email Templates): zet de
+template op de OTP-code (`{{ .Token }}`) in plaats van de magic-link. Een
+voorbeeld staat in `ui/supabase-magic-link-email.html`. Zonder dit komen
+uitnodigingen wel aan, maar met een link die niet werkt.
+
+**2. De eerste beheerder** met de hand in de tabel:
+
+```sql
+insert into public.allowed_emails (email, role)
+values ('<beheerder@klant.nl>', 'admin')
+on conflict (email) do nothing;
+```
+
+Een rij mag ook een heel domein zijn, geschreven als `@klant.nl`. Iedereen met
+zo'n adres krijgt dan die rol, zonder aparte uitnodiging:
+
+```sql
+insert into public.allowed_emails (email, role)
+values ('@klant.nl', 'reviewer')
+on conflict (email) do nothing;
+```
+
+Een persoonlijke rij gaat vóór de domeinregel, dus je kunt één iemand
+promoveren of met `viewer` terugschroeven zonder het domein aan te passen.
+
+Wees terughoudend met een domeinregel op `admin`: iedereen die een adres op dat
+domein via Supabase Auth kan laten verifiëren, komt binnen als beheerder. Zet er
+alleen een domein in dat de klant zelf beheert.
+
+Daarna nodigt die beheerder de rest uit via de **Toegang**-pagina.
+
+**Controle:** log in op de cockpit-URL met het adres uit stap 2. Je komt in de
+werkbak en ziet **Toegang** in de navigatie.
 
 ---
 
