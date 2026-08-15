@@ -264,6 +264,19 @@ const FRAME = String.raw`<!doctype html>
 
   function setState(text) { stateEl.textContent = text; }
 
+  // Een wachtregel per beurt: pending is het element zelf, zodat de tekst
+  // wordt bijgewerkt in plaats van dat er een regel bij komt.
+  var pending = null;
+  function setPending(text) {
+    if (!pending) pending = add(text, 'meta');
+    else pending.textContent = text;
+    log.scrollTop = log.scrollHeight;
+  }
+  function clearPending() {
+    if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
+    pending = null;
+  }
+
   function connect() {
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(proto + '//' + location.host + '/chat/' + encodeURIComponent(session) + '/ws');
@@ -306,8 +319,12 @@ const FRAME = String.raw`<!doctype html>
         greeted = true;
         return;
       }
-      if (data.type === 'message') { add(data.body, 'msg out'); return; }
-      if (data.type === 'notice') { add(data.body, 'notice'); return; }
+      // Voortgang vervangt zichzelf in plaats van te stapelen: drie regels
+      // onder elkaar leest als drie gebeurtenissen, terwijl het één wachtende
+      // beurt is.
+      if (data.type === 'status') { setPending(data.body); return; }
+      if (data.type === 'message') { clearPending(); add(data.body, 'msg out'); return; }
+      if (data.type === 'notice') { clearPending(); add(data.body, 'notice'); return; }
     };
   }
 
@@ -320,7 +337,7 @@ const FRAME = String.raw`<!doctype html>
     ws.send(JSON.stringify({ body: body }));
     add(body, 'msg in');
     input.value = '';
-    add('de agent kijkt ernaar…', 'meta');
+    setPending('de agent kijkt ernaar…');
   };
 
   document.getElementById('close').onclick = function () {

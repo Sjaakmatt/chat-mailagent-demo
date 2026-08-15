@@ -1,4 +1,9 @@
-import { orchestrate, type DecisionLog, type Signal } from '@factumai/agent-core';
+import {
+  orchestrate,
+  type DecisionLog,
+  type ProgressPhase,
+  type Signal,
+} from '@factumai/agent-core';
 import type { Env } from './env.js';
 import { createPlatformStore } from './store.js';
 import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from './steps.js';
@@ -41,7 +46,19 @@ export interface TurnResult {
   reply?: string;
 }
 
-export async function runSignalTurn(env: Env, input: Signal): Promise<TurnResult> {
+export interface TurnOptions {
+  /**
+   * Faseovergangen, voor kanalen waar iemand zit te wachten. De chat-DO
+   * vertaalt ze naar een regel in het venster; bij mail laat je 'm weg.
+   */
+  onProgress?: (phase: ProgressPhase) => void;
+}
+
+export async function runSignalTurn(
+  env: Env,
+  input: Signal,
+  opts: TurnOptions = {},
+): Promise<TurnResult> {
   const store = createPlatformStore(env);
   const llm = buildLlmClient(env);
 
@@ -52,7 +69,13 @@ export async function runSignalTurn(env: Env, input: Signal): Promise<TurnResult
   const startedAt = Date.now();
   const result = await orchestrate(signal, {
     steps: buildOrchestrationSteps(env, llm),
+    onProgress: opts.onProgress,
   });
+
+  // Dit blijft vóór het antwoord staan, en dat is geen slordigheid: bij uitkomst
+  // `taak` maakt `finishChatTurn` een ticket aan, en `aios_tickets.review_item_id`
+  // heeft een foreign key naar deze rij. Eerst antwoorden zou die insert laten
+  // falen — en dan krijgt de bezoeker een bevestiging zonder ticket erachter.
   await store.saveReviewItem(result.reviewItem);
 
   const outOfDomain = result.classification.outOfDomain;
@@ -89,6 +112,10 @@ export async function runSignalTurn(env: Env, input: Signal): Promise<TurnResult
   // afgerond in plaats van in de werkbak. Wát de bezoeker krijgt, hangt af van
   // de uitkomst — zie chat/turn.ts. Bij mail gebeurt dit niet: daar blijft het
   // ReviewItem staan tot een mens 'm goedkeurt.
+  //
+  // Let op de volgorde: dit gaat vóór het beslislog en vóór het DONE-zetten.
+  // Die zijn nodig voor de audit, maar de bezoeker wacht er niet op — en elke
+  // schrijfactie ervóór is wachttijd die hij ziet.
   if (signal.domain === 'chat') {
     const payload = (signal.payload ?? {}) as { conversationId?: string };
     if (payload.conversationId) {
@@ -111,6 +138,9 @@ export async function runSignalTurn(env: Env, input: Signal): Promise<TurnResult
     }
   }
 
+  // Administratie ná het antwoord. Faalt dit, dan heeft de bezoeker zijn
+  // antwoord al en zien wij de fout in de logs; andersom zou hij wachten op een
+  // schrijfactie waar hij niets aan heeft.
   await store.saveDecisionLog(log);
 
   // Als laatste, en pas als de rest is gelukt: hiermee slaat de tweede route

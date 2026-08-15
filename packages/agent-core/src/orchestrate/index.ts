@@ -227,10 +227,26 @@ export interface OrchestrationSteps {
   plan(input: PlanInput): Promise<Plan>;
 }
 
+/**
+ * Waar de lus mee bezig is. Bewust grof: dit is bedoeld om een wachtende
+ * bezoeker te laten zien dát er iets gebeurt, niet om de architectuur te
+ * lekken. De teksten die de bezoeker ziet horen bij de aanroeper, niet hier —
+ * die kent de taal en de toon van de klant.
+ */
+export type ProgressPhase = 'routeren' | 'opzoeken' | 'schrijven';
+
 export interface OrchestrationDeps {
   steps: OrchestrationSteps;
   now?: () => string;
   newId?: () => string;
+  /**
+   * Wordt aangeroepen bij elke faseovergang. Synchroon en fire-and-forget: de
+   * lus wacht er niet op en een fout hierin mag de run niet raken — een
+   * kapotte voortgangsmelding is geen reden om een antwoord te laten vallen.
+   *
+   * Alleen zinvol bij realtime kanalen. Bij mail laat je 'm weg.
+   */
+  onProgress?: (phase: ProgressPhase) => void;
   /**
    * Vaste tekst voor een bericht buiten het domein. Default: de tekst uit
    * `DOMAIN`. Wordt letterlijk gebruikt — nooit door een model aangeraakt.
@@ -252,6 +268,15 @@ export interface OrchestrationResult {
 
 function defaultId(): string {
   return `ri_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** Meldt een fase, en laat de run nooit struikelen over de melding zelf. */
+function report(deps: OrchestrationDeps, phase: ProgressPhase): void {
+  try {
+    deps.onProgress?.(phase);
+  } catch {
+    // Bewust stil: dit is versiering, geen uitkomst.
+  }
 }
 
 /**
@@ -314,22 +339,49 @@ export async function runRoute(
   signal: Signal,
   deps: OrchestrationDeps,
 ): Promise<Classification> {
-  // Poort eerst. Valt het bericht buiten het domein, dan stopt het hier:
-  // classify draait niet, en de caller hoort geen specialist te dispatchen
-  // maar `outOfDomainReviewItem()` weg te schrijven.
-  if (deps.steps.gate) {
-    const gate = await deps.steps.gate(signal);
-    if (!gate.inDomain) {
-      return {
-        category: 'buiten_domein',
-        outOfDomain: { reason: gate.reason },
-        confidence: 1,
-        needsRag: false,
-        extracted: {},
-      };
-    }
+  report(deps, 'routeren');
+  if (!deps.steps.gate) return deps.steps.classify(signal);
+
+  // Poort en classificatie draaien **naast elkaar**, niet na elkaar.
+  //
+  // Ze hangen niet van elkaar af — de poort beoordeelt of het bericht over dit
+  // bedrijf gaat, de classificatie waar het over gaat — en het zijn twee losse
+  // LLM-calls, dus achter elkaar wachten kost een hele call aan tijd. Bij mail
+  // maakt dat niets uit; bij chat zit er iemand naar een leeg venster te kijken.
+  //
+  // De veiligheidseigenschap blijft intact, en dat is hier het enige dat telt:
+  // het gaat om twee **aparte prompts**. Ze delen geen context, dus een bericht
+  // kan de poort nog steeds niet beïnvloeden via de routering of andersom. Wat
+  // je niet mag doen is ze samenvoegen tot één call — dát zou de poort omzeilbaar
+  // maken. Parallel draaien verandert alleen wanneer ze beginnen.
+  //
+  // Valt het bericht buiten het domein, dan wordt de classificatie **weggegooid**
+  // en gaat de run niet verder: geen resolve, geen tool-calls, geen generatie.
+  // Er is dus geen enkele route waarlangs die uitkomst de bezoeker bereikt.
+  //
+  // De prijs is een classificatie-call die je bij een geweigerd bericht voor
+  // niets betaalt. Dat is de goedkope tier en de rate limiting zit ervóór, dus
+  // dat weegt niet op tegen een seconde wachten bij élk bericht dat wél deugt.
+  const [gate, classification] = await Promise.all([
+    deps.steps.gate(signal),
+    deps.steps.classify(signal).catch((err: unknown) => err),
+  ]);
+
+  if (!gate.inDomain) {
+    return {
+      category: 'buiten_domein',
+      outOfDomain: { reason: gate.reason },
+      confidence: 1,
+      needsRag: false,
+      extracted: {},
+    };
   }
-  return deps.steps.classify(signal);
+
+  // Faalde classify, dan gooien we die fout hier alsnog. Hij is opgevangen om
+  // te voorkomen dat een afgewezen bericht struikelt over een call waarvan het
+  // resultaat toch werd weggegooid.
+  if (classification instanceof Error) throw classification;
+  return classification as Classification;
 }
 
 /**
@@ -350,6 +402,7 @@ export async function runSpecialize(
   const newId = deps.newId ?? defaultId;
   const { steps } = deps;
 
+  report(deps, 'opzoeken');
   const resolved = await steps.resolve(signal, classification);
 
   const recorder = new ToolCallRecorder();
@@ -367,6 +420,7 @@ export async function runSpecialize(
     ? getIntentConfig(classification.specialist)
     : undefined;
 
+  report(deps, 'schrijven');
   const plan = await steps.plan({
     signal,
     classification,

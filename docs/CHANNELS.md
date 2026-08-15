@@ -68,6 +68,48 @@ antwoord sturen. Het markeren gebeurt als láátste: faalt het, dan draait de
 poller 'm nog eens, en dat is minder erg dan een mislukte run als afgehandeld
 markeren.
 
+## Gespreksgeheugen
+
+De sessie-DO houdt een venster van de laatste tien beurten bij in `ctx.storage`.
+Dat is de juiste plek: het object *is* het geheugen van die sessie, de opslag
+overleeft hibernatie, en het kost geen netwerkrondje — in het chatpad is elk
+rondje zichtbare wachttijd. `aios_messages` blijft de bron voor de cockpit en
+voor een herverbinding die het hele verloop wil; dit is de werkkopie voor de lus.
+
+Het venster gaat mee in de signaal-payload als `context` en wordt gelezen door
+**classify én plan** (`conversationBlock()` in `steps.ts`). Dat is niet optioneel:
+zonder context beantwoordt de agent elk bericht alsof het het eerste is. "En
+wanneer is het klaar?" verliest dan het ordernummer van drie berichten eerder, en
+een bezoeker die net zijn e-mailadres gaf moet het opnieuw geven.
+
+De eerdere beurten blijven DATA. Het blok is afgebakend met hetzelfde label als
+het bericht zelf, dus een instructie die iemand er drie berichten geleden in
+heeft gezet, is nog steeds tekst en geen opdracht.
+
+## Snelheid: waar de tijd in gaat
+
+Wat er ná het weghalen van wachtrij en Workflow overblijft is het werk zelf.
+Twee dingen die daarin bewust zijn geregeld:
+
+- **Poort en classificatie draaien parallel** (`runRoute`). Ze hangen niet van
+  elkaar af, dus achter elkaar wachten kost een hele LLM-call aan tijd. De
+  veiligheidseigenschap is dat het twee *aparte prompts* zijn — die blijft.
+  Samenvoegen tot één call zou de poort omzeilbaar maken en gebeurt dus niet.
+  Buiten het domein wordt de classificatie weggegooid: geen resolve, geen
+  tool-calls, geen generatie.
+- **Het antwoord gaat vóór de administratie.** Beslislog en het DONE-zetten
+  komen ná het antwoord. Het ReviewItem blijft ervóór, want
+  `aios_tickets.review_item_id` heeft er een foreign key naar — bij uitkomst
+  `taak` zou het ticket anders niet aangemaakt kunnen worden.
+
+Wat er **niet** gebeurt is het antwoord streamen. De grounding-check draait ná de
+generatie en haalt beweringen weg waar geen dekking voor is; wat je hebt
+gestreamd kun je niet terugnemen. Streamen zou hier dus betekenen: de garantie
+opgeven dat de agent niets verzint. In plaats daarvan meldt de lus drie fasen
+(`onProgress`: routeren, opzoeken, schrijven) die de widget als één regel toont
+en telkens vervangt. Het zijn de fasen die echt draaien — zoekt de agent niets
+op, dan ziet de bezoeker die regel ook niet.
+
 ## Identificatie: pas vragen als het nodig is
 
 De widget heeft geen e-mailveld. Een identificatievraag vóór de eerste vraag is
