@@ -19,7 +19,7 @@ client:
   # Datalocatie. 'eu' tenzij expliciet anders afgesproken.
   residency: "eu"
   # FactumAI org-id (cuid) — invullen ná het aanmaken van de tenant.
-  org_id: "<cuid>"
+  org_id: "org_factumai_internal"
   # Org-id van het test-tenant (staging). Leeg laten tot je 'm aanmaakt.
   test_org_id: ""
 
@@ -131,6 +131,13 @@ notes: >
   (mayRespondWithoutHuman); draai daarom `pnpm gate` tegen een echt model
   voordat de widget publiek staat.
 
-  Nog open: org_id en test_org_id, in te vullen zodra het tenant in het
-  FactumAI-dashboard bestaat (stap 3b). Zolang __CLIENT_ORG_ID__ in de
-  wrangler-configs staat, weigert de deploy-workflow — dat is de bedoeling.
+  Tenant: er is bewust GEEN aparte org aangemaakt. De demo draait op de
+  bestaande interne org `org_factumai_internal`. Gevolg om te onthouden: de
+  agent resolvet MCP-credentials op tenant-id, dus onder deze org wijst de
+  mail-MCP naar de echte FactumAI-mailbox. Daarom is stap 7 (mail-MCP koppelen)
+  NIET gedaan en voeden we de demo via de demo-pagina en de chatwidget, die
+  volledig op de demo_*-tabellen draaien. Wil je de mail-lus echt end-to-end
+  demonstreren, maak dan eerst een eigen tenant met een wegwerp-mailbox.
+
+  test_org_id blijft leeg: geen staging. Zolang __CLIENT_TEST_ORG_ID__ in de
+  staging-blokken staat, is alleen een productie-deploy mogelijk — dat is prima.

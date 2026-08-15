@@ -35,7 +35,7 @@
   "vars": {
     "CLIENT_NAME": "Factum Webshop",
     "AIOS_RAG_ENABLED": "false",
-    "AIOS_ORG_ID": "__CLIENT_ORG_ID__",
+    "AIOS_ORG_ID": "org_factumai_internal",
     // Aan: dit is de demo-repo. Zet dit NOOIT op een productie-cockpit — het
     // laat een beheerder synthetische mail in de echte werkbak zetten.
     "DEMO_MODE": "true"
@@ -80,7 +80,7 @@
         // Cuid van de klant-org (parent) — waar changes vanuit deze staging-
         // cockpit heen worden gepromoot. Leeg = geen "Push naar prod"-knop;
         // staging blijft dan bruikbaar voor inspectie en testen.
-        "AIOS_PARENT_ORG_ID": "__CLIENT_ORG_ID__",
+        "AIOS_PARENT_ORG_ID": "org_factumai_internal",
         "COCKPIT_MODE": "staging"
       }
     }

@@ -72,7 +72,7 @@
     // Ontbrekend of andere waarde = oud gedrag — snelle rollback zonder deploy.
     "USE_MULTI_AGENT_ROUTER": "false",
     // FactumAI org-id van deze klant — vul in na het aanmaken van de tenant.
-    "AIOS_ORG_ID": "__CLIENT_ORG_ID__",
+    "AIOS_ORG_ID": "org_factumai_internal",
     // RAG/few-shot aan? Vereist het secret VOYAGE_API_KEY.
     "AIOS_RAG_ENABLED": "false",
     "MAIL_DONE_LABEL": "AIOS afgehandeld",
@@ -153,7 +153,7 @@
       "vars": {
         "CLIENT_NAME": "Factum Webshop",
         "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
-        "MODEL_PLAN": "claude-sonnet-4-6",
+        "MODEL_PLAN": "claude-sonnet-5",
         // Multi-agent-flag AAN op staging — dat is wat we willen testen.
         "USE_MULTI_AGENT_ROUTER": "true",
         // Test-tenant (child-org), NIET de prod-org — zie docs/MULTI-ENV-DESIGN.md.
