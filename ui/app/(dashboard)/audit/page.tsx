@@ -15,7 +15,7 @@ import {
   listAuditEntriesPage,
   listAuditFacets,
 } from "@/lib/db";
-import { DOMAIN_AUDIT_SOURCES } from "@/lib/audit-sources";
+import { domainAuditSources } from "@/lib/audit-sources";
 import { categoryLabel } from "@/lib/modules";
 import { timeAgoNL } from "@/lib/utils";
 
@@ -64,7 +64,7 @@ export default async function AuditPage({
   const decidedBy = sp.decidedBy ?? "";
   const category = sp.category ?? "";
   const sourceParam = sp.source ?? "";
-  const validSources = ["review", ...DOMAIN_AUDIT_SOURCES.map((s) => s.id)];
+  const validSources = ["review", ...domainAuditSources().map((s) => s.id)];
   const source: string = validSources.includes(sourceParam) ? sourceParam : "all";
   const page = Math.max(0, Number.parseInt(sp.page ?? "0", 10) || 0);
 
@@ -157,7 +157,7 @@ export default async function AuditPage({
           >
             <option value="">Alle bronnen</option>
             <option value="review">Mail-beslissingen</option>
-            {DOMAIN_AUDIT_SOURCES.map((src) => (
+            {domainAuditSources().map((src) => (
               <option key={src.id} value={src.id}>
                 {src.label}
               </option>
@@ -175,7 +175,7 @@ export default async function AuditPage({
               <option value="EXECUTED">Verstuurd</option>
               <option value="REJECTED">Afgewezen</option>
             </optgroup>
-            {DOMAIN_AUDIT_SOURCES.map((src) => (
+            {domainAuditSources().map((src) => (
               <optgroup key={src.id} label={src.label}>
                 {src.actions.map((a) => (
                   <option key={a} value={a}>
@@ -238,7 +238,7 @@ export default async function AuditPage({
                     label: e.action,
                     cls: "bg-surface-muted text-ink-muted border-brand-100",
                   };
-                  const domainSrc = DOMAIN_AUDIT_SOURCES.find(
+                  const domainSrc = domainAuditSources().find(
                     (s) => s.id === e.source,
                   );
                   const SourceIcon = domainSrc ? Package : Mail;

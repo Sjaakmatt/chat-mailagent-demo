@@ -20,6 +20,7 @@ import {
 } from "@/lib/review";
 import type { WorkbenchModule } from "./contract";
 import { collectKlantenserviceSources } from "./klantenservice-sources";
+import { klantenserviceAuditSource } from "./klantenservice-audit";
 
 /**
  * De vorm van `proposed` bij een klantenservice-item.
@@ -218,6 +219,10 @@ export const klantenserviceModule: WorkbenchModule = {
     { href: "/gesprekken", label: "Gesprekken", icon: MessagesSquare },
     { href: "/feedback", label: "Feedback", icon: ThumbsUp },
   ],
+  // Ticket-events op de auditlog-tijdlijn. De kern-auditlog toont wat er met
+  // een voorstel gebeurde; dit toont wat er daarna met het uitzoekwerk
+  // gebeurde — opgepakt door wie, afgesloten door wie.
+  auditSource: klantenserviceAuditSource,
   assistant: {
     // Waar deze module zijn feiten vandaan haalt. De assistent (stap 3) mag in
     // deze tab alleen deze bronnen bevragen.

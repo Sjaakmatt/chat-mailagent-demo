@@ -9,7 +9,7 @@ import {
   type DecisionLogRow,
 } from "@factumai/agent-core";
 import {
-  DOMAIN_AUDIT_SOURCES,
+  domainAuditSources,
   selectedDomainSources,
   type DomainAuditSource,
 } from "./audit-sources";
@@ -377,7 +377,7 @@ export async function listAuditFacets(
         >(CTX, url, { method: "GET" })
       ) ?? [];
     })(),
-    ...DOMAIN_AUDIT_SOURCES.map(async (src) => {
+    ...domainAuditSources().map(async (src) => {
       if (!src.actors) return [] as string[];
       try {
         return await src.actors(client);
