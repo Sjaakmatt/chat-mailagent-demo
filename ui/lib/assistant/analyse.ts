@@ -29,6 +29,7 @@ import {
 import { callMcp, cfAccessHeaders, mcpBearer } from "@factumai/agent-core/mcp";
 import type { CockpitEnv } from "@/lib/env";
 import { MODULES } from "@/lib/modules";
+import { mcpUrl } from "./mcp-endpoints";
 
 /** Staat de vlag aan in config? Zegt nog niets over de voorwaarden. */
 export function analyseFlagSet(env: CockpitEnv): boolean {
@@ -69,15 +70,8 @@ async function fetchReport(
   organizationId: string,
   mcpName: string,
 ): Promise<McpClassificationReport | null> {
-  const baseUrl = env.MCP_BASE_URL?.trim();
-  if (!baseUrl) return null;
-
   const res = await callMcp<FieldCategoriesResponse>(
-    {
-      url: `${baseUrl.replace(/\/$/, "")}/${mcpName}/mcp`,
-      apiKey: mcpBearer(env),
-      cfAccess: cfAccessHeaders(env),
-    },
+    { url: mcpUrl(env, mcpName), apiKey: mcpBearer(env), cfAccess: cfAccessHeaders(env) },
     {
       organizationId,
       agentId: "cockpit-analyse-gate",

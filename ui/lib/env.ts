@@ -97,11 +97,23 @@ export interface CockpitEnv {
   ASSISTANT_ANALYSE?: string;
 
   /**
-   * Basis-URL van de MCP's, bv. `https://mcp.factumai.nl`. De cockpit hangt er
-   * `/<mcp-naam>/mcp` achter. Nodig voor de voorwaardencontrole van laag 2 en
-   * later voor de aggregatie-calls zelf.
+   * Domein waaronder de MCP-subdomeinen hangen; default `factumai.nl`. Elke MCP
+   * heeft een eigen custom domain: `https://mcp-tickets.factumai.nl/mcp`.
+   *
+   * De cockpit leidt de URL dus af uit de MCP-naam en heeft standaard geen
+   * configuratie nodig. Zie `ui/lib/assistant/mcp-endpoints.ts`.
    */
-  MCP_BASE_URL?: string;
+  MCP_DOMAIN?: string;
+
+  /**
+   * Overrides per MCP — dezelfde vars die de agent-Worker gebruikt. Winnen van
+   * de afleiding, voor een MCP die tijdelijk ergens anders draait of een lokale
+   * tunnel tijdens ontwikkelen.
+   */
+  FACTUMAI_MCP_TICKETS_URL?: string;
+  FACTUMAI_MCP_ERP_URL?: string;
+  FACTUMAI_MCP_MAIL_URL?: string;
+  FACTUMAI_MCP_CRM_URL?: string;
   /** Inbound-secret voor de MCP's; zonder dit is elke /mcp-request 401. */
   FACTUMAI_MCP_INBOUND_SECRET?: string;
   FACTUMAI_MCP_API_KEY?: string;

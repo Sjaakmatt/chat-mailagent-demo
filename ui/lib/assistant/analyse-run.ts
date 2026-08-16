@@ -24,6 +24,7 @@ import {
 import { callMcp, cfAccessHeaders, mcpBearer } from "@factumai/agent-core/mcp";
 import type { CockpitEnv } from "@/lib/env";
 import type { DataCategory } from "@factumai/agent-core";
+import { mcpUrl } from "./mcp-endpoints";
 
 /**
  * De aggregaties die deze tenant kan uitvoeren.
@@ -74,17 +75,8 @@ async function runAggregation(
   args: Record<string, unknown>,
   categories: readonly DataCategory[],
 ): Promise<AnalyseOutcome> {
-  const baseUrl = env.MCP_BASE_URL?.trim();
-  if (!baseUrl) {
-    return { ok: false, reden: "De koppeling met de aggregaties is niet ingesteld." };
-  }
-
   const res = await callMcp<AggregationEnvelope>(
-    {
-      url: `${baseUrl.replace(/\/$/, "")}/${mcp}/mcp`,
-      apiKey: mcpBearer(env),
-      cfAccess: cfAccessHeaders(env),
-    },
+    { url: mcpUrl(env, mcp), apiKey: mcpBearer(env), cfAccess: cfAccessHeaders(env) },
     {
       organizationId: env.AIOS_ORG_ID,
       agentId: "cockpit-assistent",
