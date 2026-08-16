@@ -5,7 +5,26 @@ Eén rechtenmodel, geen tweede ernaast. De rol die bepaalt wat iemand mag
 
 Wat erbij komt: een rol mag dat niet meer overal in gelijke mate.
 
-## Twee assen
+## Drie lagen, van drie partijen
+
+Toegang is de **doorsnede**. Elke laag kan alleen beperken, nooit verruimen.
+
+| Laag | Wie zet het | Waar |
+| --- | --- | --- |
+| **Afname** — welke afdelingen heeft deze klant gekocht | Wij, bij het deployen | `LICENSED_MODULES` (var op de cockpit-Worker) |
+| **Toewijzing** — wie binnen die afname doet wat | De beheerder bij de klant | `allowed_emails.modules` |
+| **Rol** — hoe diep die persoon mag kijken | De beheerder bij de klant | `aios_role_grants` |
+
+`'*'` betekent **nooit** "alles wat bestaat". Voor een klant is het "alles wat wij
+hebben afgenomen", voor een gebruiker "alles wat mijn organisatie heeft". Een
+beheerder bij de klant is een tenant-beheerder, geen super admin — die laatste
+bestaat alleen aan onze kant, bij het zetten van de afname.
+
+De afname staat daarom in de Worker-config en niet in de klant-database: die
+database leeft in het Supabase-project van de klant, en een plafond dat de
+begrensde partij zelf kan verzetten is geen plafond.
+
+## Waarom afdeling en rang los blijven
 
 | As | Wat het beslist | Waarom |
 | --- | --- | --- |
@@ -14,6 +33,12 @@ Wat erbij komt: een rol mag dat niet meer overal in gelijke mate.
 
 De rollen blijven `admin | reviewer | viewer` uit `allowed_emails` — er komt geen
 tweede gebruikerstabel bij.
+
+Afdelingen zijn bewust géén rollen. Dat zou per afdeling drie rollen opleveren
+(`klantenservice_medewerker`, `_teamleider`, `_kijker`) en elke nieuwe afdeling
+vermenigvuldigt die lijst. Bovendien doet bij een kleinere klant dezelfde persoon
+klantenservice én administratie; met afdelingen-als-rol wordt dat een tweede
+account.
 
 ## De drie datacategorieën
 
@@ -65,6 +90,8 @@ de standaard is. "Leeg" en "bewust zo ingesteld" zien er anders identiek uit.
 | `ui/app/api/review/[id]/route.ts` | Goedkeuren/afwijzen checkt de modulegrant ná het ophalen — vóórdat je het item hebt, weet je niet uit welk proces het komt |
 | `ui/app/api/review/[id]/draft/route.ts` | Idem bij bewerken: een concept aanpassen is meebeslissen over wat naar buiten gaat |
 | MCP-laag | Snijdt elk antwoord bij op de meegestuurde `dataCategories` |
+| `ui/app/api/admin/allowed-emails/[email]/route.ts` | Weigert een afdeling toewijzen die niet is afgenomen — server-side, want een scherm dat alleen het juiste tóónt is geen beveiliging |
+| `ui/app/api/admin/invite/route.ts` | Zelfde plafond bij het uitnodigen |
 
 Items uit een module waar je niet in mag, worden **zonder melding** overgeslagen.
 Dat er werk ligt in een proces waar je niet bij hoort, is zelf ook informatie.
@@ -91,9 +118,20 @@ niet. *"De marge is gezond"* is ook een lek.
 De MCP levert daarvoor het materiaal: bij elk antwoord staat welke veldpaden zijn
 weggelaten en om welke reden — paden en categorieën, nooit waarden.
 
+## Afgenomen maar nog niet gebouwd
+
+Registratie en afname zijn twee dingen: registratie zegt dat er code voor een
+module bestaat, afname dat deze klant hem mag gebruiken. Een afdeling die wél is
+afgenomen maar nog geen module heeft, is gewoon toewijsbaar aan een gebruiker —
+er is alleen nog geen scherm. Zo kun je iemand alvast op HR zetten voordat de
+HR-automatisering er is.
+
 ## Wat er nog niet af is
 
-De matrix in Toegang is **lezen, niet bewerken**. Instellen gebeurt vandaag in
-`aios_role_grants`. Een editor komt pas als de vorm zich bij een tweede module
-bewezen heeft; wie de categorieën bij een nieuwe klant toewijst is nog een open
-besluit uit de bouwbriefing.
+De **rolmatrix** in Toegang is lezen, niet bewerken; de rijen zelf staan in
+`aios_role_grants`. De **afdelingen per gebruiker** zijn wél te bewerken, in
+diezelfde Toegang-pagina.
+
+De afname staat als Worker-var. Zolang wij deployen is dat een echt plafond;
+deployt een klant ooit zelf, dan is het een contractuele afspraak en geen
+technische grens — dan hoort hij naar het control plane.

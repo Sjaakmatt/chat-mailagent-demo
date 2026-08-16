@@ -17,7 +17,7 @@ export async function GET(): Promise<Response> {
 
   const { data, error } = await admin
     .from("allowed_emails")
-    .select("email, role, invited_by, created_at")
+    .select("email, role, modules, invited_by, created_at")
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: "list_failed" }, { status: 500 });
 

@@ -13,16 +13,21 @@
 import { NextResponse } from "next/server";
 import {
   categoriesAcross,
+  licensedFrom,
+  parseModuleSet,
   resolveAccess,
+  resolveUserAccess,
   toRoleGrant,
   type DataCategory,
   type ModuleId,
+  type ModuleSet,
   type ResolvedAccess,
   type Role,
   type RoleGrant,
 } from "@factumai/agent-core";
 import { MODULES } from "@/lib/modules";
 import { cockpitEnv } from "@/lib/db";
+import type { CockpitEnv } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getCurrentUser, type AuthedUser } from "./require-role";
 
@@ -32,6 +37,23 @@ export interface AuthedAccess extends AuthedUser {
   modules: ModuleId[];
   /** Categorieën over al zijn modules heen — voor schermen zonder één module. */
   categories: readonly DataCategory[];
+  /** Wat de organisatie heeft afgenomen. Het plafond boven alles hierboven. */
+  licensed: ModuleSet;
+}
+
+/**
+ * De afname van deze tenant, uit de Worker-config.
+ *
+ * Niet uit de klant-database: die leeft in het Supabase-project van de klant, en
+ * een plafond dat de begrensde partij zelf kan verzetten is geen plafond.
+ */
+export function licensedModules(env: CockpitEnv): ModuleSet {
+  return parseModuleSet(env.LICENSED_MODULES);
+}
+
+/** De afgenomen modules die ook echt geregistreerd zijn (dus een scherm hebben). */
+export function licensedRegisteredModules(env: CockpitEnv): ModuleId[] {
+  return licensedFrom(licensedModules(env), MODULES.map((m) => m.id));
 }
 
 /**
@@ -60,17 +82,27 @@ export async function getCurrentAccess(): Promise<AuthedAccess | null> {
   return accessFor(user);
 }
 
-/** De rechten bij een al vastgestelde gebruiker. */
+/**
+ * De rechten bij een al vastgestelde gebruiker: afname ∩ toewijzing ∩ rol.
+ *
+ * De doorsnede wordt op één plek uitgerekend, in `resolveUserAccess`. Zodra dit
+ * op drie plekken los gebeurt, is er een plek die er één vergeet.
+ */
 export async function accessFor(user: AuthedUser): Promise<AuthedAccess> {
-  const grants = await loadGrants(cockpitEnv().AIOS_ORG_ID);
-  const access = resolveAccess(user.role, grants);
-  const registered = MODULES.map((m) => m.id);
-  const modules = access.modulesFrom(registered);
+  const env = cockpitEnv();
+  const grants = await loadGrants(env.AIOS_ORG_ID);
+  const licensed = licensedModules(env);
+  const access = resolveUserAccess(
+    { role: user.role, grants, licensed, userModules: user.modules },
+    resolveAccess(user.role, grants),
+  );
+  const modules = access.modulesFrom(MODULES.map((m) => m.id));
   return {
     ...user,
     access,
     modules,
     categories: categoriesAcross(access, modules),
+    licensed,
   };
 }
 

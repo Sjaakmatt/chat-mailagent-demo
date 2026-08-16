@@ -3,9 +3,12 @@ import {
   ROLES,
   isDomainRule,
   isValidAllowlistEntry,
+  mayAssignModule,
   normalizeEmail,
 } from "@factumai/agent-core";
 import { requireRole, type Role } from "@/lib/auth/require-role";
+import { licensedModules } from "@/lib/auth/access";
+import { cockpitEnv } from "@/lib/db";
 import { supabaseAdmin, supabaseAnon } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -29,15 +32,37 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   let email = "";
   let role: Role = "reviewer";
+  // Standaard de joker: alles wat de organisatie heeft afgenomen. De beheerder
+  // knijpt daarna dicht per gebruiker; beginnen met niets zou betekenen dat
+  // elke uitnodiging twee handelingen kost.
+  let modules: string[] = ["*"];
   try {
-    const body = (await request.json()) as { email?: string; role?: string };
+    const body = (await request.json()) as {
+      email?: string;
+      role?: string;
+      modules?: unknown;
+    };
     email = normalizeEmail(body.email ?? "");
     if (body.role && ROLES.includes(body.role as Role)) role = body.role as Role;
+    if (Array.isArray(body.modules)) {
+      modules = body.modules.filter((m): m is string => typeof m === "string");
+    }
   } catch {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
   if (!isValidAllowlistEntry(email)) {
     return NextResponse.json({ error: "invalid_email" }, { status: 400 });
+  }
+
+  // Zelfde plafond als bij het wijzigen: niemand nodigt iemand uit voor een
+  // afdeling die de organisatie niet heeft afgenomen.
+  const licensed = licensedModules(cockpitEnv());
+  const buiten = modules.filter((m) => !mayAssignModule(licensed, m));
+  if (buiten.length > 0) {
+    return NextResponse.json(
+      { error: "module_not_licensed", modules: buiten },
+      { status: 403 },
+    );
   }
 
   const admin = supabaseAdmin();
@@ -46,7 +71,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   // 1. Op de allowlist (met rol) zetten.
   const { error: upsertErr } = await admin
     .from("allowed_emails")
-    .upsert({ email, role, invited_by: guard.email }, { onConflict: "email" });
+    .upsert({ email, role, modules, invited_by: guard.email }, { onConflict: "email" });
   if (upsertErr) {
     return NextResponse.json({ error: "allowlist_failed" }, { status: 500 });
   }

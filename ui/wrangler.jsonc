@@ -36,6 +36,11 @@
     "CLIENT_NAME": "__CLIENT_NAME__",
     "AIOS_RAG_ENABLED": "false",
     "AIOS_ORG_ID": "__CLIENT_ORG_ID__",
+    // De afdelingen die deze klant heeft AFGENOMEN. Wij verkopen per afdeling;
+    // dit is het plafond waar de beheerder van de klant niet overheen kan.
+    // Ontbreekt hij, dan ziet niemand iets — bewust fail-closed.
+    // "*" alleen op onze eigen tenants en demo's.
+    "LICENSED_MODULES": "klantenservice",
     // Model voor de assistent. Uit config, nooit hardcoded (harde regel 7).
     "MODEL_ASSISTANT": "claude-sonnet-4-6"
     // "ASSISTANT_DOSSIER": "true"  ← zet de werkbak-assistent (laag 1, dossier)

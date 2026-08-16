@@ -51,6 +51,26 @@ export interface CockpitEnv {
    */
   AIOS_PARENT_ORG_ID?: string;
 
+  /**
+   * De afdelingen die deze klant heeft afgenomen, komma-gescheiden. Bijvoorbeeld
+   * `"klantenservice"` of `"klantenservice,sales"`.
+   *
+   * Dit is de commerciële grens: wij verkopen per afdeling. Hij staat hier en
+   * niet in de klant-database, omdat de klant-database in het Supabase-project
+   * van de klant leeft — een plafond dat de begrensde partij zelf kan verzetten
+   * is geen plafond. Deze var wordt bij het deployen gezet, niet in de cockpit.
+   *
+   * Ontbreekt hij, dan is er niets afgenomen en ziet niemand iets. Bewust
+   * fail-closed en anders dan bij de rollen: een ontbrekende afname is geen
+   * storing die je wilt overbruggen.
+   *
+   * `"*"` betekent "het hele aanbod" en hoort alleen op onze eigen tenants en
+   * demo-omgevingen te staan.
+   *
+   * Hoort per tenant in het control plane zodra dat er is.
+   */
+  LICENSED_MODULES?: string;
+
   /** Feedback-few-shot aan voor deze tenant ("true"). Vereist VOYAGE_API_KEY. */
   AIOS_RAG_ENABLED?: string;
   /** Voyage AI API-key voor embeddings (feedback-MemoryEntry, voyage-3.5). */

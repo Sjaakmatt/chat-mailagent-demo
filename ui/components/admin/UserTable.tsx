@@ -15,8 +15,16 @@ type Role = "admin" | "reviewer" | "viewer";
 interface AllowedUser {
   email: string;
   role: Role;
+  /** Afdelingen; `["*"]` = alles wat de organisatie heeft afgenomen. */
+  modules: string[] | null;
   invited_by: string | null;
   created_at: string;
+}
+
+/** Een afdeling die deze organisatie heeft afgenomen. */
+export interface LicensedModule {
+  id: string;
+  label: string;
 }
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -34,9 +42,15 @@ const ROLE_BADGE: Record<Role, string> = {
 export function UserTable({
   initialUsers,
   currentEmail,
+  licensed,
 }: {
   initialUsers: AllowedUser[];
   currentEmail: string;
+  /**
+   * Wat de organisatie heeft afgenomen. Alleen dit is toewijsbaar — de server
+   * weigert de rest ook, dit is de beleefde helft van dezelfde grens.
+   */
+  licensed: LicensedModule[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -99,6 +113,40 @@ export function UserTable({
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? "wijzigen mislukt");
+      }
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "wijzigen mislukt");
+    } finally {
+      setBusyEmail(null);
+    }
+  }
+
+  /**
+   * Zet de afdelingen van één gebruiker. `["*"]` = alles wat de organisatie
+   * heeft; een lege lijst betekent nergens toegang, en dat mag — soms is dat
+   * precies wat je wilt bij iemand die tijdelijk niets moet zien.
+   */
+  async function changeModules(target: string, next: string[]) {
+    setError(null);
+    setNotice(null);
+    setBusyEmail(target);
+    try {
+      const res = await fetch(
+        `/api/admin/allowed-emails/${encodeURIComponent(target)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modules: next }),
+        },
+      );
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(
+          j.error === "module_not_licensed"
+            ? "Die afdeling is niet afgenomen voor deze organisatie."
+            : (j.error ?? "wijzigen mislukt"),
+        );
       }
       startTransition(() => router.refresh());
     } catch (err) {
@@ -240,6 +288,14 @@ export function UserTable({
                       Iedereen met een adres op dit domein
                     </div>
                   )}
+                  {licensed.length > 0 && (
+                    <ModulePicker
+                      selected={u.modules ?? ["*"]}
+                      licensed={licensed}
+                      disabled={busy}
+                      onChange={(next) => changeModules(u.email, next)}
+                    />
+                  )}
                 </div>
 
                 <span
@@ -291,5 +347,93 @@ export function UserTable({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Afdelingen aanvinken. "Alle afdelingen" is de joker — die betekent alles wat
+ * de organisatie heeft afgenomen, niet alles wat bestaat. Daarom staat er bij
+ * meer dan één afgenomen afdeling ook bij wélke dat zijn.
+ */
+function ModulePicker({
+  selected,
+  licensed,
+  disabled,
+  onChange,
+}: {
+  selected: string[];
+  licensed: LicensedModule[];
+  disabled: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  const all = selected.includes("*");
+
+  function toggle(id: string) {
+    if (all) {
+      // Vanaf de joker naar een concrete keuze: begin met alles behalve deze.
+      onChange(licensed.map((m) => m.id).filter((m) => m !== id));
+      return;
+    }
+    const next = selected.includes(id)
+      ? selected.filter((m) => m !== id)
+      : [...selected, id];
+    onChange(next);
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <Chip
+        label="Alle afdelingen"
+        on={all}
+        disabled={disabled}
+        onClick={() => onChange(all ? [] : ["*"])}
+      />
+      {licensed.map((m) => (
+        <Chip
+          key={m.id}
+          label={m.label}
+          on={all || selected.includes(m.id)}
+          dimmed={all}
+          disabled={disabled}
+          onClick={() => toggle(m.id)}
+        />
+      ))}
+      {!all && selected.length === 0 && (
+        <span className="text-xs text-ink-subtle">geen toegang</span>
+      )}
+    </div>
+  );
+}
+
+function Chip({
+  label,
+  on,
+  dimmed = false,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  dimmed?: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        on
+          ? dimmed
+            ? "bg-brand-50 text-brand-600 border-brand-200"
+            : "bg-brand-600 text-white border-brand-600"
+          : "bg-white text-ink-muted border-brand-200 hover:border-brand-400",
+      )}
+    >
+      {label}
+    </button>
   );
 }

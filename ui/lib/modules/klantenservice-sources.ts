@@ -29,7 +29,7 @@ import {
   type PolicyRuleRow,
 } from "@/lib/db";
 import { listTickets } from "@/lib/tickets";
-import { mailProposed } from "@/lib/modules/klantenservice";
+import { mailProposed } from "./klantenservice";
 import type { ReviewItemRow } from "@/lib/review";
 
 /** Hoeveel vergelijkbare zaken we meesturen. Meer is ruis, niet meer context. */
@@ -225,7 +225,7 @@ async function eerdereZakenSources(
  * dat hij iets niet weet. Wat er ontbreekt is zichtbaar: de gebruiker ziet de
  * bronnenlijst.
  */
-export async function collectSources(
+export async function collectKlantenserviceSources(
   client: CockpitDbClient,
   row: ReviewItemRow,
 ): Promise<AssistantSource[]> {

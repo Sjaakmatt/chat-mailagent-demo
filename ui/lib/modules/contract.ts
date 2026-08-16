@@ -16,7 +16,8 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import type { ModuleId } from "@factumai/agent-core";
+import type { AssistantSource, ModuleId } from "@factumai/agent-core";
+import type { CockpitDbClient } from "@/lib/tenant-query";
 import type { DomainAuditSource } from "@/lib/audit-sources";
 import type { ReviewCardViewModel, ReviewItemRow } from "@/lib/review";
 import type { NavItem } from "@/lib/brand";
@@ -76,6 +77,23 @@ export interface WorkbenchModule {
   toCard(row: ReviewItemRow): ReviewCardViewModel;
   /** Waar de detailweergave van een item van deze module leeft. */
   detailHref(id: string): string;
+  /**
+   * De bronnen die de assistent bij een item van deze module mag lezen.
+   *
+   * Hier en niet in de assistent-laag, om dezelfde reden als `toCard`: zo kan
+   * een module structureel alleen zijn éigen bronnen leveren. Zat dit in een
+   * gedeelde functie met een module-parameter, dan hing de scheiding tussen
+   * afdelingen aan het correct doorgeven van die parameter — en dat is precies
+   * het soort grens dat een keer stukgaat.
+   *
+   * Geen implementatie = geen assistent voor deze module. Ook dat is
+   * fail-closed: een nieuwe module krijgt niet per ongeluk een assistent die
+   * bronnen van iemand anders leest.
+   */
+  collectSources?(
+    client: CockpitDbClient,
+    row: ReviewItemRow,
+  ): Promise<AssistantSource[]>;
   /** Extra schermen van deze module in de zijbalk. */
   navItems?: readonly NavItem[];
   /** Eigen events op de auditlog-tijdlijn. */

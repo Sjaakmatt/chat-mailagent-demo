@@ -64,7 +64,7 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "Geen rechten op dit proces" }, { status: 403 });
   }
 
-  const { result, sources } = await askAssistant(env, client, row, question);
+  const { result, sources } = await askAssistant(env, client, mod, row, question);
 
   // De bronnenlijst gaat altijd mee, ook bij een weigering: dan ziet de
   // medewerker wat de assistent wél had en kan hij zelf kijken.

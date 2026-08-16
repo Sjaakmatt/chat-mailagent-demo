@@ -19,6 +19,7 @@ import {
   type ReviewItemRow,
 } from "@/lib/review";
 import type { WorkbenchModule } from "./contract";
+import { collectKlantenserviceSources } from "./klantenservice-sources";
 
 /**
  * De vorm van `proposed` bij een klantenservice-item.
@@ -179,6 +180,7 @@ export const klantenserviceModule: WorkbenchModule = {
   kinds: KLANTENSERVICE_MODULE.kinds,
   categories: KLANTENSERVICE_MODULE.categories,
   detailHref,
+  collectSources: collectKlantenserviceSources,
   toCard(row: ReviewItemRow): ReviewCardViewModel {
     const proposed = mailProposed(row);
     const triage = triageOf(row);

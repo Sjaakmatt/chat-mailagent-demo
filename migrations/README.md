@@ -29,6 +29,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
 | `0030_review_items_module`  | `module` per voorstel — de werkbak tabt per proces   |
 | `0031_role_grants`          | rol → (module, datacategorieën) — één rechtenmodel   |
+| `0032_allowed_emails_modules` | afdelingen per gebruiker, begrensd door de afname |
 
 ## Waarom de gaten in de nummering
 

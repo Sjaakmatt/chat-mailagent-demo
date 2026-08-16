@@ -66,7 +66,14 @@ Drie poorten, in oplopende kosten, voordat er een model aan te pas komt:
 2. **De rol** — minimaal `viewer`. Wie mag meekijken, mag vragen stellen over
    wat hij ziet.
 3. **De modulegrant** — dezelfde grens als bij goedkeuren: over een proces waar
-   je niet bij hoort, stel je ook geen vragen. Zie [`RECHTEN.md`](./RECHTEN.md).
+   je niet bij hoort, stel je ook geen vragen. Dat is de doorsnede van afname,
+   toewijzing en rol; zie [`RECHTEN.md`](./RECHTEN.md).
+
+En één die geen poort is maar een eigenschap: **de bronnen komen van de module**,
+via `WorkbenchModule.collectSources`. Er is geen gedeelde functie met een
+module-parameter, dus de klantenservice-assistent kán geen sales-bron krijgen —
+ook niet als er ergens een verkeerde id wordt doorgegeven. Een module zonder
+`collectSources` heeft geen assistent; ook dat is fail-closed.
 
 Datacategorieën spelen in laag 1 nog geen rol: de cockpit leest zijn eigen
 database, en daar staan geen inkoopprijzen of marges — die zitten in de
@@ -96,7 +103,7 @@ als var op de Worker.
 | Wat | Waar |
 | --- | --- |
 | Contract, prompt, controle | `packages/agent-core/src/assistant/` |
-| Bronnen ophalen | `ui/lib/assistant/sources.ts` |
+| Bronnen ophalen | `ui/lib/modules/klantenservice-sources.ts` — per module |
 | Eén vraag, end-to-end | `ui/lib/assistant/run.ts` |
 | API | `ui/app/api/assistant/route.ts` |
 | Paneel | `ui/components/assistant/AssistantPanel.tsx` |

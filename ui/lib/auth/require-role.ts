@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import {
   allowlistKeysFor,
   normalizeEmail,
-  resolveRoleFromRows,
+  resolveAllowlistEntry,
+  type AllowlistRow,
   type Role,
 } from "@factumai/agent-core";
 import { supabaseFromCookies, supabaseAdmin } from "@/lib/supabase/server";
@@ -14,6 +15,12 @@ const RANK: Record<Role, number> = { viewer: 0, reviewer: 1, admin: 2 };
 export interface AuthedUser {
   email: string;
   role: Role;
+  /**
+   * Afdelingen waarin deze gebruiker werkt, ruw uit `allowed_emails.modules`.
+   * `["*"]` = alles wat de organisatie heeft afgenomen — nooit meer. De
+   * doorsnede met de afname en de rolgrant wordt in `access.ts` gemaakt.
+   */
+  modules: string[];
 }
 
 /**
@@ -46,12 +53,12 @@ export async function resolveRole(email: string): Promise<AuthedUser | null> {
   const normalized = normalizeEmail(email);
   const { data, error } = await admin
     .from("allowed_emails")
-    .select("email, role")
+    .select("email, role, modules")
     .in("email", allowlistKeysFor(normalized));
   if (error || !data) return null;
 
-  const role = resolveRoleFromRows(normalized, data as { email: string; role: string | null }[]);
-  return role ? { email: normalized, role } : null;
+  const entry = resolveAllowlistEntry(normalized, data as AllowlistRow[]);
+  return entry ? { email: normalized, role: entry.role, modules: entry.modules } : null;
 }
 
 /**

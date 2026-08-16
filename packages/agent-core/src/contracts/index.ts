@@ -48,6 +48,8 @@ export type ModuleId =
   | 'sales'
   | 'administratie'
   | 'operations'
+  | 'marketing'
+  | 'hr'
   | (string & {});
 
 export type ReviewItemKind =

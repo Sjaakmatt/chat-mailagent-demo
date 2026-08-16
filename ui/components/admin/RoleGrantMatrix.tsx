@@ -6,7 +6,6 @@ import {
   type Role,
   type RoleGrant,
 } from "@factumai/agent-core";
-import { MODULES } from "@/lib/modules";
 import { cn } from "@/lib/utils";
 
 /**
@@ -42,10 +41,13 @@ const CATEGORY_HINTS: Record<DataCategory, string> = {
 export function RoleGrantMatrix({
   grants,
   usingDefaults,
+  modules,
 }: {
   grants: RoleGrant[];
   /** Geen rijen in de database → het standaardvoorstel uit agent-core. */
   usingDefaults: boolean;
+  /** Alleen de afgenomen afdelingen — niet-afgenomen bestaat niet voor deze klant. */
+  modules: { id: string; label: string }[];
 }) {
   return (
     <section className="mt-8">
@@ -70,9 +72,9 @@ export function RoleGrantMatrix({
       )}
 
       <div className="mt-4 space-y-6">
-        {MODULES.map((mod) => (
+        {modules.map((mod) => (
           <div key={mod.id}>
-            {MODULES.length > 1 && (
+            {modules.length > 1 && (
               <h3 className="text-sm font-medium text-ink mb-2">{mod.label}</h3>
             )}
             <div className="overflow-x-auto">

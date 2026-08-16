@@ -28,7 +28,7 @@ import { BRAND } from "@/lib/brand";
 import type { CockpitEnv } from "@/lib/env";
 import type { CockpitDbClient } from "@/lib/tenant-query";
 import type { ReviewItemRow } from "@/lib/review";
-import { collectSources } from "./sources";
+import type { WorkbenchModule } from "@/lib/modules";
 
 /** Is de assistent aan voor deze cockpit? */
 export function assistantEnabled(env: CockpitEnv): boolean {
@@ -47,10 +47,14 @@ export interface AssistantRunResult {
 export async function askAssistant(
   env: CockpitEnv,
   client: CockpitDbClient,
+  mod: WorkbenchModule,
   row: ReviewItemRow,
   question: string,
 ): Promise<AssistantRunResult> {
-  const sources = await collectSources(client, row);
+  // De bronnen komen van de módule, niet van een gedeelde functie met een
+  // module-parameter. Zo kan de klantenservice-assistent geen sales-bron
+  // krijgen, ook niet als er ergens een verkeerde id wordt doorgegeven.
+  const sources = mod.collectSources ? await mod.collectSources(client, row) : [];
 
   const llm = createAnthropicLlmClient({
     apiKey: env.ANTHROPIC_API_KEY ?? "",
