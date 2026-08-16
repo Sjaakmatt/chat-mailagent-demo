@@ -26,6 +26,12 @@ export interface CreateTicketInput {
   category?: string | null;
   summary: string;
   identity: TicketIdentity;
+  /**
+   * Waarom deze categorie langs een mens gaat, in één zin, uit de beleidsregel
+   * die matchte. Gaat letterlijk de bevestiging in. Leeg = de generieke zin uit
+   * `CONFIRMATION`.
+   */
+  handoverReason?: string | null;
 }
 
 export interface CreatedTicket {
@@ -104,6 +110,6 @@ export async function createTicket(
   return {
     id,
     number,
-    confirmation: aanhef + confirmationText(number, CONFIRMATION),
+    confirmation: aanhef + confirmationText(number, CONFIRMATION, input.handoverReason),
   };
 }

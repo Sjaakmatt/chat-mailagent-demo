@@ -82,6 +82,40 @@ describe('wat de bezoeker terugkrijgt', () => {
     expect(pushed[0]).not.toContain('zeg je abonnement');
   });
 
+  // De reden waarom er een mens aan te pas komt, komt uit de beleidsregel en
+  // staat onder `proposed.policy` — niet op het ReviewItem zelf. Dat is precies
+  // het soort verschil waar dit stil op de generieke zin zou terugvallen.
+  it('taak: geeft de reden uit de beleidsregel door aan het ticket', async () => {
+    const ri = item('Concept voor de collega.', {
+      from: 'k@example.com',
+      orderNumber: 'DEMO-1',
+    });
+    (ri.proposed as Record<string, unknown>).policy = {
+      ruleId: 'rule_1',
+      ruleName: 'Orderwijziging',
+      handoverReason: 'Een wijziging bevestigen we altijd met een collega.',
+    };
+
+    await finishChatTurn(env, ri, uitkomst('taak'), {
+      conversationId: 'conv_1',
+      category: 'order_wijziging',
+    });
+
+    expect(createdTickets[0]).toMatchObject({
+      handoverReason: 'Een wijziging bevestigen we altijd met een collega.',
+    });
+  });
+
+  it('taak zonder beleidsregel: geen reden, dan pakt de tekst de terugval', async () => {
+    await finishChatTurn(
+      env,
+      item('Concept.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
+      uitkomst('taak'),
+      { conversationId: 'conv_1', category: 'overig' },
+    );
+    expect(createdTickets[0]).toMatchObject({ handoverReason: null });
+  });
+
   it('taak zonder bruikbare identificatie: om gegevens vragen, geen ticket', async () => {
     ticketAnswer = null;
     const res = await finishChatTurn(env, item('Ik regel het.'), uitkomst('taak'), {
