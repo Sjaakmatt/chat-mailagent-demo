@@ -73,6 +73,15 @@
     "USE_MULTI_AGENT_ROUTER": "false",
     // FactumAI org-id van deze klant — vul in na het aanmaken van de tenant.
     "AIOS_ORG_ID": "org_factumai_internal",
+    // Wélke gekoppelde mailbox de agent gebruikt. Deze org heeft er meerdere,
+    // en leeg laten betekent NIET "geen keuze" maar "de primaire" — dat is hier
+    // Info@factumai.nl, waar echte klanten naartoe schrijven. De agent leest
+    // daar dan niet alleen uit, hij antwoordt er na goedkeuring ook vanuit.
+    //
+    // Bestaat deze instance nog niet in het dashboard, dan faalt de MCP-call
+    // luid met "instance_not_found". Dat is precies wat je wilt: liever een
+    // zichtbare fout dan stilletjes de verkeerde bak.
+    "FACTUMAI_MCP_MAIL_INSTANCE_KEY": "mail-agent",
     // RAG/few-shot aan? Vereist het secret VOYAGE_API_KEY.
     "AIOS_RAG_ENABLED": "false",
     "MAIL_DONE_LABEL": "AIOS afgehandeld",
