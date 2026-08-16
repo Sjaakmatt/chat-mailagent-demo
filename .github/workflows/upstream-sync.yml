@@ -21,7 +21,11 @@ name: Upstream-sync
 
 on:
   schedule:
-    # Maandagochtend, zodat je de week begint met de stand van zaken.
+    # Vangnet. De normale route is `workflow_dispatch` vanuit het fundament
+    # (notify-clients.yml) zodra daar iets op main landt — dan sta je niet tot
+    # maandag stil. Deze cron vangt op wat dat aanstoten miste: een verlopen
+    # token, een hernoemde repo, een klant die nog niet in CLIENT_REPOS staat.
+    # Weghalen kan pas als je erop durft te vertrouwen dat je dat altijd merkt.
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
