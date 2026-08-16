@@ -107,3 +107,5 @@ export function isValidAllowlistEntry(entry: string): boolean {
   if (/\s/.test(value)) return false;
   return value.slice(at + 1).includes('.');
 }
+
+export * from './grants.js';

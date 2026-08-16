@@ -39,6 +39,21 @@ export interface Env {
    */
   TICKET_PREFIX?: string;
 
+  /**
+   * Datacategorieën die de agent bij een MCP-call mag opvragen, als
+   * komma-gescheiden lijst. Ontbreekt → `operationeel,commercieel`.
+   *
+   * De agent is géén gebruiker en heeft dus geen rol: hij beantwoordt de vraag
+   * van een klant over diens eigen order, en daar horen bedragen bij die de
+   * klant zelf ook op zijn factuur ziet. Financieel staat er bewust níét bij —
+   * inkoopprijzen en marges horen niet in een antwoord aan een klant, en een
+   * agent die ze niet kan opvragen, kan ze ook niet per ongeluk citeren.
+   *
+   * Zet 'm als `var` in wrangler.jsonc. Verruimen is een bewuste keuze per
+   * klant; verkrappen kan altijd.
+   */
+  AGENT_DATA_CATEGORIES?: string;
+
   /** Klant-Supabase (waar Signal + ReviewItem leven). */
   AIOS_SUPABASE_URL: string;
   AIOS_SUPABASE_SERVICE_ROLE_KEY: string;

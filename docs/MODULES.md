@@ -113,9 +113,9 @@ bouwbriefing — maar de plek ligt er al, omdat de assistent een **schil**-funct
 is die over de tabs heen kijkt. Zonder deze plek zou de scope-vraag later alsnog
 module-kennis in de schil worden.
 
-Datzelfde geldt voor rechten: rol → categorie wordt rol → (module, categorie).
-Een salesmedewerker hoort geen administratie-item goed te keuren, ook niet als
-hij `reviewer` is.
+De rechten liggen er wél al: rol → (module, categorie), in `aios_role_grants`.
+Een salesmedewerker keurt geen administratie-item goed, ook niet als hij
+`reviewer` is. Zie [`docs/RECHTEN.md`](./RECHTEN.md).
 
 ## Wat er nog niet af is
 

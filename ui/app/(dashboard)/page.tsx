@@ -5,6 +5,7 @@ import { RealtimeRefresh } from "@/components/dashboard/RealtimeRefresh";
 import { authEnv } from "@/lib/supabase/env";
 import { cockpitEnv, makeClient, listReviewItems } from "@/lib/db";
 import { MODULES, moduleForRow } from "@/lib/modules";
+import { getCurrentAccess } from "@/lib/auth/access";
 import {
   bucketFor,
   type ReviewCardViewModel,
@@ -32,10 +33,16 @@ export default async function WerkbakPage({
     rows = [];
   }
 
-  // Een onbekende module in de URL negeren we: liever alles tonen dan een lege
-  // bak waarvan niemand begrijpt waarom hij leeg is.
+  // Alleen de modules waar deze rol in mag. De layout laat niemand zonder
+  // sessie hier komen; valt het toch weg, dan is leeg het juiste antwoord.
+  const me = await getCurrentAccess();
+  const visible = MODULES.filter((m) => me?.access.mayEnter(m.id) ?? false);
+
+  // Een onbekende — of niet-toegestane — module in de URL negeren we: liever
+  // alles tonen wat wél mag dan een lege bak waarvan niemand begrijpt waarom
+  // hij leeg is.
   const requested = (await searchParams).module ?? null;
-  const activeModule = MODULES.some((m) => m.id === requested) ? requested : null;
+  const activeModule = visible.some((m) => m.id === requested) ? requested : null;
 
   if (loadError) {
     return (
@@ -84,6 +91,9 @@ export default async function WerkbakPage({
       orphaned += 1;
       continue;
     }
+    // Buiten de rechten van deze rol: overslaan zonder melding. Dat er werk
+    // ligt in een proces waar je niet bij hoort, is zelf ook informatie.
+    if (!visible.some((m) => m.id === mod.id)) continue;
 
     const bucket = bucketFor(row.status);
     if (bucket === "review") {
@@ -101,7 +111,7 @@ export default async function WerkbakPage({
     else rejected.push(vm);
   }
 
-  const tabs: ModuleTab[] = MODULES.map((m) => ({
+  const tabs: ModuleTab[] = visible.map((m) => ({
     id: m.id,
     label: m.label,
     icon: m.icon,
@@ -123,7 +133,7 @@ export default async function WerkbakPage({
 
       <div className="flex-1 p-4 sm:p-6 overflow-auto">
         {/* Eén module = niets te kiezen; dan is een tabbalk alleen maar ruis. */}
-        {MODULES.length > 1 && (
+        {visible.length > 1 && (
           <ModuleTabs tabs={tabs} active={activeModule} totalCount={totalPending} />
         )}
 

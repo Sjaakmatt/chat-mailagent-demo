@@ -28,6 +28,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0021_revoke_security_definer` | RPC-grants dichtzetten — **verplicht** op bestaande DB's |
 | `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
 | `0030_review_items_module`  | `module` per voorstel — de werkbak tabt per proces   |
+| `0031_role_grants`          | rol → (module, datacategorieën) — één rechtenmodel   |
 
 ## Waarom de gaten in de nummering
 

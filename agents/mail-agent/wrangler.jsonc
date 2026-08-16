@@ -61,6 +61,9 @@
     // Klantnaam zoals de agent 'm in mails mag noemen (vult {{client}} in de
     // specialist-prompts). Geen secret.
     "CLIENT_NAME": "__CLIENT_NAME__",
+    // Wat de agent bij een MCP mag opvragen. Financieel staat er bewust niet
+    // bij: inkoopprijzen en marges horen niet in een antwoord aan een klant.
+    "AGENT_DATA_CATEGORIES": "operationeel,commercieel",
     // Model-IDs uit config, nooit hardcoded in de code (harde regel 7).
     "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
     "MODEL_PLAN": "claude-sonnet-4-6",
@@ -148,6 +151,7 @@
       // Bewust géén `triggers.crons` — zie sectie-comment hierboven.
       "vars": {
         "CLIENT_NAME": "__CLIENT_NAME__",
+        "AGENT_DATA_CATEGORIES": "operationeel,commercieel",
         "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
         "MODEL_PLAN": "claude-sonnet-4-6",
         // Multi-agent-flag AAN op staging — dat is wat we willen testen.

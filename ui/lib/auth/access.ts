@@ -1,0 +1,103 @@
+/**
+ * De rechten van de ingelogde gebruiker, geladen uit `aios_role_grants`.
+ *
+ * Bovenop `require-role.ts`, dat alleen de rol kent. Hier komt de tweede as
+ * bij: in welke module mag deze rol werken, en met welke datacategorieën. De
+ * logica zelf staat in agent-core (`resolveAccess`) en is daar getest — dit
+ * bestand doet de query en de guard.
+ *
+ * Eén rechtenmodel: dezelfde rol die bepaalt wat iemand mag goedkeuren, bepaalt
+ * wat hij mag zien. Geen tweede tabel met gebruikers ernaast.
+ */
+
+import { NextResponse } from "next/server";
+import {
+  categoriesAcross,
+  resolveAccess,
+  toRoleGrant,
+  type DataCategory,
+  type ModuleId,
+  type ResolvedAccess,
+  type Role,
+  type RoleGrant,
+} from "@factumai/agent-core";
+import { MODULES } from "@/lib/modules";
+import { cockpitEnv } from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { getCurrentUser, type AuthedUser } from "./require-role";
+
+export interface AuthedAccess extends AuthedUser {
+  access: ResolvedAccess;
+  /** De geregistreerde modules waar deze gebruiker in mag. */
+  modules: ModuleId[];
+  /** Categorieën over al zijn modules heen — voor schermen zonder één module. */
+  categories: readonly DataCategory[];
+}
+
+/**
+ * Haalt de grants van deze tenant op. Faalt de query, dan geeft dit een lege
+ * lijst terug en valt `resolveAccess` op het standaardvoorstel terug — een
+ * cockpit die op een databasehapering niemand meer binnenlaat is een storing,
+ * en de onderkant van dat voorstel lekt niets.
+ */
+async function loadGrants(organizationId: string): Promise<RoleGrant[]> {
+  const admin = supabaseAdmin();
+  if (!admin) return [];
+  const { data, error } = await admin
+    .from("aios_role_grants")
+    .select("role, module, categories")
+    .eq("organization_id", organizationId);
+  if (error || !data) return [];
+  return (data as { role: string | null; module: string | null; categories: unknown }[])
+    .map(toRoleGrant)
+    .filter((g): g is RoleGrant => g !== null);
+}
+
+/** De rechten van de huidige sessie. Null als er geen (toegestane) sessie is. */
+export async function getCurrentAccess(): Promise<AuthedAccess | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  return accessFor(user);
+}
+
+/** De rechten bij een al vastgestelde gebruiker. */
+export async function accessFor(user: AuthedUser): Promise<AuthedAccess> {
+  const grants = await loadGrants(cockpitEnv().AIOS_ORG_ID);
+  const access = resolveAccess(user.role, grants);
+  const registered = MODULES.map((m) => m.id);
+  const modules = access.modulesFrom(registered);
+  return {
+    ...user,
+    access,
+    modules,
+    categories: categoriesAcross(access, modules),
+  };
+}
+
+/**
+ * Guard voor route-handlers die op één module werken. Controleert de rol én de
+ * modulegrant, in die volgorde — een salesmedewerker die genoeg rang heeft om
+ * goed te keuren, mag dat nog steeds niet in administratie.
+ *
+ * Geeft een NextResponse terug bij faal zodat de caller direct kan returnen.
+ */
+export async function requireModule(
+  module: ModuleId,
+  minRole: Role,
+): Promise<AuthedAccess | NextResponse> {
+  const RANK: Record<Role, number> = { viewer: 0, reviewer: 1, admin: 2 };
+  const user = await getCurrentAccess();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (RANK[user.role] < RANK[minRole]) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (!user.access.mayEnter(module)) {
+    // Bewust dezelfde 403 als een rangfout, met een reden erbij voor de
+    // logs — maar zonder te verklappen wát er in die module ligt.
+    return NextResponse.json(
+      { error: "Forbidden", reason: "module" },
+      { status: 403 },
+    );
+  }
+  return user;
+}

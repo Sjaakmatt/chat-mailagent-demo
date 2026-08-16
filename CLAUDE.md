@@ -59,7 +59,9 @@ willen?* Nee → extensiepunt of `examples/`.
 4. **Numerical grounding.** Elke numerieke of feitelijke claim is traceerbaar
    naar een tool-call-respons uit dezelfde run. Geen dekking → weglaten.
 5. **Tenant-context op elke MCP-call en elke DB-query.** In de cockpit gaat dat
-   automatisch via `CockpitDbClient`; omzeil dat niet.
+   automatisch via `CockpitDbClient`; omzeil dat niet. Stuur op elke MCP-call óók
+   `dataCategories` mee — laat je ze weg, dan krijg je alleen `operationeel`
+   terug en verdwijnen velden stilzwijgend. Zie `docs/RECHTEN.md`.
 6. **Secrets uit env/Vault**, nooit in code of logs.
 7. **Model-IDs in config, niet hardcoden.** Haiku-tier classificeert,
    Sonnet-tier plant, Opus-tier alleen waar `plan-heavy` staat.
@@ -78,6 +80,7 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 | Een extra intent/specialist    | `packages/agent-core/src/specialists/`           |
 | Een side effect na goedkeuring | `agents/mail-agent/src/domain/index.ts`          |
 | Eigen events in de auditlog    | `ui/lib/audit-sources.ts`                        |
+| Wie wat mag zien/goedkeuren    | `aios_role_grants` — zie `docs/RECHTEN.md`; nooit een tweede rechtenmodel |
 | Een tweede kanaal (chat)       | `packages/agent-core/src/channels/` + `agents/mail-agent/src/channels.ts` |
 | Andere demo-mails              | `ui/lib/demo/scenarios.ts` + `migrations/0005_*` |
 

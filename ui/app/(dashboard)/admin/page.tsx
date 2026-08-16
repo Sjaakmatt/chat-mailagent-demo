@@ -2,6 +2,9 @@ import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { UserTable } from "@/components/admin/UserTable";
+import { RoleGrantMatrix } from "@/components/admin/RoleGrantMatrix";
+import { toRoleGrant, type RoleGrant } from "@factumai/agent-core";
+import { cockpitEnv } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -48,12 +51,27 @@ export default async function AdminPage() {
     users = (data as AllowedUser[] | null) ?? [];
   }
 
+  // Rechten per rol. Geen rijen = het standaardvoorstel uit agent-core; dat
+  // zeggen we erbij, want "leeg" en "bewust zo ingesteld" zien er anders
+  // identiek uit.
+  let grants: RoleGrant[] = [];
+  if (admin) {
+    const { data } = await admin
+      .from("aios_role_grants")
+      .select("role, module, categories")
+      .eq("organization_id", cockpitEnv().AIOS_ORG_ID);
+    grants = ((data as { role: string | null; module: string | null; categories: unknown }[] | null) ?? [])
+      .map(toRoleGrant)
+      .filter((g): g is RoleGrant => g !== null);
+  }
+
   return (
     <>
       <PageHeader />
       <div className="flex-1 overflow-auto">
         <div className="max-w-3xl mx-auto p-4 sm:p-6">
           <UserTable initialUsers={users} currentEmail={user.email} />
+          <RoleGrantMatrix grants={grants} usingDefaults={grants.length === 0} />
         </div>
       </div>
     </>

@@ -30,6 +30,7 @@ import {
   type MatchedMemory,
   type TenantContext,
 } from '@factumai/agent-core';
+import { DATA_CATEGORIES, type DataCategory } from '@factumai/agent-core';
 import type { Env } from './env.js';
 import { callMcp, cfAccessHeaders, mcpBearer } from './mcp.js';
 import { createAnthropicLlmClient } from './llm-anthropic.js';
@@ -57,6 +58,27 @@ export function clientName(env: Env): string {
 }
 
 /**
+ * De categorieën die de agent bij een MCP mag opvragen.
+ *
+ * Sinds de veldclassificatie in de MCP-laag geldt: stuur je niets mee, dan krijg
+ * je alleen operationeel. Voor de agent is dat te krap — hij moet een klant
+ * kunnen vertellen wat diens order kostte. Financieel zit er bewust niet bij;
+ * zie `AGENT_DATA_CATEGORIES` in `env.ts`.
+ */
+const DEFAULT_AGENT_CATEGORIES: readonly DataCategory[] = ['operationeel', 'commercieel'];
+
+export function agentDataCategories(env: Env): DataCategory[] {
+  const raw = env.AGENT_DATA_CATEGORIES?.trim();
+  if (!raw) return [...DEFAULT_AGENT_CATEGORIES];
+  const wanted = raw.split(',').map((s) => s.trim().toLowerCase());
+  // Onbekende waarden vallen weg in plaats van een gok te worden. Blijft er
+  // niets over, dan is de var kapot ingevuld en is de standaard veiliger dan
+  // niets — een agent zonder categorieën valt stil op elke feitenvraag.
+  const known = DATA_CATEGORIES.filter((c) => wanted.includes(c));
+  return known.length > 0 ? known : [...DEFAULT_AGENT_CATEGORIES];
+}
+
+/**
  * Tenant-context voor lookups in de eigen DB. `organizationId` komt uit config
  * zodat één codebase meerdere tenants kan bedienen.
  */
@@ -65,6 +87,8 @@ function storeCtx(env: Env) {
     organizationId: env.AIOS_ORG_ID,
     agentId: 'aios-agent',
     toolCallId: 'aios-agent',
+    // Gaat mee op elke MCP-call; de MCP snijdt zijn antwoord erop bij.
+    dataCategories: agentDataCategories(env),
   };
 }
 
@@ -306,7 +330,13 @@ interface FetchedMail {
 }
 
 type McpEndpoint = { url: string; apiKey?: string; cfAccess?: Record<string, string> };
-type McpCtx = { organizationId: string; agentId: string; toolCallId: string };
+type McpCtx = {
+  organizationId: string;
+  agentId: string;
+  toolCallId: string;
+  /** Wat deze aanroeper bij een MCP mag opvragen; zie agentDataCategories. */
+  dataCategories?: readonly DataCategory[];
+};
 
 /** Bijlagen/attachments: caps om kosten + storage te begrenzen. */
 const MAX_ATTACHMENTS = 10;

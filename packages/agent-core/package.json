@@ -24,7 +24,9 @@
     "./domain-gate": "./dist/domain-gate/index.js",
     "./outcomes": "./dist/outcomes/index.js",
     "./decision-log": "./dist/decision-log/index.js",
-    "./tickets": "./dist/tickets/index.js"
+    "./tickets": "./dist/tickets/index.js",
+    "./access": "./dist/access/index.js",
+    "./modules": "./dist/modules/index.js"
   },
   "scripts": {
     "build": "tsc",
