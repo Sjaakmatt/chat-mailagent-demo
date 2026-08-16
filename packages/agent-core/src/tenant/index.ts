@@ -1,3 +1,4 @@
+import type { DataCategory } from '../access/grants.js';
 /**
  * Tenant-context + credential-store contract — gevendord in agent-core zodat de
  * AIOS-stack (agent + cockpit-UI) volledig zelfstandig draait, zonder dependency
@@ -13,6 +14,14 @@ export interface TenantContext {
   parentCallId?: string;
   /** Optionele instance/mailbox-selector (leeg = primaire instance). */
   instanceKey?: string;
+  /**
+   * De datacategorieën die deze aanroeper bij een MCP mag opvragen.
+   *
+   * Spiegel van hetzelfde veld in de MCP-laag (`@factumai/shared`). Laat je het
+   * weg, dan snijdt de MCP zijn antwoord terug tot alleen `operationeel` en
+   * verdwijnen velden stilzwijgend — zie `docs/RECHTEN.md`.
+   */
+  dataCategories?: DataCategory[];
 }
 
 export interface CredentialValue {

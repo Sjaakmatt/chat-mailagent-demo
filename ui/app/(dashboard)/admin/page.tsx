@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/auth/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { UserTable } from "@/components/admin/UserTable";
 import { RoleGrantMatrix } from "@/components/admin/RoleGrantMatrix";
+import { AnalysePanel } from "@/components/admin/AnalysePanel";
+import { analyseStatus } from "@/lib/assistant/analyse";
 import { toRoleGrant, type RoleGrant } from "@factumai/agent-core";
 import { cockpitEnv } from "@/lib/db";
 import { licensedRegisteredModules } from "@/lib/auth/access";
@@ -68,6 +70,10 @@ export default async function AdminPage() {
       .filter((g): g is RoleGrant => g !== null);
   }
 
+  // De stand van de analyse-laag. Doet netwerkcalls naar de MCP's; faalt er
+  // een, dan telt die als niet gehaald in plaats van de pagina te breken.
+  const analyse = await analyseStatus(cockpitEnv(), grants).catch(() => null);
+
   // Alleen wat deze organisatie heeft afgenomen én waar code voor bestaat. Wij
   // verkopen per afdeling; een beheerder bij de klant kan zichzelf niets erbij
   // geven, en de API weigert het ook.
@@ -92,6 +98,7 @@ export default async function AdminPage() {
             usingDefaults={grants.length === 0}
             modules={licensed}
           />
+          {analyse && <AnalysePanel status={analyse} />}
         </div>
       </div>
     </>

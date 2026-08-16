@@ -32,7 +32,7 @@ import {
 } from '@factumai/agent-core';
 import { DATA_CATEGORIES, type DataCategory } from '@factumai/agent-core';
 import type { Env } from './env.js';
-import { callMcp, cfAccessHeaders, mcpBearer } from './mcp.js';
+import { callMcp, cfAccessHeaders, mcpBearer } from '@factumai/agent-core/mcp';
 import { createAnthropicLlmClient } from '@factumai/agent-core/llm-anthropic';
 import { sendViaResend } from './resend.js';
 
@@ -330,13 +330,12 @@ interface FetchedMail {
 }
 
 type McpEndpoint = { url: string; apiKey?: string; cfAccess?: Record<string, string> };
-type McpCtx = {
-  organizationId: string;
-  agentId: string;
-  toolCallId: string;
-  /** Wat deze aanroeper bij een MCP mag opvragen; zie agentDataCategories. */
-  dataCategories?: readonly DataCategory[];
-};
+/**
+ * De context die met elke MCP-call meegaat. Sinds `dataCategories` op
+ * `TenantContext` staat is dit geen eigen type meer — één type minder dat uit
+ * de pas kan lopen met wat de MCP verwacht.
+ */
+type McpCtx = TenantContext;
 
 /** Bijlagen/attachments: caps om kosten + storage te begrenzen. */
 const MAX_ATTACHMENTS = 10;

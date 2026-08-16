@@ -43,6 +43,10 @@
     "LICENSED_MODULES": "klantenservice",
     // Model voor de assistent. Uit config, nooit hardcoded (harde regel 7).
     "MODEL_ASSISTANT": "claude-sonnet-4-6"
+    // "ASSISTANT_ANALYSE": "true"  ← laag 2 (analyse). Gaat alleen echt aan als
+    // de drie voorwaarden zijn gehaald; de Toegang-pagina toont per voorwaarde
+    // waarom hij aan of uit staat. Vereist ook MCP_BASE_URL.
+    // "MCP_BASE_URL": "https://mcp.factumai.nl",
     // "ASSISTANT_DOSSIER": "true"  ← zet de werkbak-assistent (laag 1, dossier)
     // aan. Vereist ook het secret ANTHROPIC_API_KEY; zonder key blijft hij uit.
     // Bewust opt-in: hij kost per vraag geld en hoort bij een klant die 'm heeft

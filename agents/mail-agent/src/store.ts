@@ -17,7 +17,7 @@ import type {
 } from '@factumai/agent-core';
 import { toDecisionLogRow, type DecisionLog } from '@factumai/agent-core';
 import type { Env, PlatformStore, UnknownIntentEntry } from './env.js';
-import { callMcp, cfAccessHeaders, mcpBearer } from './mcp.js';
+import { callMcp, cfAccessHeaders, mcpBearer } from '@factumai/agent-core/mcp';
 
 /**
  * Platform-DB-toegang voor de Workflows — tegen de klant-Supabase.

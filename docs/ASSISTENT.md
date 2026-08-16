@@ -108,11 +108,36 @@ als var op de Worker.
 | API | `ui/app/api/assistant/route.ts` |
 | Paneel | `ui/components/assistant/AssistantPanel.tsx` |
 
+## Laag 2 — de analyse-laag
+
+Aggregeren over verzamelingen: klachtenpercentages, doorlooptijden, marges. Een
+ander product met een andere koper, maar dezelfde codebase met een schakelaar.
+
+**De vlag beslist niet alleen.** `ASSISTANT_ANALYSE=true` zet 'm aan, maar de
+drie voorwaarden uit de bouwbriefing worden gecontroleerd in plaats van
+vertrouwd:
+
+| Voorwaarde | Waarom |
+| --- | --- |
+| Alle velden in de gekoppelde MCP's hebben een categorie | Een veld zonder categorie is voor niemand opvraagbaar; een ongeclassificeerde MCP levert lege antwoorden op waar de gebruiker geen verklaring voor heeft |
+| Minstens één aggregatietool beschikbaar | Zonder aggregatie kan de laag alleen weigeren |
+| Minstens één rol mag commercieel of financieel zien | Anders is er niemand voor wie de laag iets kan betekenen |
+
+Voldoet er iets niet, dan blijft de laag uit **met de reden erbij** — te zien op
+de Toegang-pagina. Geen halve activering: een analyse-assistent die aanstaat maar
+bij de helft van de velden niets kan, wekt de indruk dat er niets te halen valt.
+
+De rapporten komen van de MCP's zelf (`list_field_categories`), niet uit een
+registerbestand: de controle mag niet leunen op een lijst die iemand had moeten
+bijwerken. Een MCP die zich niet meldt telt als **niet gehaald** — onbereikbaar
+is niet hetzelfde als in orde.
+
 ## Wat er nog niet in zit
 
-- **Geen aggregatie.** Vragen als "hoe vaak gebeurt dit" kan hij niet
-  beantwoorden. Dat is laag 2: het aggregatiecontract, met periode, populatie en
-  definitie bij elk cijfer.
+- **De vraagroute van laag 2.** De schakelaar en de voorwaardencontrole staan;
+  de assistent kan nog geen aggregatie ópvragen. Dat is de volgende stap: de
+  aggregatietools als bron aanbieden, weigeren als de gevraagde aggregatie niet
+  bestaat, en elk cijfer tonen mét periode, populatie en definitie.
 - **Alleen bij een openstaand voorstel.** Het paneel hangt aan de itempagina. Een
   invoerveld zonder open item — met de werkbak als context — komt als laag 2 er
   is, want dan is er ook iets zinnigs te vragen zonder item.

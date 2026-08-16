@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Signal } from '@factumai/agent-core';
 
 const callMcp = vi.fn();
-vi.mock('./mcp.js', () => ({
+vi.mock('@factumai/agent-core/mcp', () => ({
   callMcp: (...a: unknown[]) => callMcp(...a),
   mcpBearer: (env: { FACTUMAI_MCP_INBOUND_SECRET?: string; FACTUMAI_MCP_API_KEY?: string }) =>
     env.FACTUMAI_MCP_INBOUND_SECRET || env.FACTUMAI_MCP_API_KEY || undefined,

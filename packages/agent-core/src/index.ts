@@ -30,3 +30,10 @@ export * from './decision-log/index.js';
 export * from './tickets/index.js';
 export * from './access/index.js';
 export * from './assistant/index.js';
+
+/**
+ * De MCP-client wordt bewust NIET vanuit deze barrel geëxporteerd — hij trekt
+ * de MCP-SDK mee, en dit bestand hangt aan alles wat `@factumai/agent-core`
+ * importeert, inclusief cockpit-componenten die in de browser draaien.
+ * Importeer 'm via het subpad `@factumai/agent-core/mcp`.
+ */

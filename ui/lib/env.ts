@@ -87,6 +87,28 @@ export interface CockpitEnv {
    */
   ASSISTANT_DOSSIER?: string;
 
+  /**
+   * Werkbak-assistent, laag 2 (analyse). Alleen de letterlijke waarde "true".
+   *
+   * De vlag beslist niet alleen: de drie voorwaarden uit de bouwbriefing worden
+   * gecontroleerd, niet vertrouwd. Voldoet er iets niet, dan blijft de laag uit
+   * mét de reden. Zie `ui/lib/assistant/analyse.ts` en de Toegang-pagina.
+   */
+  ASSISTANT_ANALYSE?: string;
+
+  /**
+   * Basis-URL van de MCP's, bv. `https://mcp.factumai.nl`. De cockpit hangt er
+   * `/<mcp-naam>/mcp` achter. Nodig voor de voorwaardencontrole van laag 2 en
+   * later voor de aggregatie-calls zelf.
+   */
+  MCP_BASE_URL?: string;
+  /** Inbound-secret voor de MCP's; zonder dit is elke /mcp-request 401. */
+  FACTUMAI_MCP_INBOUND_SECRET?: string;
+  FACTUMAI_MCP_API_KEY?: string;
+  /** Cloudflare Access service-token voor MCP's achter een custom domain. */
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+
   /** Anthropic-key voor de assistent. Zonder key blijft de assistent uit. */
   ANTHROPIC_API_KEY?: string;
 

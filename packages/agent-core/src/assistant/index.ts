@@ -24,3 +24,4 @@
 export * from './sources.js';
 export * from './prompt.js';
 export * from './answer.js';
+export * from './analyse-gate.js';
