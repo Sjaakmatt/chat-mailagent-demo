@@ -1,10 +1,11 @@
 import { TopBar } from "@/components/dashboard/TopBar";
 import { TriageBucket } from "@/components/dashboard/TriageBucket";
+import { ModuleTabs, type ModuleTab } from "@/components/dashboard/ModuleTabs";
 import { RealtimeRefresh } from "@/components/dashboard/RealtimeRefresh";
 import { authEnv } from "@/lib/supabase/env";
 import { cockpitEnv, makeClient, listReviewItems } from "@/lib/db";
+import { MODULES, moduleForRow } from "@/lib/modules";
 import {
-  toCardViewModel,
   bucketFor,
   type ReviewCardViewModel,
   type ReviewItemRow,
@@ -14,7 +15,11 @@ import {
 // load toont de actuele stand.
 export const dynamic = "force-dynamic";
 
-export default async function WerkbakPage() {
+export default async function WerkbakPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ module?: string }>;
+}) {
   let rows: ReviewItemRow[];
   let loadError: string | null = null;
   const env = cockpitEnv();
@@ -26,6 +31,11 @@ export default async function WerkbakPage() {
     loadError = err instanceof Error ? err.message : String(err);
     rows = [];
   }
+
+  // Een onbekende module in de URL negeren we: liever alles tonen dan een lege
+  // bak waarvan niemand begrijpt waarom hij leeg is.
+  const requested = (await searchParams).module ?? null;
+  const activeModule = MODULES.some((m) => m.id === requested) ? requested : null;
 
   if (loadError) {
     return (
@@ -51,6 +61,10 @@ export default async function WerkbakPage() {
   const pending: ReviewCardViewModel[] = [];
   const sent: ReviewCardViewModel[] = [];
   const rejected: ReviewCardViewModel[] = [];
+  // Openstaand per module, voor de tellers op de tabs. Die tellen over álle
+  // modules, ook als er één actief is — anders zie je niet dat er ergens anders
+  // werk ligt.
+  const pendingPerModule = new Map<string, number>();
 
   // Afgehandelde items (verstuurd/afgewezen) tonen we max. 24u; ouder → Auditlog.
   // Openstaande review blijft altijd staan, ongeacht leeftijd.
@@ -60,17 +74,40 @@ export default async function WerkbakPage() {
     return Number.isNaN(t) ? true : t >= cutoff;
   };
 
+  let orphaned = 0;
   for (const row of rows) {
+    const mod = moduleForRow(row);
+    // Geen geregistreerde module: het item komt uit een automatisering die hier
+    // niet (meer) draait. Tellen en melden, niet stilletjes bij de eerste tab
+    // gooien — dan lijkt het werk van iemand anders.
+    if (!mod) {
+      orphaned += 1;
+      continue;
+    }
+
     const bucket = bucketFor(row.status);
     if (bucket === "review") {
-      pending.push(toCardViewModel(row));
+      pendingPerModule.set(mod.id, (pendingPerModule.get(mod.id) ?? 0) + 1);
+    }
+    if (activeModule && mod.id !== activeModule) continue;
+
+    if (bucket === "review") {
+      pending.push(mod.toCard(row));
       continue;
     }
     if (!decidedRecently(row)) continue;
-    const vm = toCardViewModel(row);
+    const vm = mod.toCard(row);
     if (bucket === "sent") sent.push(vm);
     else rejected.push(vm);
   }
+
+  const tabs: ModuleTab[] = MODULES.map((m) => ({
+    id: m.id,
+    label: m.label,
+    icon: m.icon,
+    count: pendingPerModule.get(m.id) ?? 0,
+  }));
+  const totalPending = [...pendingPerModule.values()].reduce((a, b) => a + b, 0);
 
   // Prioriteits-"smaken" binnen de openstaande review. Onbepaald (oudere items
   // zonder triage) valt in Review — die wil je sowieso even bekijken.
@@ -82,9 +119,14 @@ export default async function WerkbakPage() {
 
   return (
     <>
-      <TopBar pendingCount={pending.length} />
+      <TopBar pendingCount={totalPending} />
 
       <div className="flex-1 p-4 sm:p-6 overflow-auto">
+        {/* Eén module = niets te kiezen; dan is een tabbalk alleen maar ruis. */}
+        {MODULES.length > 1 && (
+          <ModuleTabs tabs={tabs} active={activeModule} totalCount={totalPending} />
+        )}
+
         <div className="flex justify-end mb-3">
           <RealtimeRefresh
             table="aios_review_items"
@@ -93,6 +135,15 @@ export default async function WerkbakPage() {
             organizationId={orgId}
           />
         </div>
+
+        {orphaned > 0 && (
+          <p className="mb-4 text-xs text-ink-muted border border-brand-100 bg-surface-muted rounded px-3 py-2">
+            {orphaned} {orphaned === 1 ? "voorstel hoort" : "voorstellen horen"} bij
+            een automatisering die hier niet geregistreerd is en {orphaned === 1 ? "wordt" : "worden"} niet
+            getoond.
+          </p>
+        )}
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <StatBox label="Simpel" value={simple.length} accent="auto" />
           <StatBox label="Review" value={review.length} accent="review" />

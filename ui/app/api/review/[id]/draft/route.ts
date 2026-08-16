@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import { CTX } from "@/lib/db";
 import { requireRole } from "@/lib/auth/require-role";
+import { mailProposed } from "@/lib/modules/klantenservice";
 
 export const dynamic = "force-dynamic";
 
@@ -50,8 +51,9 @@ export async function POST(
     );
   }
 
-  const prevSubject = existing.proposed?.subject ?? "";
-  const prevBody = existing.proposed?.body ?? "";
+  const existingProposed = mailProposed(existing);
+  const prevSubject = existingProposed.subject ?? "";
+  const prevBody = existingProposed.body ?? "";
   const subject = payload.subject ?? prevSubject;
   const body = payload.body ?? prevBody;
 

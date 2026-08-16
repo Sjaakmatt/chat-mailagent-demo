@@ -1,4 +1,5 @@
 import {
+  KLANTENSERVICE_MODULE,
   SupabaseClient,
   ServiceRoleCredentialStore,
   type TenantContext,
@@ -65,6 +66,9 @@ interface ReviewItemRow {
   compound: boolean | null;
   tasks: CompoundTaskSummary[] | null;
   precedence_intent: string | null;
+  // Welk proces dit voorstel produceerde (migratie 0030). Nullable voor
+  // historie van vóór de moduleopdeling.
+  module: string | null;
 }
 
 function rowToSignal(r: SignalRow): Signal {
@@ -90,6 +94,7 @@ function rowToReviewItem(r: ReviewItemRow): ReviewItem {
     organizationId: r.organization_id,
     signalId: r.signal_id,
     kind: r.kind,
+    module: r.module ?? null,
     summary: r.summary,
     proposed: r.proposed ?? {},
     compound: r.compound,
@@ -110,6 +115,10 @@ function reviewItemToRow(item: ReviewItem): ReviewItemRow {
     organization_id: item.organizationId,
     signal_id: item.signalId ?? null,
     kind: item.kind,
+    // Deze Worker draait de klantenservice-module. Expliciet meeschrijven, want
+    // de werkbak tabt erop en de rollen hangen eraan; terugvallen op `kind` is
+    // alleen bedoeld voor historie.
+    module: item.module ?? KLANTENSERVICE_MODULE.id,
     summary: item.summary,
     proposed: item.proposed,
     confidence: item.confidence ?? null,

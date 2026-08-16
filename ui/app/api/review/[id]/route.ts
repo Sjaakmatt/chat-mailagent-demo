@@ -9,6 +9,7 @@ import {
 import { writeFeedback } from "@/lib/feedback";
 import type { CockpitEnv } from "@/lib/env";
 import { requireRole } from "@/lib/auth/require-role";
+import { mailProposed } from "@/lib/modules/klantenservice";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,8 @@ export async function POST(
     return new NextResponse("ReviewItem is al besloten", { status: 409 });
   }
 
-  const originalDraft = existing.proposed?.body ?? "";
+  const existingProposed = mailProposed(existing);
+  const originalDraft = existingProposed.body ?? "";
 
   try {
     if (action === "reject") {
@@ -78,9 +80,9 @@ export async function POST(
 
     if (action === "edit") {
       const editedBody = payload.body ?? originalDraft;
-      const finalSubject = payload.subject ?? existing.proposed?.subject ?? "";
+      const finalSubject = payload.subject ?? existingProposed.subject ?? "";
       const proposed = {
-        ...(existing.proposed ?? {}),
+        ...existingProposed,
         subject: finalSubject,
         body: editedBody,
       };

@@ -1,67 +1,72 @@
 import Link from "next/link";
-import { Clock, Check, AlertTriangle, Send, Layers } from "lucide-react";
+import { Clock, Check, AlertTriangle, Send } from "lucide-react";
 import {
   TRIAGE_META,
-  specialistLabel,
+  type CardBadge,
   type ReviewCardViewModel,
   type ReviewStatus,
   type TriageTier,
 } from "@/lib/review";
 import { cn, timeAgoNL } from "@/lib/utils";
 
-interface MailCardProps {
+/**
+ * De kaart in de werkbak — voor élk proces dezelfde.
+ *
+ * Heette `MailCard` en kende mail: onderwerp, afzender, categorie, specialist.
+ * Nu tekent hij een viewmodel dat de module aanlevert: titel, ondertitel,
+ * badges, link. Een sales-offerte en een klantmail komen hier op precies
+ * dezelfde manier binnen, en dat is de bedoeling — de schil hoort niet te weten
+ * wat het verschil is.
+ */
+interface ReviewCardProps {
   item: ReviewCardViewModel;
   /** Compacte enkele regel voor afgehandelde bakken (Verstuurd/Afgewezen). */
   compact?: boolean;
 }
 
-const KIND_LABELS: Record<string, string> = {
-  draft_email: "Concept",
-  draft_reply: "Concept",
-};
-
-export function MailCard({ item, compact = false }: MailCardProps) {
+export function ReviewCard({ item, compact = false }: ReviewCardProps) {
   if (compact) return <CompactCard item={item} />;
   return (
     <Link
-      href={`/mail/${encodeURIComponent(item.id)}`}
+      href={item.href}
       className={cn(
         "group block px-4 py-3",
         "hover:bg-brand-50/40 transition-colors",
         "focus-visible:outline-none focus-visible:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
       )}
     >
-      {/* Regel 1: afzender + tijd */}
+      {/* Regel 1: om wie of wat het gaat + tijd */}
       <div className="flex items-center gap-2">
         <StatusIcon status={item.status} />
         <span className="text-sm font-semibold text-ink truncate min-w-0 flex-1">
-          {item.customer ?? "Onbekende afzender"}
+          {item.subtitle ?? item.title}
         </span>
         <span className="tabular-nums text-xs text-ink-subtle whitespace-nowrap flex-shrink-0">
           {timeAgoNL(item.createdAt)}
         </span>
       </div>
 
-      {/* Regel 2: onderwerp */}
+      {/* Regel 2: waar het over gaat */}
       <div className="mt-1 text-sm text-ink truncate group-hover:text-brand-700">
-        {item.subject}
+        {item.title}
       </div>
 
-      {/* Regel 3: korte samenvatting van de vraag */}
+      {/* Regel 3: korte samenvatting */}
       <p className="mt-0.5 text-xs text-ink-muted line-clamp-2 leading-snug">
         {item.summary}
       </p>
 
-      {/* Regel 4: labels */}
+      {/* Regel 4: labels. Triage en zekerheid zijn van de schil, de rest van
+          de module — die weet wat er in zijn proces toe doet. */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {item.triage && <TriageBadge tier={item.triage} />}
-        {item.taskCount > 1 && <CompoundBadge count={item.taskCount} />}
-        {item.specialist && <SpecialistBadge slug={item.specialist} />}
-        {item.category && <CategoryBadge label={item.category} />}
+        {item.badges.map((badge, i) => (
+          <Badge key={`${badge.label}-${i}`} badge={badge} />
+        ))}
         {item.confidence != null && (
           <ConfidenceBadge confidence={item.confidence} />
         )}
-        <KindBadge kind={item.kind} />
+        {item.kindLabel && <NeutralBadge label={item.kindLabel} />}
       </div>
     </Link>
   );
@@ -72,7 +77,7 @@ function CompactCard({ item }: { item: ReviewCardViewModel }) {
   return (
     <div className="group relative flex items-start sm:items-center hover:bg-brand-50/40 transition-colors">
       <Link
-        href={`/mail/${encodeURIComponent(item.id)}`}
+        href={item.href}
         className={cn(
           "flex-1 min-w-0 flex items-start sm:items-center gap-3 px-4 py-2.5",
           "focus-visible:outline-none focus-visible:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
@@ -82,12 +87,9 @@ function CompactCard({ item }: { item: ReviewCardViewModel }) {
 
         <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:gap-2">
           <span className="text-sm font-medium text-ink truncate sm:flex-shrink-0 sm:max-w-[40%]">
-            {item.subject}
+            {item.title}
           </span>
-          <span
-            className="hidden sm:inline text-brand-200"
-            aria-hidden="true"
-          >
+          <span className="hidden sm:inline text-brand-200" aria-hidden="true">
             ·
           </span>
           <span className="text-sm text-ink-muted truncate min-w-0 sm:flex-1 group-hover:text-ink">
@@ -102,9 +104,11 @@ function CompactCard({ item }: { item: ReviewCardViewModel }) {
               {Math.round(item.confidence * 100)}%
             </span>
           )}
-          <span className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-ink-muted border border-brand-100 bg-white">
-            {KIND_LABELS[item.kind] ?? item.kind}
-          </span>
+          {item.kindLabel && (
+            <span className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-ink-muted border border-brand-100 bg-white">
+              {item.kindLabel}
+            </span>
+          )}
           {item.decidedBy && (
             <span
               className="hidden lg:inline tabular-nums text-ink-subtle whitespace-nowrap truncate max-w-[160px]"
@@ -166,53 +170,29 @@ function TriageBadge({ tier }: { tier: TriageTier }) {
   );
 }
 
-function CategoryBadge({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-brand-700 border border-brand-200 bg-brand-50">
-      {label}
-    </span>
-  );
-}
-
-/**
- * Toont welke specialist het concept schreef (single-intent) of welke intent
- * de eindtoon bepaalde (compound → precedence_intent). Zelfde stijl als de
- * categorie-badge maar een tint donkerder zodat de reviewer intuïtief
- * onderscheid maakt tussen "wat voor mail" en "wie schreef het".
- */
-function SpecialistBadge({ slug }: { slug: string }) {
-  const label = specialistLabel(slug) ?? slug;
+/** Een badge die de module heeft aangeleverd. De tint is van de schil. */
+function Badge({ badge }: { badge: CardBadge }) {
+  const cls: Record<NonNullable<CardBadge["tone"]>, string> = {
+    neutral: "text-brand-700 border-brand-200 bg-brand-50",
+    accent: "text-brand-800 border-brand-300 bg-brand-100",
+    alert: "text-alert-700 border-alert-200 bg-alert-50",
+  };
   return (
     <span
-      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-brand-800 border border-brand-300 bg-brand-100"
-      title={`Specialist: ${label}`}
+      className={cn(
+        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border",
+        cls[badge.tone ?? "neutral"],
+      )}
     >
-      {label}
+      {badge.label}
     </span>
   );
 }
 
-/**
- * Signaleert compound review-items: één antwoord samengesteld uit N
- * specialist-fragmenten. Reviewer weet dan meteen: de detailpagina laat
- * een breakdown zien.
- */
-function CompoundBadge({ count }: { count: number }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-accent-700 border border-accent-200 bg-accent-50"
-      title={`Samengesteld antwoord uit ${count} deel-taken`}
-    >
-      <Layers className="w-3 h-3" />
-      {count} taken
-    </span>
-  );
-}
-
-function KindBadge({ kind }: { kind: string }) {
+function NeutralBadge({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-ink-muted border border-brand-100 bg-white">
-      {KIND_LABELS[kind] ?? kind}
+      {label}
     </span>
   );
 }

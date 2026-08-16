@@ -23,6 +23,7 @@ import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
 import { DecisionPanel } from "@/components/mail-detail/DecisionPanel";
 import { CompoundBreakdown } from "@/components/mail-detail/CompoundBreakdown";
 import { cn, timeAgoNL } from "@/lib/utils";
+import { mailProposed } from "@/lib/modules/klantenservice";
 
 function formatBytes(n?: number): string {
   if (!n || n <= 0) return "";
@@ -121,7 +122,7 @@ export default async function ReviewDetailPage({
     );
   }
 
-  const proposed = row.proposed ?? {};
+  const proposed = mailProposed(row);
   const subject = proposed.subject ?? row.summary;
   const body = proposed.body ?? "";
   const ungrounded = proposed.guardrail?.ungroundedClaims ?? [];

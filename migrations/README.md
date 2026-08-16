@@ -27,6 +27,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0020_conversations_tickets`| gesprekken, berichten, tickets + nummerteller       |
 | `0021_revoke_security_definer` | RPC-grants dichtzetten — **verplicht** op bestaande DB's |
 | `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
+| `0030_review_items_module`  | `module` per voorstel — de werkbak tabt per proces   |
 
 ## Waarom de gaten in de nummering
 
@@ -37,6 +38,12 @@ migraties gelijk aan wat er al draait, en blijft de historie navolgbaar.
 
 Neem je de magazijnmodule over in een klant-repo, hernummer die bestanden dan op
 de volgende vrije index in plaats van de oude gaten te vullen.
+
+`0023` t/m `0029` zijn overgeslagen omdat een klant-repo die nummers al in
+gebruik heeft. Twee bestanden met hetzelfde nummer geeft een dubbelzinnige
+volgorde zodra die repo `upstream/main` mergt — en dat merkt niemand tot een
+migratie in de verkeerde volgorde draait. Laat bij een nieuwe fundament-migratie
+dus ruimte boven wat klant-repo's al gebruiken.
 
 ## Nieuwe migratie toevoegen
 

@@ -23,6 +23,7 @@ export * from './signals/index.js';
 export * from './specialists/index.js';
 export * from './taxonomy/index.js';
 export * from './channels/index.js';
+export * from './modules/index.js';
 export * from './domain-gate/index.js';
 export * from './outcomes/index.js';
 export * from './decision-log/index.js';

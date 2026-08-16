@@ -5,11 +5,15 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Loader2, Save, Power, Package, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PolicyRuleRow } from "@/lib/db";
-import { CATEGORY_SLUGS } from "@factumai/agent-core";
+import { MODULES, allCategories } from "@/lib/modules";
 
-// Uit de gedeelde taxonomie (agent-core) — dezelfde slugs waarop de agent
-// classificeert, zodat je nooit een regel kunt maken die nooit matcht.
-const CATEGORIES = [...CATEGORY_SLUGS];
+// Uit de geregistreerde modules — dezelfde slugs waarop de automatiseringen
+// classificeren, zodat je nooit een regel kunt maken die nooit matcht. Bij één
+// module leest dit als vroeger; bij meer modules staat erbij uit welk proces
+// een categorie komt, want "facturatie" betekent iets anders in administratie
+// dan in klantenservice.
+const CATEGORIES = allCategories();
+const SHOW_MODULE = MODULES.length > 1;
 
 const ACTIONS: { value: string; label: string }[] = [
   { value: "review_queue", label: "Naar review" },
@@ -285,12 +289,13 @@ export function PolicyEditor({
             <Field label="Categorieën (waarop deze regel matcht)">
               <div className="flex flex-wrap gap-1.5">
                 {CATEGORIES.map((cat) => {
-                  const on = draft.appliesTo.includes(cat);
+                  const on = draft.appliesTo.includes(cat.slug);
                   return (
                     <button
-                      key={cat}
+                      key={cat.slug}
                       type="button"
-                      onClick={() => toggleCategory(cat)}
+                      onClick={() => toggleCategory(cat.slug)}
+                      title={SHOW_MODULE ? `${cat.moduleLabel} · ${cat.label}` : cat.label}
                       className={cn(
                         "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
                         on
@@ -298,7 +303,7 @@ export function PolicyEditor({
                           : "bg-white text-ink-muted border-brand-200 hover:border-brand-400",
                       )}
                     >
-                      {cat.replace(/_/g, " ")}
+                      {SHOW_MODULE ? `${cat.moduleLabel} · ${cat.label}` : cat.label}
                     </button>
                   );
                 })}

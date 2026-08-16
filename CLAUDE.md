@@ -25,6 +25,13 @@ Drie deployables in één pnpm-workspace:
 | `migrations`          | SQL voor de klant-Supabase (`aios_*`, pgmq, pgvector).        |
 | `examples`            | Referentie-implementaties. Géén productiecode.                |
 
+De werkbak is de **schil**, niet het scherm van de mailagent. Automatiseringen
+dokken erin als module — klantenservice vandaag, sales en administratie later —
+met een eigen tab, eigen categorieën en eigen schermen. De schil kent geen enkele
+module bij naam behalve in `ui/lib/modules/registry.ts`. Lees
+[`docs/MODULES.md`](./docs/MODULES.md) vóór je iets aan de werkbak toevoegt:
+mailkennis in een kernbestand van de cockpit is een regressie.
+
 ## Wat hier NIET in hoort
 
 Dit is het fundament, niet een klant. Houd het leeg van klantspecifieke zaken:
@@ -63,6 +70,7 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 
 | Wil je…                        | Bewerk                                          |
 | ------------------------------ | ----------------------------------------------- |
+| Een tweede automatisering (sales, administratie) | `packages/agent-core/src/modules/` + `ui/lib/modules/` — zie `docs/MODULES.md` |
 | Andere categorieën             | `packages/agent-core/src/taxonomy/index.ts`      |
 | Waar de agent wél/niet over gaat | `packages/agent-core/src/domain-gate/index.ts` |
 | Wanneer iets automatisch mag | `packages/agent-core/src/outcomes/index.ts` |
