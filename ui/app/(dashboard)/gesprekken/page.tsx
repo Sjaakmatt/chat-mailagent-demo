@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { MessagesSquare } from "lucide-react";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { listConversations, countBillableConversations } from "@/lib/conversations";
 import { timeAgoNL } from "@/lib/utils";
@@ -13,6 +15,10 @@ export const dynamic = "force-dynamic";
  * berichten, en buiten-domein telt niet mee.
  */
 export default async function ConversationsPage() {
+  // Gesprekken zijn klantenservice. Wie die afdeling niet heeft, hoort hier
+  // niet te komen — ook niet door de URL in te tikken.
+  await requireModulePage(KLANTENSERVICE_MODULE.id);
+
   const period = new Date().toISOString().slice(0, 7);
 
   let conversations: Awaited<ReturnType<typeof listConversations>> = [];

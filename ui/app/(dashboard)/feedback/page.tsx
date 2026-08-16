@@ -1,5 +1,6 @@
-import { ShieldAlert, ThumbsUp } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth/require-role";
+import { ThumbsUp } from "lucide-react";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { listFeedback, type FeedbackItem } from "@/lib/visitor-feedback";
 import { FeedbackList } from "@/components/feedback/FeedbackList";
@@ -18,21 +19,9 @@ export const dynamic = "force-dynamic";
  * seconden; een zin schrijven kost een minuut en gebeurt dus niet.
  */
 export default async function FeedbackPage() {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return (
-      <>
-        <PageHeader open={0} />
-        <div className="flex-1 flex items-center justify-center p-12">
-          <div className="text-center max-w-md">
-            <ShieldAlert className="w-7 h-7 text-alert-500 mx-auto mb-3" aria-hidden="true" />
-            <p className="text-ink-muted text-sm">Log in om feedback te zien.</p>
-          </div>
-        </div>
-      </>
-    );
-  }
+  // Bezoekersfeedback hoort bij klantenservice: het gaat over antwoorden die
+  // deze module gaf. Guard dekt geen-sessie én verkeerde-afdeling.
+  const user = await requireModulePage(KLANTENSERVICE_MODULE.id);
 
   let nieuw: FeedbackItem[] = [];
   let behandeld: FeedbackItem[] = [];

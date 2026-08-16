@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CATEGORY_SLUGS } from "@factumai/agent-core";
+import { CATEGORY_SLUGS, KLANTENSERVICE_MODULE } from "@factumai/agent-core";
 import { cockpitEnv, makeClient } from "@/lib/db";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireModule } from "@/lib/auth/access";
 import { labelFeedback, EVAL_LABELS, type EvalLabel, type TriageStatus } from "@/lib/visitor-feedback";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const guard = await requireRole("reviewer");
+  // Rol én module: bezoekersfeedback gaat over antwoorden van klantenservice,
+  // en labelen stuurt de eval-set. Dat is geen werk voor een andere afdeling.
+  const guard = await requireModule(KLANTENSERVICE_MODULE.id, "reviewer");
   if (guard instanceof NextResponse) return guard;
 
   const { id } = await params;

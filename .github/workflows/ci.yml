@@ -34,6 +34,12 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      # Elk module-scherm moet op zijn module weigeren. Dit is geen gedrag maar
+      # een afwezigheid, dus tsc en de tests zien het niet — en het ging vijf
+      # pagina's tegelijk mis zonder dat iets het opmerkte.
+      - name: Module-guards
+        run: node scripts/check-module-guards.mjs
+
       - name: Test
         run: pnpm -r test
 

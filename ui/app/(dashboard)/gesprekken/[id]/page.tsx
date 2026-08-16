@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MessagesSquare } from "lucide-react";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { getConversation, listMessages } from "@/lib/conversations";
 import { listTickets } from "@/lib/tickets";
@@ -20,6 +22,10 @@ export default async function ConversationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // Vóór de query: een gespreksverloop is klantcorrespondentie, en dit scherm
+  // toont het volledig.
+  await requireModulePage(KLANTENSERVICE_MODULE.id);
+
   const { id } = await params;
   const client = makeClient(cockpitEnv());
 

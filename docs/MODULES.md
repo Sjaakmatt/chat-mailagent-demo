@@ -67,6 +67,35 @@ export const salesModule: WorkbenchModule = {
 };
 ```
 
+### 2b. Eigen schermen — en ze ook echt dichtzetten
+
+Heeft de module schermen naast de werkbak-tab, zet ze dan op de module en niet
+in `lib/brand.ts`:
+
+```ts
+  navItems: [
+    { href: "/tickets", label: "Tickets", icon: ClipboardList },
+  ],
+```
+
+De zijbalk toont ze dan alleen aan wie deze afdeling heeft. **Dat is cosmetica.**
+Verbergen is geen weigeren: zonder guard is het scherm gewoon bereikbaar door de
+URL in te tikken. Zet daarom op elke pagina:
+
+```ts
+const user = await requireModulePage(SALES_MODULE.id);
+```
+
+en op elke route-handler erachter `requireModule(SALES_MODULE.id, "reviewer")`
+in plaats van `requireRole("reviewer")` — anders mag een reviewer uit een andere
+afdeling wél schrijven: genoeg rang, verkeerd proces.
+
+De layout rekent de toegestane items uit en geeft ze aan de zijbalk door. Dat
+gebeurt dáár en niet in de zijbalk zelf, omdat die een client-component is: zou
+hij de moduleregistry importeren, dan trekt `collectSources` de database-laag
+mee de browserbundel in. Het icoon gaat als gerenderd element over de
+RSC-grens — een componentfunctie overleeft die niet.
+
 ### 3. Eén regel in het register
 
 ```ts

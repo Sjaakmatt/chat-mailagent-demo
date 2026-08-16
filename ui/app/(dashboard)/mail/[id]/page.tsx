@@ -17,6 +17,8 @@ import {
   listReviewEdits,
   getDecisionLog,
 } from "@/lib/db";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+import { requireModulePage } from "@/lib/auth/access";
 import { signAttachmentUrl } from "@/lib/storage";
 import { ReviewForm } from "@/components/mail-detail/ReviewForm";
 import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
@@ -85,6 +87,12 @@ export default async function ReviewDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // Vóór de query, niet erna: dit scherm toont de volledige klantmail, het
+  // concept en de classificatie. Het is de detailweergave van de
+  // klantenservice-module (zie `detailHref` daar), dus wie die afdeling niet
+  // heeft, hoort hier niets op te halen.
+  await requireModulePage(KLANTENSERVICE_MODULE.id);
+
   const { id: rawId } = await params;
   const id = safeDecode(rawId);
 

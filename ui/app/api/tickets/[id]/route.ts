@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { TicketStatus } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
 import { cockpitEnv, makeClient } from "@/lib/db";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireModule } from "@/lib/auth/access";
 import { updateTicketStatus } from "@/lib/tickets";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const guard = await requireRole("reviewer");
+  // Rol én module. Alleen op rol toetsen liet een reviewer uit een andere
+  // afdeling een klantenservice-ticket afhandelen — genoeg rang, verkeerd
+  // proces.
+  const guard = await requireModule(KLANTENSERVICE_MODULE.id, "reviewer");
   if (guard instanceof NextResponse) return guard;
 
   const { id } = await params;

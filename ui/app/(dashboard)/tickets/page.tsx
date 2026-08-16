@@ -1,6 +1,6 @@
-import { ClipboardList, ShieldAlert } from "lucide-react";
-import type { Ticket } from "@factumai/agent-core";
-import { getCurrentUser } from "@/lib/auth/require-role";
+import { ClipboardList } from "lucide-react";
+import { KLANTENSERVICE_MODULE, type Ticket } from "@factumai/agent-core";
+import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { listTickets } from "@/lib/tickets";
 import { TicketList } from "@/components/tickets/TicketList";
@@ -16,21 +16,11 @@ export const dynamic = "force-dynamic";
  * de bestaande werkbak.
  */
 export default async function TicketsPage() {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return (
-      <>
-        <PageHeader open={0} />
-        <div className="flex-1 flex items-center justify-center p-12">
-          <div className="text-center max-w-md">
-            <ShieldAlert className="w-7 h-7 text-alert-500 mx-auto mb-3" aria-hidden="true" />
-            <p className="text-ink-muted text-sm">Log in om tickets te zien.</p>
-          </div>
-        </div>
-      </>
-    );
-  }
+  // Tickets zijn klantenservice. De guard dekt allebei de gevallen die hier
+  // fout kunnen gaan: geen sessie (→ aanmelden) en wél een sessie maar niet
+  // deze afdeling (→ terug naar de werkbak). Het losse "log in"-scherm dat
+  // hier stond, dekte alleen het eerste.
+  const user = await requireModulePage(KLANTENSERVICE_MODULE.id);
 
   let tickets: Ticket[] = [];
   let loadError: string | null = null;
