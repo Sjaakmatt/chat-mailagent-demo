@@ -99,9 +99,60 @@ jobs:
           echo "Nieuw in het fundament ($ahead commits):"
           git log --oneline HEAD..upstream/main | tee /tmp/nieuw.txt
 
+          # Raakt de update workflow-bestanden? Dan kan deze workflow 'm niet
+          # landen, en ook geen PR-branch pushen.
+          #
+          # De GITHUB_TOKEN van Actions mag geen bestanden onder
+          # .github/workflows/ schrijven. Dat is een platformregel en geen
+          # instelling: je krijgt "refusing to allow a GitHub App to create or
+          # update workflow ... without `workflows` permission", op élke push
+          # die zulke bestanden bevat — dus ook op de branch achter de PR.
+          #
+          # Vooraf vaststellen in plaats van halverwege stukgaan. Anders draait
+          # de hele verificatie, lukt de merge lokaal, en faalt pas de push —
+          # met een foutmelding die niet vertelt wat je moet doen.
+          workflows=$(git diff --name-only HEAD..upstream/main -- .github/workflows/ | tr '\n' ' ')
+          echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
+          if [ -n "$workflows" ]; then
+            echo "::warning::Deze fundament-update wijzigt workflow-bestanden ($workflows). Actions mag die niet pushen; haal 'm met de hand op — zie de samenvatting."
+            {
+              echo "### Fundament-update vraagt om een mens"
+              echo
+              echo "Deze update raakt \`.github/workflows/\`:"
+              echo
+              for f in $workflows; do echo "- \`$f\`"; done
+              echo
+              echo "De \`GITHUB_TOKEN\` van Actions mag workflow-bestanden niet schrijven."
+              echo "Dat geldt ook voor de PR-route, want die pusht dezelfde bestanden."
+              echo
+              echo "Haal 'm lokaal op:"
+              echo
+              echo '```bash'
+              echo "git fetch upstream && git merge upstream/main"
+              echo "pnpm install && pnpm -r typecheck && pnpm -r test"
+              echo "git push"
+              echo '```'
+              echo
+              echo "Liever automatisch? Dan heeft deze repo een token met"
+              echo "**Workflows: write** nodig, en moet de push hieronder dat token"
+              echo "gebruiken in plaats van GITHUB_TOKEN. Dat is een bewuste"
+              echo "rechtenkeuze: zo'n token mag de CI van deze repo herschrijven."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Raakt de update workflow-bestanden, dan slaat alles hierna over: geen
+      # merge, geen PR, geen deploy. De waarschuwing en de samenvatting
+      # hierboven zijn dan de hele uitkomst.
+      #
+      # Eén conditie volstaat: valt deze stap weg, dan is `merge.outputs.clean`
+      # leeg en `verify.outcome` "skipped", waardoor ook de merge-, deploy- en
+      # PR-stappen hieronder niet aanslaan.
       - name: Proefmerge
         id: merge
-        if: steps.pre.outputs.run == 'true' && steps.fetch.outputs.ahead != '0'
+        if: |
+          steps.pre.outputs.run == 'true'
+          && steps.fetch.outputs.ahead != '0'
+          && steps.fetch.outputs.workflows == ''
         run: |
           set -uo pipefail
           git config user.name "upstream-sync"

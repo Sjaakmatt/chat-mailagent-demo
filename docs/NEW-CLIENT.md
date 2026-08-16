@@ -374,6 +374,26 @@ Wat er dan gebeurt hangt af van jouw maatwerk:
 | Schoon te mergen én typecheck/tests groen  | mergt naar `main` en start Deploy              |
 | Conflict met maatwerk                      | opent een PR, `main` blijft ongemoeid          |
 | Schoon, maar tests of build falen erna     | opent een PR, `main` blijft ongemoeid          |
+| Update raakt `.github/workflows/`          | doet niets, en zegt met de hand op te halen    |
+
+Die laatste is geen keuze maar een platformregel: de `GITHUB_TOKEN` van Actions
+mag geen workflow-bestanden schrijven. Ook niet via de PR-route, want die pusht
+dezelfde bestanden. De workflow stelt dat vooraf vast en stopt met een
+werkinstructie in de run-samenvatting, in plaats van halverwege te falen op een
+`remote rejected`.
+
+Zo'n update haal je met de hand op:
+
+```bash
+git fetch upstream && git merge upstream/main
+pnpm install && pnpm -r typecheck && pnpm -r test
+git push
+```
+
+Wil je het tóch automatisch, dan heeft de klant-repo een token met
+**Workflows: write** nodig en moet de push dat token gebruiken in plaats van
+`GITHUB_TOKEN`. Weeg dat bewust: zo'n token mag de CI van die repo
+herschrijven, en het ligt in een repo-secret.
 
 Eenmalig instellen in de klant-repo:
 
