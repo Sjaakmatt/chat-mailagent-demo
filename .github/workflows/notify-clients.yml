@@ -39,13 +39,19 @@ concurrency:
   group: notify-clients
   cancel-in-progress: false
 
-permissions: {}
+# Alleen lezen, en alleen in deze repo — genoeg voor de checkout die de
+# klant-repo-guard hieronder nodig heeft. Het aanstoten zelf loopt via
+# CLIENT_DISPATCH_TOKEN, niet via GITHUB_TOKEN.
+permissions:
+  contents: read
 
 jobs:
   notify:
     name: klant-repos aanstoten
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Voorwaarden
         id: pre
         env:
@@ -54,6 +60,18 @@ jobs:
         run: |
           set -euo pipefail
           skip() { echo "::notice::$1"; echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # Spiegel van de guard in upstream-sync.yml. Dit bestand reist mee
+          # naar elke klant-repo, en daar hoort het niets te doen: een klant
+          # stoot geen andere klanten aan. Alleen het fundament heeft de
+          # placeholder nog staan.
+          #
+          # Niet theoretisch: variabelen kunnen op ORG-niveau staan. Eén
+          # org-brede CLIENT_REPOS en zonder deze guard gaat elke klant-repo
+          # elke andere aanstoten.
+          if ! grep -q '__CLIENT_SLUG__' agents/mail-agent/wrangler.jsonc 2>/dev/null; then
+            skip "Dit is een klant-repo, niet het fundament — hier valt niets aan te stoten."
+          fi
 
           [ -n "${CLIENT_REPOS:-}" ] \
             || skip "Variable CLIENT_REPOS niet gezet — niets aan te stoten. De maandag-cron in de klant-repo's blijft het vangnet."
