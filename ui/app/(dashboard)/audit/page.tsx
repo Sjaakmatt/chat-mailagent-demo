@@ -16,7 +16,7 @@ import {
   listAuditFacets,
 } from "@/lib/db";
 import { DOMAIN_AUDIT_SOURCES } from "@/lib/audit-sources";
-import { CATEGORY_LABELS } from "@/lib/review";
+import { categoryLabel } from "@/lib/modules";
 import { timeAgoNL } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -205,7 +205,7 @@ export default async function AuditPage({
             <option value="">Alle categorieën</option>
             {facets.categories.map((c) => (
               <option key={c} value={c}>
-                {CATEGORY_LABELS[c] ?? c}
+                {categoryLabel(c) ?? c}
               </option>
             ))}
           </select>
@@ -244,7 +244,7 @@ export default async function AuditPage({
                   const SourceIcon = domainSrc ? Package : Mail;
                   const domainHref = domainSrc?.linkHref?.(e) ?? null;
                   const categoryNice = e.source === "review" && e.meta
-                    ? (CATEGORY_LABELS[e.meta] ?? e.meta)
+                    ? (categoryLabel(e.meta) ?? e.meta)
                     : null;
                   return (
                     <div

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mailEndpoint, mcpBearer, cfAccessHeaders } from './mcp.js';
+import { mailEndpoint, mcpBearer, cfAccessHeaders } from './index.js';
 
 /**
  * De instance-keuze is niet cosmetisch. Eén org kan meerdere mailboxen hebben

@@ -8,7 +8,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }));
 
-import { createAnthropicLlmClient } from './llm-anthropic.js';
+import { createAnthropicLlmClient } from './anthropic.js';
 
 beforeEach(() => create.mockReset());
 

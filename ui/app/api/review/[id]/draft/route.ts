@@ -7,6 +7,9 @@ import {
 } from "@/lib/db";
 import { CTX } from "@/lib/db";
 import { requireRole } from "@/lib/auth/require-role";
+import { accessFor } from "@/lib/auth/access";
+import { moduleForRow } from "@/lib/modules";
+import { mailProposed } from "@/lib/modules/klantenservice";
 
 export const dynamic = "force-dynamic";
 
@@ -50,8 +53,17 @@ export async function POST(
     );
   }
 
-  const prevSubject = existing.proposed?.subject ?? "";
-  const prevBody = existing.proposed?.body ?? "";
+  // Zelfde modulegrens als bij het beslissen: een concept bewerken is ook
+  // meebeslissen over wat er straks naar buiten gaat.
+  const mod = moduleForRow(existing);
+  const me = await accessFor(guard);
+  if (!mod || !me.access.mayEnter(mod.id)) {
+    return new NextResponse("Geen rechten op dit proces", { status: 403 });
+  }
+
+  const existingProposed = mailProposed(existing);
+  const prevSubject = existingProposed.subject ?? "";
+  const prevBody = existingProposed.body ?? "";
   const subject = payload.subject ?? prevSubject;
   const body = payload.body ?? prevBody;
 

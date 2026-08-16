@@ -24,6 +24,12 @@ export const ROLES: readonly Role[] = ['admin', 'reviewer', 'viewer'];
 export interface AllowlistRow {
   email: string;
   role: string | null;
+  /**
+   * Afdelingen waarin deze gebruiker werkt (migratie 0032). `['*']` = alles wat
+   * de organisatie heeft afgenomen. Ontbreekt bij oudere rijen; dan geldt de
+   * joker, want vóór deze kolom had niemand een beperking.
+   */
+  modules?: string[] | null;
 }
 
 /** Normaliseert een adres: trimmen en lowercase. */
@@ -94,6 +100,44 @@ function toRole(value: string | null): Role {
   return ROLES.includes(value as Role) ? (value as Role) : 'reviewer';
 }
 
+/** Rol én afdelingen van het adres. Null = geen toegang. */
+export interface AllowlistEntry {
+  role: Role;
+  /** Ruwe waarde uit de rij; `parseModuleSet` maakt er een ModuleSet van. */
+  modules: string[];
+}
+
+/**
+ * Zoals `resolveRoleFromRows`, maar geeft ook de afdelingen van de winnende
+ * rij terug. Dezelfde voorrangsregel: een persoonlijke regel wint van de
+ * domeinregel — je wilt één iemand een andere afdeling kunnen geven zonder het
+ * hele domein aan te passen.
+ */
+export function resolveAllowlistEntry(
+  email: string,
+  rows: readonly AllowlistRow[],
+): AllowlistEntry | null {
+  const normalized = normalizeEmail(email);
+  const domain = domainRuleFor(normalized);
+
+  let domainMatch: AllowlistRow | undefined;
+  for (const row of rows) {
+    const entry = normalizeEmail(row.email ?? '');
+    if (entry === normalized) return toEntry(row);
+    if (domain && entry === domain) domainMatch = row;
+  }
+  return domainMatch ? toEntry(domainMatch) : null;
+}
+
+function toEntry(row: AllowlistRow): AllowlistEntry {
+  return {
+    role: toRole(row.role),
+    // Ontbrekende kolom (rij van vóór migratie 0032) → de joker. Die betekent
+    // "alles wat de organisatie heeft afgenomen", dus het is geen verruiming.
+    modules: row.modules && row.modules.length > 0 ? row.modules : ['*'],
+  };
+}
+
 /**
  * Mag dit als allowlist-regel worden opgeslagen? Spiegelt de check-constraint
  * uit migratie 0022, zodat de UI een nette melding geeft in plaats van een
@@ -107,3 +151,6 @@ export function isValidAllowlistEntry(entry: string): boolean {
   if (/\s/.test(value)) return false;
   return value.slice(at + 1).includes('.');
 }
+
+export * from './grants.js';
+export * from './entitlement.js';

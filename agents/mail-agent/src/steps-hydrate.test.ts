@@ -6,8 +6,8 @@ const callMcp = vi.fn();
 // had `mcpBearer` en `cfAccessHeaders` met de hand nagebouwd; die kopieën
 // liepen achter zodra er iets bij kwam, en dan test je een module die niet
 // bestaat.
-vi.mock('./mcp.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./mcp.js')>()),
+vi.mock('@factumai/agent-core/mcp', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@factumai/agent-core/mcp')>()),
   callMcp: (...a: unknown[]) => callMcp(...a),
 }));
 

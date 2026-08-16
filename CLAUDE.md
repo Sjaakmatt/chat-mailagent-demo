@@ -25,6 +25,13 @@ Drie deployables in één pnpm-workspace:
 | `migrations`          | SQL voor de klant-Supabase (`aios_*`, pgmq, pgvector).        |
 | `examples`            | Referentie-implementaties. Géén productiecode.                |
 
+De werkbak is de **schil**, niet het scherm van de mailagent. Automatiseringen
+dokken erin als module — klantenservice vandaag, sales en administratie later —
+met een eigen tab, eigen categorieën en eigen schermen. De schil kent geen enkele
+module bij naam behalve in `ui/lib/modules/registry.ts`. Lees
+[`docs/MODULES.md`](./docs/MODULES.md) vóór je iets aan de werkbak toevoegt:
+mailkennis in een kernbestand van de cockpit is een regressie.
+
 ## Wat hier NIET in hoort
 
 Dit is het fundament, niet een klant. Houd het leeg van klantspecifieke zaken:
@@ -52,7 +59,9 @@ willen?* Nee → extensiepunt of `examples/`.
 4. **Numerical grounding.** Elke numerieke of feitelijke claim is traceerbaar
    naar een tool-call-respons uit dezelfde run. Geen dekking → weglaten.
 5. **Tenant-context op elke MCP-call en elke DB-query.** In de cockpit gaat dat
-   automatisch via `CockpitDbClient`; omzeil dat niet.
+   automatisch via `CockpitDbClient`; omzeil dat niet. Stuur op elke MCP-call óók
+   `dataCategories` mee — laat je ze weg, dan krijg je alleen `operationeel`
+   terug en verdwijnen velden stilzwijgend. Zie `docs/RECHTEN.md`.
 6. **Secrets uit env/Vault**, nooit in code of logs.
 7. **Model-IDs in config, niet hardcoden.** Haiku-tier classificeert,
    Sonnet-tier plant, Opus-tier alleen waar `plan-heavy` staat.
@@ -63,6 +72,7 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 
 | Wil je…                        | Bewerk                                          |
 | ------------------------------ | ----------------------------------------------- |
+| Een tweede automatisering (sales, administratie) | `packages/agent-core/src/modules/` + `ui/lib/modules/` — zie `docs/MODULES.md` |
 | Andere categorieën             | `packages/agent-core/src/taxonomy/index.ts`      |
 | Waar de agent wél/niet over gaat | `packages/agent-core/src/domain-gate/index.ts` |
 | Wanneer iets automatisch mag | `packages/agent-core/src/outcomes/index.ts` |
@@ -70,6 +80,8 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 | Een extra intent/specialist    | `packages/agent-core/src/specialists/`           |
 | Een side effect na goedkeuring | `agents/mail-agent/src/domain/index.ts`          |
 | Eigen events in de auditlog    | `ui/lib/audit-sources.ts`                        |
+| Wie wat mag zien/goedkeuren    | `aios_role_grants` — zie `docs/RECHTEN.md`; nooit een tweede rechtenmodel |
+| Wat de assistent mag inzien    | `collectSources` op de module — zie `docs/ASSISTENT.md`; elke bewering herleidbaar |
 | Een tweede kanaal (chat)       | `packages/agent-core/src/channels/` + `agents/mail-agent/src/channels.ts` |
 | Andere demo-mails              | `ui/lib/demo/scenarios.ts` + `migrations/0005_*` |
 

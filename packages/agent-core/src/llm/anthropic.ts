@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { LlmClient, LlmCompleteInput, ModelConfig, ModelTier } from '@factumai/agent-core';
+import type { LlmClient, LlmCompleteInput, ModelConfig, ModelTier } from './index.js';
 
 /**
- * Anthropic-implementatie van de agent-core `LlmClient` (Build Document A11:
+ * Anthropic-implementatie van de `LlmClient` (Build Document A11:
  * dunne abstractie, model-IDs uit config, Haiku-tier classify / Sonnet-tier
  * plan). Later per tenant te wisselen naar Bedrock/Vertex-EU — één plek.
  *

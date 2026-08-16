@@ -10,6 +10,7 @@ import {
 import type { ReviewItemRow } from "@/lib/review";
 import type { ReviewEditRow } from "@/lib/db";
 import { cn } from "@/lib/utils";
+import { mailProposed } from "@/lib/modules/klantenservice";
 
 interface CaseTimelineProps {
   item: ReviewItemRow;
@@ -63,7 +64,7 @@ export function CaseTimeline({
   edits = [],
   extraEvents = [],
 }: CaseTimelineProps) {
-  const proposed = item.proposed ?? {};
+  const proposed = mailProposed(item);
   const original = proposed.original;
   const classification = proposed.classification;
   const policy = proposed.policy;

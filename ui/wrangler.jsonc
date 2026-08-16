@@ -36,6 +36,18 @@
     "CLIENT_NAME": "Factum Webshop",
     "AIOS_RAG_ENABLED": "false",
     "AIOS_ORG_ID": "org_factumai_internal",
+    // De afdelingen die deze klant heeft AFGENOMEN. Wij verkopen per afdeling;
+    // dit is het plafond waar de beheerder van de klant niet overheen kan.
+    // Dit is onze eigen demo-tenant, vandaar de joker.
+    "LICENSED_MODULES": "*",
+    // Model voor de assistent. Uit config, nooit hardcoded (harde regel 7).
+    "MODEL_ASSISTANT": "claude-sonnet-5",
+    // De werkbak-assistent. Laag 1 leest het dossier; laag 2 aggregeert. Laag 2
+    // gaat alleen echt aan als de drie voorwaarden zijn gehaald — de
+    // Toegang-pagina toont per voorwaarde waarom hij aan of uit staat.
+    // Beide vereisen het secret ANTHROPIC_API_KEY.
+    "ASSISTANT_DOSSIER": "true",
+    "ASSISTANT_ANALYSE": "true",
     // Aan: dit is de demo-repo. Zet dit NOOIT op een productie-cockpit — het
     // laat een beheerder synthetische mail in de echte werkbak zetten.
     "DEMO_MODE": "true"

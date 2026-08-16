@@ -2,6 +2,13 @@ import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { UserTable } from "@/components/admin/UserTable";
+import { RoleGrantMatrix } from "@/components/admin/RoleGrantMatrix";
+import { AnalysePanel } from "@/components/admin/AnalysePanel";
+import { analyseStatus } from "@/lib/assistant/analyse";
+import { toRoleGrant, type RoleGrant } from "@factumai/agent-core";
+import { cockpitEnv } from "@/lib/db";
+import { licensedRegisteredModules } from "@/lib/auth/access";
+import { MODULES } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +17,7 @@ type Role = "admin" | "reviewer" | "viewer";
 interface AllowedUser {
   email: string;
   role: Role;
+  modules: string[] | null;
   invited_by: string | null;
   created_at: string;
 }
@@ -43,17 +51,54 @@ export default async function AdminPage() {
   if (admin) {
     const { data } = await admin
       .from("allowed_emails")
-      .select("email, role, invited_by, created_at")
+      .select("email, role, modules, invited_by, created_at")
       .order("created_at", { ascending: true });
     users = (data as AllowedUser[] | null) ?? [];
   }
+
+  // Rechten per rol. Geen rijen = het standaardvoorstel uit agent-core; dat
+  // zeggen we erbij, want "leeg" en "bewust zo ingesteld" zien er anders
+  // identiek uit.
+  let grants: RoleGrant[] = [];
+  if (admin) {
+    const { data } = await admin
+      .from("aios_role_grants")
+      .select("role, module, categories")
+      .eq("organization_id", cockpitEnv().AIOS_ORG_ID);
+    grants = ((data as { role: string | null; module: string | null; categories: unknown }[] | null) ?? [])
+      .map(toRoleGrant)
+      .filter((g): g is RoleGrant => g !== null);
+  }
+
+  // De stand van de analyse-laag. Doet netwerkcalls naar de MCP's; faalt er
+  // een, dan telt die als niet gehaald in plaats van de pagina te breken.
+  const analyse = await analyseStatus(cockpitEnv(), grants).catch(() => null);
+
+  // Alleen wat deze organisatie heeft afgenomen én waar code voor bestaat. Wij
+  // verkopen per afdeling; een beheerder bij de klant kan zichzelf niets erbij
+  // geven, en de API weigert het ook.
+  const licensedIds = licensedRegisteredModules(cockpitEnv());
+  const licensed = MODULES.filter((m) => licensedIds.includes(m.id)).map((m) => ({
+    id: m.id,
+    label: m.label,
+  }));
 
   return (
     <>
       <PageHeader />
       <div className="flex-1 overflow-auto">
         <div className="max-w-3xl mx-auto p-4 sm:p-6">
-          <UserTable initialUsers={users} currentEmail={user.email} />
+          <UserTable
+            initialUsers={users}
+            currentEmail={user.email}
+            licensed={licensed}
+          />
+          <RoleGrantMatrix
+            grants={grants}
+            usingDefaults={grants.length === 0}
+            modules={licensed}
+          />
+          {analyse && <AnalysePanel status={analyse} />}
         </div>
       </div>
     </>

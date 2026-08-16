@@ -24,7 +24,11 @@
     "./domain-gate": "./dist/domain-gate/index.js",
     "./outcomes": "./dist/outcomes/index.js",
     "./decision-log": "./dist/decision-log/index.js",
-    "./tickets": "./dist/tickets/index.js"
+    "./tickets": "./dist/tickets/index.js",
+    "./access": "./dist/access/index.js",
+    "./modules": "./dist/modules/index.js",
+    "./llm-anthropic": "./dist/llm/anthropic.js",
+    "./mcp": "./dist/mcp/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -34,7 +38,9 @@
     "prepare": "tsc"
   },
   "dependencies": {
-    "zod": "^3.25.0"
+    "zod": "^3.25.0",
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260422.1",

@@ -1,5 +1,6 @@
 import { Layers, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
-import { specialistLabel, type CompoundTaskSummary } from "@/lib/review";
+import type { CompoundTaskSummary } from "@/lib/review";
+import { specialistLabel } from "@/lib/modules/klantenservice";
 import { cn } from "@/lib/utils";
 
 interface CompoundBreakdownProps {

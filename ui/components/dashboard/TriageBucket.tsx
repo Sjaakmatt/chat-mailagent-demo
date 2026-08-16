@@ -1,5 +1,5 @@
 import type { ReviewCardViewModel } from "@/lib/review";
-import { MailCard } from "./MailCard";
+import { ReviewCard } from "./ReviewCard";
 import { cn } from "@/lib/utils";
 
 interface TriageBucketProps {
@@ -51,7 +51,7 @@ export function TriageBucket({
           <ul className="divide-y divide-brand-50">
             {items.map((item) => (
               <li key={item.id}>
-                <MailCard item={item} compact={compact} />
+                <ReviewCard item={item} compact={compact} />
               </li>
             ))}
           </ul>

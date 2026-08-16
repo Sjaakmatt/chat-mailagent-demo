@@ -34,6 +34,24 @@ export interface Signal {
 }
 
 /** draft_email | crm_update | calendar_event | invoice | social_post | task | ... */
+/**
+ * Het proces waar een voorstel uit komt — klantenservice, sales, administratie,
+ * operations. Staat hier en niet in `modules/` omdat het een contractwaarde is
+ * die de kern én de schil delen; `modules/` bouwt erop voort zonder dat
+ * contracts iets van modules hoeft te weten.
+ *
+ * Open union, net als `ReviewItemKind`: een klant mag een eigen proces
+ * toevoegen zonder deze lijst te wijzigen.
+ */
+export type ModuleId =
+  | 'klantenservice'
+  | 'sales'
+  | 'administratie'
+  | 'operations'
+  | 'marketing'
+  | 'hr'
+  | (string & {});
+
 export type ReviewItemKind =
   | 'draft_email'
   | 'crm_update'
@@ -67,6 +85,15 @@ export interface ReviewItem {
   organizationId: string;
   signalId?: string | null;
   kind: ReviewItemKind;
+  /**
+   * Het proces dat dit voorstel produceerde — klantenservice, sales,
+   * administratie, operations. Bepaalt in welke tab van de werkbak het item
+   * landt en wie het mag goedkeuren.
+   *
+   * Optioneel omdat items van vóór de moduleopdeling 'm niet dragen; de schil
+   * valt dan terug op `kind`. Nieuwe schrijvers vullen 'm altijd.
+   */
+  module?: ModuleId | null;
   summary: string;
   /** De concrete voorgestelde inhoud (bv. { subject, body } voor een draft_email). */
   proposed: Record<string, unknown>;

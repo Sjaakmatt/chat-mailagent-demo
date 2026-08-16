@@ -119,6 +119,49 @@ npx wrangler secret put SUPABASE_ANON_KEY
 pnpm run build:cf && pnpm run deploy
 ```
 
+**Werkbak-assistent (optioneel).** Laag 1 — het dossier — staat standaard uit.
+Aanzetten is `"ASSISTANT_DOSSIER": "true"` in `wrangler.jsonc` plus:
+
+```bash
+npx wrangler secret put ANTHROPIC_API_KEY
+```
+
+Zonder key blijft de assistent uit, ook met de vlag aan: een halve configuratie
+hoort een uitgeschakelde assistent op te leveren en geen fout bij de eerste
+vraag. Zie [`docs/ASSISTENT.md`](docs/ASSISTENT.md).
+
+**Analyse-laag (laag 2).** Zet `"ASSISTANT_ANALYSE": "true"` en geef de cockpit
+toegang tot de MCP's. De URL's leidt hij zelf af — elke MCP heeft een eigen
+custom domain (`https://mcp-tickets.factumai.nl/mcp`) — dus je hoeft alleen de
+auth te zetten, met dezelfde waarden als op de agent-Worker:
+
+```bash
+npx wrangler secret put CF_ACCESS_CLIENT_ID
+npx wrangler secret put CF_ACCESS_CLIENT_SECRET
+#   → of FACTUMAI_MCP_INBOUND_SECRET voor de oude *.workers.dev-URL's
+```
+
+Draait een MCP ergens anders, zet dan `FACTUMAI_MCP_<NAAM>_URL` — die wint van
+de afleiding. Een ander domein voor staging gaat via `MCP_DOMAIN`.
+
+De laag gaat alleen echt aan als de drie voorwaarden zijn gehaald; de
+Toegang-pagina toont per voorwaarde waarom hij aan of uit staat.
+
+**Analyse-laag (laag 2).** Zet `"ASSISTANT_ANALYSE": "true"` én geef de cockpit
+de MCP-URL's — dezelfde waarden als op de agent-Worker, want de cockpit bevraagt
+dezelfde MCP's:
+
+```bash
+npx wrangler secret put FACTUMAI_MCP_TICKETS_URL
+npx wrangler secret put FACTUMAI_MCP_INBOUND_SECRET
+#   → en CF_ACCESS_CLIENT_ID/SECRET als de MCP's achter Cloudflare Access staan
+```
+
+De laag gaat alleen echt aan als de drie voorwaarden zijn gehaald; de
+Toegang-pagina toont per voorwaarde waarom hij aan of uit staat. Een MCP zonder
+URL telt daar als "kon zich niet melden" — dat is een zichtbare reden, geen
+stille 404.
+
 > `pnpm run deploy`, niet `pnpm deploy` — dat laatste is een ingebouwd
 > pnpm-commando (een workspace-package naar een map kopiëren) en draait het
 > script uit `package.json` dus níet.

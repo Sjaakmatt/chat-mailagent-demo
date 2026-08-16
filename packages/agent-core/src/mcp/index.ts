@@ -1,9 +1,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { TenantContext } from '@factumai/agent-core';
+import type { TenantContext } from '../tenant/index.js';
 
 /**
- * Dunne MCP-client voor de agent: connect-per-call over streamable HTTP
+ * Dunne MCP-client: connect-per-call over streamable HTTP
  * (`/mcp`), bearer-auth, en de tenant-context-envelope op elke tool-call —
  * conform de blueprint (geen secrets meesturen, tenant-context altijd). Een
  * falende MCP-call gooit; de orchestratie-stappen vangen dat op.

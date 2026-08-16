@@ -9,6 +9,9 @@ import {
 import { writeFeedback } from "@/lib/feedback";
 import type { CockpitEnv } from "@/lib/env";
 import { requireRole } from "@/lib/auth/require-role";
+import { accessFor } from "@/lib/auth/access";
+import { moduleForRow } from "@/lib/modules";
+import { mailProposed } from "@/lib/modules/klantenservice";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +67,17 @@ export async function POST(
     return new NextResponse("ReviewItem is al besloten", { status: 409 });
   }
 
-  const originalDraft = existing.proposed?.body ?? "";
+  // Rang is niet genoeg: een reviewer in klantenservice hoort een
+  // administratie-item niet goed te keuren. De modulegrant beslist dat, en
+  // pas hier — want vóór het ophalen weten we niet uit welk proces dit komt.
+  const mod = moduleForRow(existing);
+  const me = await accessFor(guard);
+  if (!mod || !me.access.mayEnter(mod.id)) {
+    return new NextResponse("Geen rechten op dit proces", { status: 403 });
+  }
+
+  const existingProposed = mailProposed(existing);
+  const originalDraft = existingProposed.body ?? "";
 
   try {
     if (action === "reject") {
@@ -78,9 +91,9 @@ export async function POST(
 
     if (action === "edit") {
       const editedBody = payload.body ?? originalDraft;
-      const finalSubject = payload.subject ?? existing.proposed?.subject ?? "";
+      const finalSubject = payload.subject ?? existingProposed.subject ?? "";
       const proposed = {
-        ...(existing.proposed ?? {}),
+        ...existingProposed,
         subject: finalSubject,
         body: editedBody,
       };

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  agentDataCategories,
   extractJson,
   parseClassification,
   parsePlan,
@@ -186,6 +187,43 @@ describe('pickModelForIntent', () => {
   it('respecteert lege string als ongezet', () => {
     const emptyEnv = { ...baseEnv, MODEL_PLAN_HEAVY: '   ' } as Env;
     expect(pickModelForIntent(emptyEnv, technicalConfig)).toBe('claude-sonnet-5');
+  });
+});
+
+describe('agentDataCategories', () => {
+  const env = (value?: string) => ({ AGENT_DATA_CATEGORIES: value }) as Env;
+
+  it('geeft operationeel + commercieel als de var niet gezet is', () => {
+    // De agent moet een klant kunnen vertellen wat zijn order kostte. Zonder
+    // deze standaard krijgt hij sinds de veldclassificatie alleen operationeel
+    // terug en verdwijnen orderbedragen stilletjes uit zijn antwoorden.
+    expect(agentDataCategories(env())).toEqual(['operationeel', 'commercieel']);
+    expect(agentDataCategories(env('   '))).toEqual(['operationeel', 'commercieel']);
+  });
+
+  it('geeft de agent nooit financieel tenzij het er expliciet staat', () => {
+    expect(agentDataCategories(env())).not.toContain('financieel');
+    expect(agentDataCategories(env('operationeel'))).toEqual(['operationeel']);
+  });
+
+  it('leest een expliciete lijst, ongeacht volgorde en spaties', () => {
+    expect(agentDataCategories(env('financieel , operationeel'))).toEqual([
+      'operationeel',
+      'financieel',
+    ]);
+  });
+
+  it('gooit onbekende waarden weg in plaats van te gokken', () => {
+    expect(agentDataCategories(env('operationeel,hr'))).toEqual(['operationeel']);
+  });
+
+  it('valt terug op de standaard als er niets bruikbaars overblijft', () => {
+    // Een kapot ingevulde var mag de agent niet laten stilvallen op elke
+    // feitenvraag; de standaard lekt niets wat de klant niet zelf al ziet.
+    expect(agentDataCategories(env('hr,marketing'))).toEqual([
+      'operationeel',
+      'commercieel',
+    ]);
   });
 });
 
