@@ -10,7 +10,7 @@
  * één regel in `registry.ts`. De schil verandert niet.
  */
 
-import { Inbox } from "lucide-react";
+import { ClipboardList, Inbox, MessagesSquare, ThumbsUp } from "lucide-react";
 import { KLANTENSERVICE_MODULE, categoryLabelIn } from "@factumai/agent-core";
 import {
   triageOf,
@@ -203,6 +203,21 @@ export const klantenserviceModule: WorkbenchModule = {
       triageReason: triage.reason,
     };
   },
+  // De eigen schermen van deze module, naast de werkbak-tab.
+  //
+  // Deze stonden in `lib/brand.ts` bij de schil-navigatie, en dat was fout op
+  // twee manieren. Inhoudelijk: het zijn klantenservice-schermen, dus dat is
+  // mailkennis in een kernbestand van de cockpit. Praktisch: daar worden ze
+  // alleen op rol gefilterd, dus iemand met alleen sales zag ze gewoon staan.
+  //
+  // Hier hangen ze aan de module, en toont de zijbalk ze alleen aan wie deze
+  // afdeling heeft. Dat is nog steeds cosmetica — het echte weigeren doet
+  // `requireModulePage` op de pagina's zelf.
+  navItems: [
+    { href: "/tickets", label: "Tickets", icon: ClipboardList },
+    { href: "/gesprekken", label: "Gesprekken", icon: MessagesSquare },
+    { href: "/feedback", label: "Feedback", icon: ThumbsUp },
+  ],
   assistant: {
     // Waar deze module zijn feiten vandaan haalt. De assistent (stap 3) mag in
     // deze tab alleen deze bronnen bevragen.

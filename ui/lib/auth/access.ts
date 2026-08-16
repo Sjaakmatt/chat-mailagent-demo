@@ -11,6 +11,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import {
   categoriesAcross,
   licensedFrom,
@@ -130,6 +131,36 @@ export async function requireModule(
       { error: "Forbidden", reason: "module" },
       { status: 403 },
     );
+  }
+  return user;
+}
+
+/**
+ * Dezelfde guard, maar voor een **pagina** in plaats van een route-handler.
+ *
+ * Een server-component kan geen `NextResponse` teruggeven, dus de uitkomst is
+ * hier een redirect naar de werkbak. Die toont precies wat deze gebruiker wél
+ * mag, in plaats van een foutpagina die vooral verklapt dát er iets is.
+ *
+ * Waarom dit naast de tabfilter in de werkbak moet: die verbérgt een module, en
+ * verbergen is niet weigeren. Zonder deze guard is een moduletab-scherm gewoon
+ * bereikbaar door de URL in te tikken — ook voor iemand die die afdeling niet
+ * heeft afgenomen. De zijbalk is cosmetica; dit is de grens.
+ *
+ * Bij faal keert hij nooit terug (`redirect` gooit), dus de aanroeper mag de
+ * teruggegeven gebruiker zonder verdere controle gebruiken.
+ */
+export async function requireModulePage(
+  module: ModuleId,
+  minRole: Role = "viewer",
+): Promise<AuthedAccess> {
+  const RANK: Record<Role, number> = { viewer: 0, reviewer: 1, admin: 2 };
+  const user = await getCurrentAccess();
+  // Geen sessie hoort de middleware al af te vangen; komt het toch hier, dan is
+  // aanmelden het juiste antwoord en niet een lege werkbak.
+  if (!user) redirect("/sign-in");
+  if (RANK[user.role] < RANK[minRole] || !user.access.mayEnter(module)) {
+    redirect("/");
   }
   return user;
 }

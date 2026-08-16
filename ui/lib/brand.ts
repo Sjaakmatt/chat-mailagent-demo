@@ -11,14 +11,11 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
-  ClipboardList,
   FileClock,
   Inbox,
-  MessagesSquare,
   PlayCircle,
   Settings,
   ShieldCheck,
-  ThumbsUp,
 } from "lucide-react";
 
 export interface NavItem {
@@ -60,11 +57,13 @@ export interface Brand {
  * werkbak → tickets → gesprekken → feedback → analytics → auditlog → beleid →
  * toegang.
  */
+// Alleen schermen van de schíl zelf. Tickets, Gesprekken en Feedback stonden
+// hier ook, maar dat zijn klantenservice-schermen: ze horen bij de module
+// (`ui/lib/modules/klantenservice.ts`, veld `navItems`). Zo verdwijnen ze
+// vanzelf voor iemand die die afdeling niet heeft — hier zouden ze voor
+// iedereen zichtbaar blijven.
 const CORE_NAV: NavItem[] = [
   { href: "/", label: "Werkbak", icon: Inbox },
-  { href: "/tickets", label: "Tickets", icon: ClipboardList },
-  { href: "/gesprekken", label: "Gesprekken", icon: MessagesSquare },
-  { href: "/feedback", label: "Feedback", icon: ThumbsUp },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/audit", label: "Auditlog", icon: FileClock },
   { href: "/policy", label: "Beleid", icon: Settings, adminOnly: true },

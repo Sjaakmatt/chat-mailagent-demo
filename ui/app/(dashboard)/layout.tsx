@@ -1,6 +1,8 @@
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { StagingBanner } from "@/components/dashboard/StagingBanner";
 import { getCurrentUser, type AuthedUser } from "@/lib/auth/require-role";
+import { accessFor } from "@/lib/auth/access";
+import { MODULES } from "@/lib/modules";
 import { cockpitEnv } from "@/lib/db";
 import { isDemoEnabled } from "@/lib/demo/enabled";
 
@@ -26,6 +28,36 @@ export default async function DashboardLayout({
     );
   }
 
+  // De schermen van de modules waar deze gebruiker in mag. Hier en niet in de
+  // zijbalk: die is een client-component en mag de moduleregistry niet
+  // importeren — `collectSources` trekt daar de database-laag mee de
+  // browserbundel in.
+  //
+  // Het icoon gaat als gerénderd element mee: een componentfunctie overleeft de
+  // RSC-grens niet.
+  //
+  // Fail-soft, net als hierboven: valt de rechtenquery om, dan toont de zijbalk
+  // geen module-schermen. Dat is vervelend maar veilig, en de pagina's zelf
+  // weigeren alsnog via `requireModulePage`.
+  let moduleNav: { href: string; label: string; icon: React.ReactNode }[] = [];
+  if (user) {
+    try {
+      const { access } = await accessFor(user);
+      moduleNav = MODULES.filter((m) => access.mayEnter(m.id)).flatMap((m) =>
+        (m.navItems ?? []).map((item) => ({
+          href: item.href,
+          label: item.label,
+          icon: <item.icon className="w-4 h-4" aria-hidden="true" />,
+        })),
+      );
+    } catch (err) {
+      console.warn(
+        "[dashboard-layout] modulenavigatie overgeslagen:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   // Staging-detectie: alleen als de env-var `COCKPIT_MODE === "staging"`
   // renderen we de banner. Prod-cockpit (default) toont hem nooit.
   let isStaging = false;
@@ -49,6 +81,7 @@ export default async function DashboardLayout({
         userEmail={user?.email ?? null}
         role={user?.role ?? null}
         demoEnabled={demoEnabled}
+        moduleNav={moduleNav}
       />
       <main className="flex-1 flex flex-col min-h-screen min-w-0 pt-16 lg:pt-0">
         {isStaging && <StagingBanner organizationId={stagingOrgId} />}

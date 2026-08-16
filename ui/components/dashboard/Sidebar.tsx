@@ -18,20 +18,57 @@ import { BrandWordmark } from "@/components/BrandMark";
 
 type Role = "admin" | "reviewer" | "viewer";
 
-// Navigatie + merknaam komen uit één plek: `lib/brand.ts`.
+// Navigatie van de schíl komt uit één plek: `lib/brand.ts`. De schermen van
+// modules komen als prop binnen — zie `moduleNav` hieronder.
 const NAV_ITEMS = navItems();
+
+/**
+ * Een zijbalk-item zoals dit component het tekent.
+ *
+ * `icon` is een **gerenderd** element en geen componenttype. Dat is nodig omdat
+ * de module-items van de server komen: een functie overleeft de RSC-grens niet,
+ * een element wel. De schil-items renderen we hieronder op dezelfde manier
+ * voor, zodat er één tekenpad blijft in plaats van twee.
+ */
+type RenderedNavItem = {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  adminOnly?: boolean;
+  disabled?: boolean;
+};
 
 export function Sidebar({
   userEmail,
   role,
   demoEnabled = false,
+  moduleNav = [],
 }: {
   userEmail?: string | null;
   role?: Role | null;
   /** Toont het Demo-item; alleen aan als DEMO_MODE op de Worker staat. */
   demoEnabled?: boolean;
+  /**
+   * Schermen van de modules waar deze gebruiker in mag. De layout rekent dat
+   * uit — de zijbalk mag de moduleregistry niet importeren, want die trekt via
+   * `collectSources` de database-laag mee de browserbundel in.
+   *
+   * Leeg = geen module-schermen. Dat is ook het antwoord voor iemand zonder
+   * enkele afdeling, en dat hoort zo.
+   */
+  moduleNav?: RenderedNavItem[];
 }) {
-  const items = demoEnabled ? [...NAV_ITEMS, DEMO_NAV_ITEM] : NAV_ITEMS;
+  const shell: RenderedNavItem[] = (
+    demoEnabled ? [...NAV_ITEMS, DEMO_NAV_ITEM] : NAV_ITEMS
+  ).map((i) => ({
+    ...i,
+    icon: <i.icon className="w-4 h-4" aria-hidden="true" />,
+  }));
+
+  // Module-schermen komen direct achter de werkbak, vóór analytics en audit:
+  // dagelijks werk boven, overzicht en beheer onder.
+  const items: RenderedNavItem[] =
+    shell.length > 0 ? [shell[0], ...moduleNav, ...shell.slice(1)] : moduleNav;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   // Desktop-collapse: per browser bewaard zodat hij blijft staan bij refresh.
@@ -173,7 +210,6 @@ export function Sidebar({
           {items.filter(
             (item) => !item.adminOnly || role === "admin",
           ).map((item) => {
-            const Icon = item.icon;
             const isActive =
               pathname === item.href ||
               (item.href !== "/" && pathname.startsWith(item.href));
@@ -190,7 +226,7 @@ export function Sidebar({
                     collapsed && "justify-center px-2",
                   )}
                 >
-                  <Icon className="w-4 h-4" aria-hidden="true" />
+                  {item.icon}
                   {!collapsed && (
                     <>
                       {item.label}
@@ -217,7 +253,7 @@ export function Sidebar({
                   collapsed && "justify-center px-2",
                 )}
               >
-                <Icon className="w-4 h-4" aria-hidden="true" />
+                {item.icon}
                 {!collapsed && item.label}
               </Link>
             );
