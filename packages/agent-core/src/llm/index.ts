@@ -53,3 +53,12 @@ export class FakeLlmClient implements LlmClient {
     return this.responder[input.tier] ?? '';
   }
 }
+
+/**
+ * De Anthropic-implementatie wordt bewust NIET vanuit deze barrel geëxporteerd.
+ * Hij trekt de Anthropic-SDK mee, en dit bestand hangt via de root-barrel aan
+ * alles wat `@factumai/agent-core` importeert — inclusief cockpit-componenten
+ * die in de browser draaien. Importeer 'm via het subpad:
+ *
+ *   import { createAnthropicLlmClient } from '@factumai/agent-core/llm-anthropic';
+ */

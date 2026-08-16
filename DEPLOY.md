@@ -105,6 +105,17 @@ npx wrangler secret put SUPABASE_ANON_KEY
 pnpm run build:cf && pnpm run deploy
 ```
 
+**Werkbak-assistent (optioneel).** Laag 1 — het dossier — staat standaard uit.
+Aanzetten is `"ASSISTANT_DOSSIER": "true"` in `wrangler.jsonc` plus:
+
+```bash
+npx wrangler secret put ANTHROPIC_API_KEY
+```
+
+Zonder key blijft de assistent uit, ook met de vlag aan: een halve configuratie
+hoort een uitgeschakelde assistent op te leveren en geen fout bij de eerste
+vraag. Zie [`docs/ASSISTENT.md`](docs/ASSISTENT.md).
+
 > `pnpm run deploy`, niet `pnpm deploy` — dat laatste is een ingebouwd
 > pnpm-commando (een workspace-package naar een map kopiëren) en draait het
 > script uit `package.json` dus níet.

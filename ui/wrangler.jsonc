@@ -35,7 +35,13 @@
   "vars": {
     "CLIENT_NAME": "__CLIENT_NAME__",
     "AIOS_RAG_ENABLED": "false",
-    "AIOS_ORG_ID": "__CLIENT_ORG_ID__"
+    "AIOS_ORG_ID": "__CLIENT_ORG_ID__",
+    // Model voor de assistent. Uit config, nooit hardcoded (harde regel 7).
+    "MODEL_ASSISTANT": "claude-sonnet-4-6"
+    // "ASSISTANT_DOSSIER": "true"  ← zet de werkbak-assistent (laag 1, dossier)
+    // aan. Vereist ook het secret ANTHROPIC_API_KEY; zonder key blijft hij uit.
+    // Bewust opt-in: hij kost per vraag geld en hoort bij een klant die 'm heeft
+    // gekocht.
     // "DEMO_MODE": "true"  ← alleen op een demo-/salesomgeving. Zet dit NOOIT
     // op een productie-cockpit: het laat een beheerder synthetische mail in de
     // echte werkbak zetten.

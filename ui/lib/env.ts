@@ -57,6 +57,25 @@ export interface CockpitEnv {
   VOYAGE_API_KEY?: string;
   MODEL_EMBED?: string;
 
+  /**
+   * Werkbak-assistent, laag 1 (dossier). Alleen de letterlijke waarde "true"
+   * zet 'm aan. Bewust opt-in: een assistent die er zomaar staat bij een klant
+   * die 'm niet heeft gekocht, is een verrassing — en hij kost per vraag geld.
+   *
+   * Hoort per tenant in het control plane; hier als var tot dat er is. De
+   * analyse-laag (laag 2) krijgt een eigen vlag mét voorwaardencontrole.
+   */
+  ASSISTANT_DOSSIER?: string;
+
+  /** Anthropic-key voor de assistent. Zonder key blijft de assistent uit. */
+  ANTHROPIC_API_KEY?: string;
+
+  /**
+   * Model voor de assistent. Uit config, nooit hardcoded (harde regel 7). Het
+   * dossier is redeneerwerk over aangeleverde tekst → Sonnet-tier.
+   */
+  MODEL_ASSISTANT?: string;
+
   /** Workflow-binding naar aios-agent → ExecuteWorkflow. */
   EXECUTE: Workflow<ExecuteParams>;
 }

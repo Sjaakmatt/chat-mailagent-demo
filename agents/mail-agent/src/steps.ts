@@ -33,7 +33,7 @@ import {
 import { DATA_CATEGORIES, type DataCategory } from '@factumai/agent-core';
 import type { Env } from './env.js';
 import { callMcp, cfAccessHeaders, mcpBearer } from './mcp.js';
-import { createAnthropicLlmClient } from './llm-anthropic.js';
+import { createAnthropicLlmClient } from '@factumai/agent-core/llm-anthropic';
 import { sendViaResend } from './resend.js';
 
 /**

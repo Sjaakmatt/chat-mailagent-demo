@@ -29,3 +29,4 @@ export * from './outcomes/index.js';
 export * from './decision-log/index.js';
 export * from './tickets/index.js';
 export * from './access/index.js';
+export * from './assistant/index.js';

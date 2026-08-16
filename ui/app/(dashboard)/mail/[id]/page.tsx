@@ -21,6 +21,8 @@ import { signAttachmentUrl } from "@/lib/storage";
 import { ReviewForm } from "@/components/mail-detail/ReviewForm";
 import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
 import { DecisionPanel } from "@/components/mail-detail/DecisionPanel";
+import { AssistantPanel } from "@/components/assistant/AssistantPanel";
+import { assistantEnabled } from "@/lib/assistant/run";
 import { CompoundBreakdown } from "@/components/mail-detail/CompoundBreakdown";
 import { cn, timeAgoNL } from "@/lib/utils";
 import { mailProposed } from "@/lib/modules/klantenservice";
@@ -235,8 +237,12 @@ export default async function ReviewDetailPage({
               <ThreadRail thread={thread} />
             </div>
 
-            {/* RECHTS — tijdlijn, analyse, samenvatting, grounding, guardrail, confidence */}
+            {/* RECHTS — assistent, tijdlijn, analyse, samenvatting, grounding, guardrail, confidence */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Bovenaan: de vraag die een medewerker als eerste heeft is
+                  "waarom stelt hij dit voor", en die stel je hier. */}
+              {env && assistantEnabled(env) && <AssistantPanel reviewItemId={row.id} />}
+
               <Panel title="Tijdlijn">
                 <CaseTimeline item={row} edits={edits} />
               </Panel>
