@@ -34,7 +34,12 @@ export interface Brand {
   name: string;
   /**
    * Optioneel gesplitst logo: het eerste deel krijgt de accentkleur, het tweede
-   * de normale tekstkleur (bv. "sun" + "wise"). Leeg = gewoon `name` tonen.
+   * de normale tekstkleur (bv. `{ accent: "Factum", rest: "AI" }`). Leeg =
+   * gewoon `name` tonen.
+   *
+   * Alles wat dit toont loopt via `components/BrandMark.tsx`. Type de naam
+   * nergens anders in: hij stond ooit los in drie auth-schermen en bleef daar
+   * na een herbranding gewoon staan.
    */
   logo?: { accent: string; rest: string };
   /** Ondertitel onder het logo. */

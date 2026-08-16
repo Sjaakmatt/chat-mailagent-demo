@@ -14,6 +14,7 @@ import {
   ChevronsRight,
 } from "lucide-react";
 import { BRAND, navItems, DEMO_NAV_ITEM } from "@/lib/brand";
+import { BrandWordmark } from "@/components/BrandMark";
 
 type Role = "admin" | "reviewer" | "viewer";
 
@@ -119,18 +120,11 @@ export function Sidebar({
         >
           {!collapsed && (
             <div>
-              <div className="flex items-baseline gap-0 text-2xl font-display font-bold">
-                {BRAND.logo ? (
-                  <>
-                    <span className="italic text-accent-400">
-                      {BRAND.logo.accent}
-                    </span>
-                    <span className="text-white">{BRAND.logo.rest}</span>
-                  </>
-                ) : (
-                  <span className="text-white">{BRAND.name}</span>
-                )}
-              </div>
+              <BrandWordmark
+                accentClass="text-accent-400"
+                restClass="text-white"
+                className="text-2xl"
+              />
               <div className="text-xs text-brand-200 font-sans mt-1">
                 {BRAND.tagline}
               </div>
