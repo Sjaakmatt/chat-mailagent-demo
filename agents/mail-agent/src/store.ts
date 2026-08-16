@@ -235,10 +235,54 @@ export function createPlatformStore(env: Env): PlatformStore {
         method: 'PATCH',
         body: JSON.stringify({
           status,
-          processed_at: status === 'DONE' ? new Date().toISOString() : null,
+          // `processed_at` betekent hier "wanneer we dit signaal voor het laatst
+          // hebben aangeraakt", niet alleen "wanneer het klaar was". Bij een
+          // claim (PROCESSING) is dat de claimtijd — zonder die stempel kun je
+          // een vastgelopen claim niet van een lopende onderscheiden.
+          processed_at:
+            status === 'DONE' || status === 'PROCESSING' ? new Date().toISOString() : null,
         }),
         prefer: 'return=minimal',
       });
+    },
+
+    /**
+     * Claimt een signaal om het te gaan verwerken. Geeft `false` als een ander
+     * het al heeft.
+     *
+     * ## Waarom dit moet
+     *
+     * Twee routes kunnen hetzelfde signaal oppakken: de chat-DO draait de beurt
+     * rechtstreeks, en de poller start er een Workflow op vanaf de wachtrij.
+     * Zonder claim lezen ze allebei een signaal dat nog op NEW staat en draaien
+     * ze allebei de hele lus — en krijgt de bezoeker twee antwoorden.
+     *
+     * De claim is één UPDATE met de oude status als voorwaarde. Postgres
+     * serialiseert dat, dus precies één van de twee krijgt een rij terug. Dat is
+     * de winnaar; de ander ziet een lege respons en stopt.
+     *
+     * ## Vastgelopen claims
+     *
+     * Valt een isolate om midden in een beurt, dan blijft het signaal op
+     * PROCESSING staan en zou het nooit meer opgepakt worden. Daarom mag een
+     * claim die ouder is dan `staleAfterMs` worden overgenomen. Ruim genomen:
+     * liever een keer te laat overnemen dan een lopende beurt dubbel draaien.
+     */
+    async claimSignal(signalId: string, staleAfterMs = 5 * 60_000): Promise<boolean> {
+      const cutoff = new Date(Date.now() - staleAfterMs).toISOString();
+      const url = client.tableUrl('aios_signals');
+      url.searchParams.set('id', `eq.${signalId}`);
+      // NEW, óf een PROCESSING-claim die te lang stilstaat.
+      url.searchParams.set(
+        'or',
+        `(status.eq.NEW,and(status.eq.PROCESSING,processed_at.lt.${cutoff}))`,
+      );
+      const rows = await client.request<Array<{ id?: string }>>(STORE_CTX, url, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'PROCESSING', processed_at: new Date().toISOString() }),
+        prefer: 'return=representation',
+      });
+      return Array.isArray(rows) && rows.length > 0;
     },
 
     // ── Fase 3 — compound-fan-in ────────────────────────────────────────

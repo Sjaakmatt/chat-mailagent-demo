@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandHeader } from "@/components/BrandMark";
 
 const inputCls = cn(
   "w-full px-3 py-2.5 rounded-lg border border-brand-200 bg-white",
@@ -66,13 +67,7 @@ function UpdatePasswordForm() {
   return (
     <div className="min-h-screen bg-surface-muted flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-baseline justify-center gap-0 text-3xl font-display font-bold mb-2">
-            <span className="italic text-accent-500">sun</span>
-            <span className="text-brand-700">wise</span>
-          </div>
-          <div className="text-sm text-ink-muted">Cockpit</div>
-        </div>
+        <BrandHeader />
 
         <div className="bg-white rounded-xl border border-brand-100 shadow-soft p-6 sm:p-8">
           <h1 className="font-display text-xl font-semibold text-brand-700 mb-1">

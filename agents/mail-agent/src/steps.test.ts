@@ -163,7 +163,7 @@ describe('categoryToSpecialist', () => {
 describe('pickModelForIntent', () => {
   const baseEnv = {
     MODEL_CLASSIFY: 'claude-haiku-4-5',
-    MODEL_PLAN: 'claude-sonnet-4-6',
+    MODEL_PLAN: 'claude-sonnet-5',
   } as unknown as Env;
 
   it('classify-tier → MODEL_CLASSIFY', () => {
@@ -173,20 +173,20 @@ describe('pickModelForIntent', () => {
   });
 
   it('plan-tier → MODEL_PLAN', () => {
-    expect(pickModelForIntent(baseEnv, orderChangeConfig)).toBe('claude-sonnet-4-6');
+    expect(pickModelForIntent(baseEnv, orderChangeConfig)).toBe('claude-sonnet-5');
   });
 
   it('plan-heavy → MODEL_PLAN_HEAVY als gezet, anders fallback op MODEL_PLAN', () => {
     // Zonder MODEL_PLAN_HEAVY: technical valt terug op MODEL_PLAN
-    expect(pickModelForIntent(baseEnv, technicalConfig)).toBe('claude-sonnet-4-6');
+    expect(pickModelForIntent(baseEnv, technicalConfig)).toBe('claude-sonnet-5');
     // Met MODEL_PLAN_HEAVY: gebruikt die
-    const opusEnv = { ...baseEnv, MODEL_PLAN_HEAVY: 'claude-opus-4-7' } as Env;
-    expect(pickModelForIntent(opusEnv, technicalConfig)).toBe('claude-opus-4-7');
+    const opusEnv = { ...baseEnv, MODEL_PLAN_HEAVY: 'claude-opus-5' } as Env;
+    expect(pickModelForIntent(opusEnv, technicalConfig)).toBe('claude-opus-5');
   });
 
   it('respecteert lege string als ongezet', () => {
     const emptyEnv = { ...baseEnv, MODEL_PLAN_HEAVY: '   ' } as Env;
-    expect(pickModelForIntent(emptyEnv, technicalConfig)).toBe('claude-sonnet-4-6');
+    expect(pickModelForIntent(emptyEnv, technicalConfig)).toBe('claude-sonnet-5');
   });
 });
 

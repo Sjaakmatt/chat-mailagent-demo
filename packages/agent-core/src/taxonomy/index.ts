@@ -34,101 +34,40 @@ export interface CategoryDef {
    * belangrijker — wanneer níét.
    *
    * Dit is geen documentatie maar werkende configuratie. Een kale lijst slugs
-   * laat het model raden wat een naam betekent, en dan valt een bericht in de
-   * categorie die er het meest naar klínkt in plaats van de categorie waar het
-   * hoort. Vervolgens draait het beleid van die verkeerde categorie, en vraagt
-   * de agent netjes iets wat niemand had willen vragen.
+   * laat het model raden wat een naam betekent, en dan belandt "ik zie een
+   * mailagent op de website" onder `demo_aanvraag` omdat het woord "mailagent"
+   * commercieel klinkt. Vervolgens vraagt de agent netjes om naam en bedrijf,
+   * precies zoals het beleid voor die categorie voorschrijft, op een vraag die
+   * gewoon een productvraag was.
    *
-   * Schrijf de afbakening op, niet de omschrijving. "Alleen als de klant zelf om
-   * X vraagt" stuurt beter dan "X-verzoeken".
+   * Schrijf de afbakening op, niet de omschrijving. "Alleen als de bezoeker zelf
+   * om een gesprek vraagt" stuurt beter dan "demo-aanvragen".
    */
   hint?: string;
 }
 
-/**
- * Neutrale startset — vervang per klant.
- *
- * De hints hieronder zijn de generieke webshop-afbakening. Ze zijn er om te
- * laten zien wát een goede hint is; bij een klant herschrijf je ze mee met de
- * categorieën zelf. Een categorie zonder hint werkt, maar classificeert
- * slechter — zie `CATEGORY_GUIDE`.
- */
+/** Neutrale startset — vervang per klant. */
 export const CATEGORIES: readonly CategoryDef[] = Object.freeze([
-  {
-    slug: 'levertijd_status',
-    label: 'Levertijd / status',
-    specialist: 'simple_reply',
-    hint: 'waar blijft mijn bestelling, wanneer komt het; gaat over een order die al geplaatst is',
-  },
-  {
-    slug: 'order_wijziging',
-    label: 'Orderwijziging',
-    specialist: 'order_change',
-    hint: 'iets erbij, eraf, ander adres of annuleren op een bestaande order',
-  },
-  {
-    slug: 'retour_ruilen',
-    label: 'Retour / ruilen',
-    specialist: 'order_change',
-    hint: 'terugsturen, omruilen, geld terug bij een geleverd artikel dat heel is',
-  },
-  {
-    slug: 'garantie_claim',
-    label: 'Garantieclaim',
-    specialist: 'complaint',
-    hint: 'artikel is stuk of defect binnen de garantietermijn — niet "past niet", dat is retour_ruilen',
-  },
-  {
-    slug: 'product_vraag',
-    label: 'Productvraag',
-    specialist: 'simple_reply',
-    hint: 'wat een artikel doet, kost, of kan; de standaard voor elke inhoudelijke vraag over het assortiment',
-  },
-  {
-    slug: 'technisch_probleem',
-    label: 'Technisch probleem',
-    specialist: 'technical',
-    hint: 'werkt niet zoals verwacht, maar er is nog niet vastgesteld dát er iets stuk is',
-  },
-  {
-    slug: 'facturatie',
-    label: 'Facturatie',
-    specialist: 'simple_reply',
-    hint: 'factuur, betaling, bedrag of BTW — de administratieve kant, niet het artikel',
-  },
-  {
-    slug: 'klacht',
-    label: 'Klacht',
-    specialist: 'complaint',
-    hint: 'de klant is ontevreden over hoe iets gelopen is, los van welk artikel het betrof',
-  },
-  {
-    slug: 'commercieel',
-    label: 'Commercieel',
-    specialist: 'escalate',
-    hint: 'ALLEEN als de schrijver zelf iets wil verkopen of samenwerken; interesse in ons assortiment is product_vraag',
-  },
-  {
-    slug: 'gdpr_verzoek',
-    label: 'Privacy / GDPR-verzoek',
-    specialist: 'gdpr',
-    hint: 'AVG-verzoek over de eigen gegevens van de schrijver: uitschrijven, verwijdering, inzage, dataportabiliteit. NIET een vraag over ons privacybeleid in het algemeen',
-  },
-  {
-    slug: 'overig',
-    label: 'Overig',
-    specialist: 'escalate',
-    hint: 'gaat wel over ons, maar past nergens anders; kies dit pas als geen enkele andere categorie past',
-  },
+  { slug: 'levertijd_status', label: 'Levertijd / status', specialist: 'simple_reply', hint: 'waar blijft mijn bestelling, wanneer wordt het geleverd, track & trace' },
+  { slug: 'order_wijziging', label: 'Orderwijziging', specialist: 'order_change', hint: 'adres, aantal of artikel wijzigen, of annuleren vóór verzending' },
+  { slug: 'retour_ruilen', label: 'Retour / ruilen', specialist: 'order_change', hint: 'retourneren, ruilen, herroepingsrecht, geld terug' },
+  { slug: 'garantie_claim', label: 'Garantieclaim', specialist: 'complaint', hint: 'defect binnen de garantietermijn, ontbrekende of kapotte onderdelen' },
+  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply', hint: 'maten, materialen, compatibiliteit, gebruik — ook als de klant enthousiast klinkt. De standaard voor elke inhoudelijke vraag over een artikel' },
+  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical', hint: 'werkt niet zoals verwacht, maar nog niet vastgesteld dat er iets stuk is' },
+  { slug: 'facturatie', label: 'Facturatie', specialist: 'simple_reply', hint: 'facturen, betaalmethoden, btw, betaling die niet klopt' },
+  { slug: 'klacht', label: 'Klacht', specialist: 'complaint', hint: 'ontevredenheid over een product, bezorging of afhandeling; boze of teleurgestelde toon' },
+  { slug: 'commercieel', label: 'Commercieel', specialist: 'escalate', hint: 'grotere aantallen, offerte, wederverkoop, samenwerking. ALLEEN als de klant er zelf om vraagt' },
+  { slug: 'gdpr_verzoek', label: 'Privacy / GDPR-verzoek', specialist: 'gdpr', hint: 'AVG-verzoek over de eigen gegevens van de schrijver: inzage, verwijdering, uitschrijven' },
+  { slug: 'overig', label: 'Overig', specialist: 'escalate', hint: 'te vaag om te routeren, of past nergens onder. Bij een losse begroeting hoort dit, ook als er eerder in het gesprek iets anders speelde' },
 ]);
 
 /**
  * De categorielijst zoals de classifier 'm te zien krijgt: slug plus afbakening.
  *
- * Een kale opsomming van slugs laat het model de betekenis raden uit de naam,
- * en dat gaat mis op precies de plek waar het duur is — een bericht belandt in
- * de categorie die er het meest naar klinkt, waarna het beleid van díé categorie
- * draait. Daarom krijgt de classifier de afbakening mee, niet alleen de naam.
+ * Een kale opsomming van slugs laat het model de betekenis raden uit de naam.
+ * Dat gaat mis op precies de plek waar het duur is: "ik zie een mailagent op de
+ * website" belandde onder `demo_aanvraag` omdat dat commercieel klinkt, waarna
+ * de agent keurig om naam en bedrijf vroeg — het beleid voor die categorie.
  */
 export const CATEGORY_GUIDE: string = CATEGORIES.map(
   (c) => `- ${c.slug}${c.hint ? `: ${c.hint}` : ''}`,

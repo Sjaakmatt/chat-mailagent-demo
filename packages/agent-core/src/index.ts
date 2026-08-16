@@ -24,10 +24,13 @@ export * from './specialists/index.js';
 export * from './taxonomy/index.js';
 export * from './channels/index.js';
 export * from './modules/index.js';
+export * from './chat-guard/index.js';
+export * from './chat-identity/index.js';
 export * from './domain-gate/index.js';
 export * from './outcomes/index.js';
 export * from './decision-log/index.js';
 export * from './tickets/index.js';
+export * from './actions/index.js';
 export * from './access/index.js';
 export * from './assistant/index.js';
 

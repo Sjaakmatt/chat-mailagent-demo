@@ -166,6 +166,13 @@ export interface Plan {
      * `afterExecute`-domeinhook, die 'm invult (werkticket, CRM-update, …).
      */
     createsTask?: boolean;
+    /**
+     * Eén zin voor de klant: waarom komt er bij deze categorie een mens aan te
+     * pas. Gaat letterlijk de ticketbevestiging in (`confirmationText`), dus
+     * hij wordt nooit door een model aangeraakt en telt niet mee in de
+     * grounding — het is beleid, geen bewering over een order.
+     */
+    handoverReason?: string;
   };
   /**
    * Vertrouwde bronteksten voor de grounding-check (bv. de beleidsrichtlijn en
@@ -227,10 +234,40 @@ export interface OrchestrationSteps {
   plan(input: PlanInput): Promise<Plan>;
 }
 
+/**
+ * Waar de lus mee bezig is. Bewust grof: dit is bedoeld om een wachtende
+ * bezoeker te laten zien dát er iets gebeurt, niet om de architectuur te
+ * lekken. De teksten die de bezoeker ziet horen bij de aanroeper, niet hier —
+ * die kent de taal en de toon van de klant.
+ */
+export type ProgressPhase = 'routeren' | 'opzoeken' | 'schrijven' | 'doorzetten';
+
+/** Eén gemeten stap uit de lus. Voedt het beslislog. */
+export interface StepTiming {
+  step: 'route' | 'resolve' | 'retrieve' | 'plan' | 'ground';
+  ms: number;
+}
+
 export interface OrchestrationDeps {
   steps: OrchestrationSteps;
   now?: () => string;
   newId?: () => string;
+  /**
+   * Duur per stap. Net als `onProgress` fire-and-forget.
+   *
+   * Waarom dit er is: één getal om de hele lus vertelt je dat een beurt dertig
+   * seconden kostte en verder niets. Of dat `retrieve`, `plan` of `ground` was,
+   * bepaalt volledig wat je eraan doet — en zonder deze meting is het gokken.
+   */
+  onTiming?: (timing: StepTiming) => void;
+  /**
+   * Wordt aangeroepen bij elke faseovergang. Synchroon en fire-and-forget: de
+   * lus wacht er niet op en een fout hierin mag de run niet raken — een
+   * kapotte voortgangsmelding is geen reden om een antwoord te laten vallen.
+   *
+   * Alleen zinvol bij realtime kanalen. Bij mail laat je 'm weg.
+   */
+  onProgress?: (phase: ProgressPhase) => void;
   /**
    * Vaste tekst voor een bericht buiten het domein. Default: de tekst uit
    * `DOMAIN`. Wordt letterlijk gebruikt — nooit door een model aangeraakt.
@@ -252,6 +289,37 @@ export interface OrchestrationResult {
 
 function defaultId(): string {
   return `ri_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** Meldt een fase, en laat de run nooit struikelen over de melding zelf. */
+function report(deps: OrchestrationDeps, phase: ProgressPhase): void {
+  try {
+    deps.onProgress?.(phase);
+  } catch {
+    // Bewust stil: dit is versiering, geen uitkomst.
+  }
+}
+
+/**
+ * Meet één stap. Ook bij een fout wordt de tijd gemeld — juist een stap die na
+ * twintig seconden omvalt wil je in het log terugzien, en dat is precies de
+ * meting die je kwijt bent als je alleen het geslaagde pad meet.
+ */
+async function meet<T>(
+  deps: OrchestrationDeps,
+  step: StepTiming['step'],
+  run: () => Promise<T>,
+): Promise<T> {
+  const start = Date.now();
+  try {
+    return await run();
+  } finally {
+    try {
+      deps.onTiming?.({ step, ms: Date.now() - start });
+    } catch {
+      // Zelfde afweging als bij report(): een meting mag geen beurt kosten.
+    }
+  }
 }
 
 /**
@@ -314,22 +382,54 @@ export async function runRoute(
   signal: Signal,
   deps: OrchestrationDeps,
 ): Promise<Classification> {
-  // Poort eerst. Valt het bericht buiten het domein, dan stopt het hier:
-  // classify draait niet, en de caller hoort geen specialist te dispatchen
-  // maar `outOfDomainReviewItem()` weg te schrijven.
-  if (deps.steps.gate) {
-    const gate = await deps.steps.gate(signal);
-    if (!gate.inDomain) {
-      return {
-        category: 'buiten_domein',
-        outOfDomain: { reason: gate.reason },
-        confidence: 1,
-        needsRag: false,
-        extracted: {},
-      };
-    }
+  report(deps, 'routeren');
+  // In een const, niet als `deps.steps.gate`: de narrowing van de guard
+  // hieronder overleeft de closure in `meet()` anders niet.
+  const gateStep = deps.steps.gate;
+  if (!gateStep) return meet(deps, 'route', () => deps.steps.classify(signal));
+
+  // Poort en classificatie draaien **naast elkaar**, niet na elkaar.
+  //
+  // Ze hangen niet van elkaar af — de poort beoordeelt of het bericht over dit
+  // bedrijf gaat, de classificatie waar het over gaat — en het zijn twee losse
+  // LLM-calls, dus achter elkaar wachten kost een hele call aan tijd. Bij mail
+  // maakt dat niets uit; bij chat zit er iemand naar een leeg venster te kijken.
+  //
+  // De veiligheidseigenschap blijft intact, en dat is hier het enige dat telt:
+  // het gaat om twee **aparte prompts**. Ze delen geen context, dus een bericht
+  // kan de poort nog steeds niet beïnvloeden via de routering of andersom. Wat
+  // je niet mag doen is ze samenvoegen tot één call — dát zou de poort omzeilbaar
+  // maken. Parallel draaien verandert alleen wanneer ze beginnen.
+  //
+  // Valt het bericht buiten het domein, dan wordt de classificatie **weggegooid**
+  // en gaat de run niet verder: geen resolve, geen tool-calls, geen generatie.
+  // Er is dus geen enkele route waarlangs die uitkomst de bezoeker bereikt.
+  //
+  // De prijs is een classificatie-call die je bij een geweigerd bericht voor
+  // niets betaalt. Dat is de goedkope tier en de rate limiting zit ervóór, dus
+  // dat weegt niet op tegen een seconde wachten bij élk bericht dat wél deugt.
+  const [gate, classification] = await meet(deps, 'route', () =>
+    Promise.all([
+      gateStep(signal),
+      deps.steps.classify(signal).catch((err: unknown) => err),
+    ]),
+  );
+
+  if (!gate.inDomain) {
+    return {
+      category: 'buiten_domein',
+      outOfDomain: { reason: gate.reason },
+      confidence: 1,
+      needsRag: false,
+      extracted: {},
+    };
   }
-  return deps.steps.classify(signal);
+
+  // Faalde classify, dan gooien we die fout hier alsnog. Hij is opgevangen om
+  // te voorkomen dat een afgewezen bericht struikelt over een call waarvan het
+  // resultaat toch werd weggegooid.
+  if (classification instanceof Error) throw classification;
+  return classification as Classification;
 }
 
 /**
@@ -350,12 +450,14 @@ export async function runSpecialize(
   const newId = deps.newId ?? defaultId;
   const { steps } = deps;
 
-  const resolved = await steps.resolve(signal, classification);
+  report(deps, 'opzoeken');
+  const resolved = await meet(deps, 'resolve', () => steps.resolve(signal, classification));
 
   const recorder = new ToolCallRecorder();
+  const retrieveStep = steps.retrieve;
   const memory =
-    classification.needsRag && steps.retrieve
-      ? await steps.retrieve(signal, classification, resolved)
+    classification.needsRag && retrieveStep
+      ? await meet(deps, 'retrieve', () => retrieveStep(signal, classification, resolved))
       : [];
 
   // Multi-agent Fase 1: als de router een specialist heeft gekozen, laad de
@@ -367,20 +469,24 @@ export async function runSpecialize(
     ? getIntentConfig(classification.specialist)
     : undefined;
 
-  const plan = await steps.plan({
-    signal,
-    classification,
-    resolved,
-    memory,
-    recorder,
-    intentConfig,
-  });
+  // Bij een taak schrijft de plan-stap geen antwoord voor de bezoeker maar een
+  // concept voor de werkbak. "Schrijven" is dan misleidend: iemand zit te
+  // wachten op een tekst die hij nooit krijgt. Zeg wat er wél gebeurt — de
+  // router weet dit al vóór de dure stap, dus dat kan op tijd.
+  report(deps, classification.outcome === 'taak' ? 'doorzetten' : 'schrijven');
+  const plan = await meet(deps, 'plan', () =>
+    steps.plan({
+      signal,
+      classification,
+      resolved,
+      memory,
+      recorder,
+      intentConfig,
+    }),
+  );
 
-  const { grounding, ungrounded } = validateGrounding(
-    plan.body,
-    plan.claims,
-    recorder,
-    plan.trustedText ?? [],
+  const { grounding, ungrounded } = await meet(deps, 'ground', async () =>
+    validateGrounding(plan.body, plan.claims, recorder, plan.trustedText ?? []),
   );
 
   const proposed: Record<string, unknown> = {

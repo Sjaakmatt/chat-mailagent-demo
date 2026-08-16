@@ -18,6 +18,8 @@ import { SpecialistWorkflow } from './workflows/specialist.js';
 import { AggregatorWorkflow } from './workflows/aggregator.js';
 import { ChatSession } from './chat/session-do.js';
 import { chatWidgetResponse } from './chat/widget.js';
+import { widgetLoaderResponse, widgetFrameResponse } from './chat/embed.js';
+import { verifyChatIdentity, customerSessionId } from '@factumai/agent-core';
 import type { Env } from './env.js';
 
 export {
@@ -46,6 +48,15 @@ export default {
     if (url.pathname === '/__poller/start' && request.method === 'POST') {
       await kickPoller(env);
       return new Response('poller gestart', { status: 202 });
+    }
+    // Waarom dit endpoint bestaat: een stilgevallen poller ziet er aan de
+    // buitenkant uit als een chat die niet werkt. Zonder dit is de enige route
+    // naar het antwoord `wrangler tail` op het juiste moment. Nu is het één URL:
+    // staat er een alarm, wanneer draaide hij, en wat ging er mis.
+    if (url.pathname === '/__poller/status' && request.method === 'GET') {
+      const id = env.AIOS_POLLER.idFromName('aios-poller');
+      const status = await env.AIOS_POLLER.get(id).status();
+      return Response.json(status);
     }
     // Staging-only test-endpoint: start de RouterWorkflow direct op een
     // bestaand signalId zonder de pgmq-queue te raken. Prod (met
@@ -79,6 +90,16 @@ export default {
       return chatWidgetResponse();
     }
 
+    // Productiewidget. Bewust NIET achter DEMO_MODE: dit is wat op de site van
+    // een klant komt te staan. Wie 'm mag insluiten regelt `frame-ancestors`
+    // op het iframe-antwoord, niet een vlag.
+    if (url.pathname === '/widget.js' && request.method === 'GET') {
+      return widgetLoaderResponse();
+    }
+    if (url.pathname === '/widget' && request.method === 'GET') {
+      return widgetFrameResponse(env);
+    }
+
     // Chat: de bezoeker verbindt met /chat/<sessie>/ws. Elke sessie is een
     // eigen Durable Object, zodat snel achter elkaar getypte berichten niet
     // op elkaars gespreksstand botsen.
@@ -88,7 +109,29 @@ export default {
       if (!sessionId) {
         return new Response('sessie-id ontbreekt in path', { status: 400 });
       }
-      const id = env.CHAT_SESSION.idFromName(sessionId);
+
+      // Is deze bezoeker een ingelogde klant van de winkel? Dan hangt zijn
+      // gesprek aan zijn klant-id in plaats van aan een willekeurig id uit de
+      // browser, en vindt hij het morgen op een ander apparaat terug.
+      //
+      // De verificatie hoort HIER en niet alleen bij het renderen van de widget:
+      // het pad bepaalt welk Durable Object je krijgt, dus wie een sessienaam
+      // raadt, zou anders bij dat gesprek kunnen. Klopt de handtekening niet,
+      // dan valt de bezoeker terug op de anonieme sessie uit het pad — geen
+      // foutmelding, wel een logregel.
+      const identity = await verifyChatIdentity(
+        { customerId: url.searchParams.get('uid'), hash: url.searchParams.get('uhash') },
+        env.CHAT_IDENTITY_SECRET,
+      );
+      if (identity.reason !== 'anoniem' && !identity.verified) {
+        console.warn(`[chat] identiteitsclaim afgewezen: ${identity.reason}`);
+      }
+      const naam =
+        identity.verified && identity.customerId && env.CHAT_IDENTITY_SECRET
+          ? await customerSessionId(identity.customerId, env.CHAT_IDENTITY_SECRET)
+          : sessionId;
+
+      const id = env.CHAT_SESSION.idFromName(naam);
       return env.CHAT_SESSION.get(id).fetch(request);
     }
 

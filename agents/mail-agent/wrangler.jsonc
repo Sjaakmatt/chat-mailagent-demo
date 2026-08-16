@@ -65,11 +65,11 @@
     // bij: inkoopprijzen en marges horen niet in een antwoord aan een klant.
     "AGENT_DATA_CATEGORIES": "operationeel,commercieel",
     // Model-IDs uit config, nooit hardcoded in de code (harde regel 7).
-    "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
-    "MODEL_PLAN": "claude-sonnet-4-6",
+    "MODEL_CLASSIFY": "claude-haiku-4-5",
+    "MODEL_PLAN": "claude-sonnet-5",
     // Optioneel: Opus-tier voor de `technical`-specialist (diagnose met vision
     // op bijgevoegde foto's). Ontbrekend → val terug op MODEL_PLAN.
-    // "MODEL_PLAN_HEAVY": "claude-opus-4-7",
+    // "MODEL_PLAN_HEAVY": "claude-opus-5",
     // Fase 2 multi-agent split: zet op "true" om de poller ROUTER te laten
     // starten (Router → Specialist) i.p.v. ORCHESTRATION (single workflow).
     // Ontbrekend of andere waarde = oud gedrag — snelle rollback zonder deploy.
@@ -87,6 +87,28 @@
     "MAIL_SEND_VIA": "graph",
     // Prefix voor ticketnummers (PREFIX-JJMM-NNNN). Drie letters.
     "TICKET_PREFIX": "TIC"
+
+    // ---------------------------------------------------------------------
+    // CHAT-BEWAKING — alle vier optioneel; de defaults hieronder gelden als je
+    // ze weglaat. Zet ze zodra de widget op een publieke site staat.
+    //
+    // CHAT_ALLOWED_ORIGINS  Welke sites de widget mogen insluiten, komma-
+    //                       gescheiden. Ongezet = alleen deze Worker zelf, dus
+    //                       de testwidget werkt en verder niemand. Zet hier de
+    //                       echte domeinen zodra de widget ergens anders staat:
+    //                         "https://shop.klant.nl,https://www.klant.nl"
+    //                       `*` schakelt de check uit — alleen lokaal.
+    // CHAT_RATE_PER_MIN     Berichten per minuut per sessie.        (10)
+    // CHAT_MAX_PER_SESSION  Harde bovengrens per sessie.            (100)
+    // CHAT_MAX_MESSAGE_CHARS Max lengte van één bericht.            (2000)
+    //
+    // De origin-check houdt andere sites tegen, geen scripts — die zetten de
+    // Origin-header zelf. De rate limiting is wat de rekening begrenst.
+    // ---------------------------------------------------------------------
+    // "CHAT_ALLOWED_ORIGINS": "https://shop.klant.nl",
+    // "CHAT_RATE_PER_MIN": "10",
+    // "CHAT_MAX_PER_SESSION": "100",
+    // "CHAT_MAX_MESSAGE_CHARS": "2000"
   },
   // ---------------------------------------------------------------------------
   // STAGING — aparte Worker om nieuwe branches te testen zonder prod te raken.
@@ -152,8 +174,8 @@
       "vars": {
         "CLIENT_NAME": "__CLIENT_NAME__",
         "AGENT_DATA_CATEGORIES": "operationeel,commercieel",
-        "MODEL_CLASSIFY": "claude-haiku-4-5-20251001",
-        "MODEL_PLAN": "claude-sonnet-4-6",
+        "MODEL_CLASSIFY": "claude-haiku-4-5",
+        "MODEL_PLAN": "claude-sonnet-5",
         // Multi-agent-flag AAN op staging — dat is wat we willen testen.
         "USE_MULTI_AGENT_ROUTER": "true",
         // Test-tenant (child-org), NIET de prod-org — zie docs/MULTI-ENV-DESIGN.md.

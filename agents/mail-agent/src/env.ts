@@ -34,6 +34,41 @@ export interface Env {
   DEMO_MODE?: string;
 
   /**
+   * Komma-gescheiden lijst van origins die een chatsessie mogen openen, bv.
+   * `https://shop.klant.nl,https://www.klant.nl`.
+   *
+   * Ongezet → alleen de Worker zelf, zodat de testwidget blijft werken en geen
+   * enkele andere site de widget kan insluiten. Bewust geen fail-open: een
+   * vergeten var mag de deur niet openzetten. `*` schakelt de check uit en
+   * hoort alleen in lokale ontwikkeling.
+   *
+   * Let op de reikwijdte: dit houdt insluiting door andere sites tegen, geen
+   * scripts — die zetten de `Origin`-header zelf. Daarvoor is de rate limiting.
+   */
+  CHAT_ALLOWED_ORIGINS?: string;
+
+  /**
+   * Gedeeld geheim waarmee de webshop het klant-id ondertekent, zodat een
+   * ingelogde klant zijn gesprek over apparaten heen meeneemt.
+   *
+   * De winkel rekent `hash_hmac('sha256', $klantId, $geheim)` uit op de server
+   * en zet dat als `data-user-hash` bij de widget. Wij rekenen hetzelfde uit en
+   * vergelijken. Zonder deze var wordt elke identiteitsclaim genegeerd en is
+   * iedereen anoniem — bewust, want zonder geheim valt er niets te geloven.
+   *
+   * Zet 'm met `wrangler secret put CHAT_IDENTITY_SECRET`. Nooit als `var`: dit
+   * hoort niet in een repo en niet in een dashboard-overzicht.
+   */
+  CHAT_IDENTITY_SECRET?: string;
+
+  /** Berichten per minuut per chatsessie. Ongeldig/ontbrekend → 10. */
+  CHAT_RATE_PER_MIN?: string;
+  /** Harde bovengrens per chatsessie. Ongeldig/ontbrekend → 100. */
+  CHAT_MAX_PER_SESSION?: string;
+  /** Maximale lengte van één bezoekersbericht. Ongeldig/ontbrekend → 2000. */
+  CHAT_MAX_MESSAGE_CHARS?: string;
+
+  /**
    * Prefix voor ticketnummers, drie letters (PREFIX-JJMM-NNNN). Ontbreekt of
    * ongeldig → "TIC". Hoort per tenant in het control plane; hier als var.
    */
@@ -113,6 +148,19 @@ export interface Env {
   FACTUMAI_MCP_CRM_URL?: string;
   FACTUMAI_MCP_ERP_URL?: string;
   FACTUMAI_MCP_MAIL_URL?: string;
+  /**
+   * Wélke mailbox van deze org de agent gebruikt (`instanceKey` uit het
+   * dashboard, bv. `mail-agent`).
+   *
+   * **Zet dit zodra de org meer dan één mailbox heeft gekoppeld.** Leeg
+   * betekent niet "geen keuze" maar "de primaire instance" — en dat is bij een
+   * organisatie doorgaans het adres waar echte klanten naartoe schrijven. Deze
+   * agent leest daar dan niet alleen uit, hij **antwoordt er ook vanuit**.
+   *
+   * De beschikbare sleutels staan in het dashboard bij de MCP-activaties van
+   * de org.
+   */
+  FACTUMAI_MCP_MAIL_INSTANCE_KEY?: string;
   FACTUMAI_MCP_SHIPPING_URL?: string;
   FACTUMAI_MCP_API_KEY?: string;
   /**
@@ -215,6 +263,12 @@ export interface PlatformStore {
   saveReviewItem(item: ReviewItem): Promise<void>;
   loadReviewItem(reviewItemId: string): Promise<ReviewItem>;
   markSignal(signalId: string, status: Signal['status']): Promise<void>;
+  /**
+   * Claimt een signaal om het te verwerken; `false` als een ander het al heeft.
+   * Voorkomt dat de chat-DO en de poller dezelfde beurt allebei draaien — en de
+   * bezoeker dus twee antwoorden krijgt. Zie de implementatie in `store.ts`.
+   */
+  claimSignal(signalId: string, staleAfterMs?: number): Promise<boolean>;
 
   // ── Fase 3 — compound-fan-in ──────────────────────────────────────────
   /**

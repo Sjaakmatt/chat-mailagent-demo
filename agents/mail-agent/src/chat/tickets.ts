@@ -13,6 +13,7 @@ import {
   ticketPeriod,
   ticketReadiness,
   confirmationText,
+  categoryLabel,
   CONFIRMATION,
   type TicketIdentity,
 } from '@factumai/agent-core';
@@ -25,6 +26,12 @@ export interface CreateTicketInput {
   category?: string | null;
   summary: string;
   identity: TicketIdentity;
+  /**
+   * Waarom deze categorie langs een mens gaat, in één zin, uit de beleidsregel
+   * die matchte. Gaat letterlijk de bevestiging in. Leeg = de generieke zin uit
+   * `CONFIRMATION`.
+   */
+  handoverReason?: string | null;
 }
 
 export interface CreatedTicket {
@@ -90,5 +97,19 @@ export async function createTicket(
     prefer: 'return=minimal,resolution=merge-duplicates',
   });
 
-  return { id, number, confirmation: confirmationText(number, CONFIRMATION) };
+  // Even benoemen waar het over ging, vóór de vaste bevestiging. Dat komt uit
+  // gegevens die we al hebben — het categorielabel en het ordernummer — en niet
+  // uit een model, dus er kan geen belofte in sluipen. Zonder deze regel leest
+  // de bevestiging als een bonnetje: een nummer zonder onderwerp.
+  const onderwerp = categoryLabel(input.category)?.toLowerCase();
+  const order = readiness.state === 'complete' ? readiness.orderReference : null;
+  const aanhef = onderwerp
+    ? `Je vraag over ${onderwerp}${order ? ` bij ${order}` : ''} zet ik door.\n\n`
+    : '';
+
+  return {
+    id,
+    number,
+    confirmation: aanhef + confirmationText(number, CONFIRMATION, input.handoverReason),
+  };
 }

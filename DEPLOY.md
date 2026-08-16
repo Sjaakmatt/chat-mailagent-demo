@@ -54,6 +54,20 @@ npx wrangler secret put FACTUMAI_MCP_API_KEY
 # en de overige MCP's die deze klant gebruikt (ERP, CRM, shipping)
 ```
 
+**Heeft de org meer dan één mailbox gekoppeld? Zet dan ook de instance.** Dit
+is geen `secret` maar een `var` (het is geen geheim, en je wilt in de config
+kunnen zien welke bak de agent gebruikt):
+
+```jsonc
+"vars": { "FACTUMAI_MCP_MAIL_INSTANCE_KEY": "mail-agent" }
+```
+
+Sla je dit over, dan kiest de MCP de instance die als **primair** is
+gemarkeerd. Dat is bij de meeste organisaties het adres waar echte klanten
+naartoe schrijven — en deze agent leest daar niet alleen uit, hij **antwoordt
+er ook vanuit** zodra iemand een concept goedkeurt. De beschikbare sleutels
+staan in het dashboard bij de MCP-activaties van de org.
+
 Bij MCP's achter Cloudflare Access horen ook `CF_ACCESS_CLIENT_ID` en
 `CF_ACCESS_CLIENT_SECRET` — beide, anders antwoordt Access met 403 aan de edge.
 Voor de oude `*.workers.dev`-URL's geldt in plaats daarvan

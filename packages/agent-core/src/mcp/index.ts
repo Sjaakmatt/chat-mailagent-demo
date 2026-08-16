@@ -59,6 +59,46 @@ export interface McpEndpoint {
    * `cfAccessHeaders(env)`.
    */
   cfAccess?: Record<string, string>;
+  /**
+   * Wélke instance van deze MCP. Eén org kan er meerdere hebben: drie
+   * mailboxen, twee administraties, twee advertentieaccounts.
+   *
+   * **Leeg is niet neutraal.** De MCP valt dan terug op de instance die als
+   * primair is gemarkeerd, en dat is precies de instance die je bij een agent
+   * meestal níét wilt — bij mail is dat het adres waar echte klanten naartoe
+   * schrijven. En omdat deze agent ook verstuurt, is die default niet alleen
+   * lezen uit de verkeerde bak maar ook antwoorden vanuit het verkeerde adres.
+   *
+   * Zet 'm dus expliciet zodra een org meer dan één instance heeft.
+   */
+  instanceKey?: string;
+}
+
+/**
+ * Het mail-endpoint, op één plek. De agent bouwde dit op twee plekken los op
+ * (ophalen bij binnenkomst, versturen na goedkeuring); zodra er een derde ding
+ * bij komt — een instance, een header — loopt dat gegarandeerd uit elkaar. En
+ * bij mail is "uit elkaar" concreet: lezen uit de ene mailbox en antwoorden
+ * vanuit de andere.
+ *
+ * Geeft `null` als er geen URL geconfigureerd is, zodat de caller zelf kan
+ * beslissen of dat een overslaan of een fout is.
+ */
+export function mailEndpoint(env: {
+  FACTUMAI_MCP_MAIL_URL?: string;
+  FACTUMAI_MCP_MAIL_INSTANCE_KEY?: string;
+  FACTUMAI_MCP_INBOUND_SECRET?: string;
+  FACTUMAI_MCP_API_KEY?: string;
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+}): McpEndpoint | null {
+  if (!env.FACTUMAI_MCP_MAIL_URL) return null;
+  return {
+    url: env.FACTUMAI_MCP_MAIL_URL,
+    apiKey: mcpBearer(env),
+    cfAccess: cfAccessHeaders(env),
+    instanceKey: env.FACTUMAI_MCP_MAIL_INSTANCE_KEY?.trim() || undefined,
+  };
 }
 
 export async function callMcp<T = unknown>(
@@ -87,9 +127,15 @@ export async function callMcp<T = unknown>(
   }
   try {
     await client.connect(transport);
+    // De instance hoort bij het endpoint, niet bij de call: elke tool op deze
+    // MCP moet dezelfde mailbox/administratie raken. Nestelen in de
+    // tenant-context is wat de MCP-kant verwacht (`TenantContextSchema`).
+    const tenantContext = endpoint.instanceKey
+      ? { ...ctx, instanceKey: endpoint.instanceKey }
+      : ctx;
     const result = await client.callTool({
       name: toolName,
-      arguments: { tenantContext: ctx, ...args },
+      arguments: { tenantContext, ...args },
     });
     if ((result as { isError?: boolean }).isError) {
       const content = (result as { content?: Array<{ text?: string }> }).content;

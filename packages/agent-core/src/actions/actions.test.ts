@@ -1,0 +1,315 @@
+import { describe, it, expect } from 'vitest';
+import {
+  ACTION_STATUSES,
+  ACTION_TYPES,
+  canTransitionAction,
+  evaluateApproval,
+  getActionType,
+  identificationSuffices,
+  isExpired,
+  isOpenAction,
+  mayProposeAction,
+  preconditionDrift,
+  requiredApproverRole,
+  ungroundedFields,
+  type ProposedAction,
+} from './index.js';
+
+const nu = new Date('2026-08-16T09:00:00.000Z');
+
+function voorstel(over: Partial<ProposedAction> = {}): ProposedAction {
+  return {
+    id: 'act_1',
+    organizationId: 'org-demo',
+    type: 'werkticket_aanmaken',
+    payload: { subject: 'Onderdeel nabestellen' },
+    evidence: [{ field: 'subject', toolCallId: 'tc-1' }],
+    precondition: {},
+    impact: 'Er wordt een werkticket aangemaakt voor productie.',
+    status: 'voorgesteld',
+    runId: 'sig_1',
+    idempotencyKey: 'act_1',
+    createdAt: '2026-08-16T08:00:00.000Z',
+    expiresAt: '2026-08-23T08:00:00.000Z',
+    ...over,
+  };
+}
+
+// ---------------------------------------------------------------------------
+
+describe('statusmachine', () => {
+  it('loopt de gelukkige route helemaal af', () => {
+    expect(canTransitionAction('voorgesteld', 'goedgekeurd')).toBe(true);
+    expect(canTransitionAction('goedgekeurd', 'uitgevoerd')).toBe(true);
+  });
+
+  it('laat een uitgevoerde actie nergens meer heen', () => {
+    for (const naar of ACTION_STATUSES) {
+      expect(canTransitionAction('uitgevoerd', naar)).toBe(false);
+    }
+  });
+
+  // Hervalidatie leeft hier: goedkeuren, preconditie klopt niet meer, terug in
+  // de wachtrij in plaats van uitvoeren.
+  it('staat verlopen toe ná goedkeuren', () => {
+    expect(canTransitionAction('goedgekeurd', 'verlopen')).toBe(true);
+  });
+
+  // Een netwerkfout tijdens uitvoeren mag geen voorstel definitief weggooien.
+  it('laat een mislukte uitvoering opnieuw', () => {
+    expect(canTransitionAction('mislukt', 'goedgekeurd')).toBe(true);
+    expect(canTransitionAction('mislukt', 'uitgevoerd')).toBe(false);
+  });
+
+  it('kan niet van voorgesteld direct naar uitgevoerd', () => {
+    expect(canTransitionAction('voorgesteld', 'uitgevoerd')).toBe(false);
+  });
+
+  it('weet wat er nog op een mens wacht', () => {
+    expect(isOpenAction('voorgesteld')).toBe(true);
+    expect(isOpenAction('mislukt')).toBe(true);
+    expect(isOpenAction('uitgevoerd')).toBe(false);
+    expect(isOpenAction('afgewezen')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('typeregistratie', () => {
+  it('heeft unieke slugs', () => {
+    const slugs = ACTION_TYPES.map((t) => t.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  // Het type om de machinerie op te beproeven: tool bestaat, impact op de klant
+  // is nul, beide kanalen mogen.
+  it('begint met werkticket aanmaken', () => {
+    expect(ACTION_TYPES[0].slug).toBe('werkticket_aanmaken');
+    expect(ACTION_TYPES[0].channels).toEqual(['mail', 'chat']);
+  });
+
+  // Alles wat de klant of het geld raakt, mag niet uit een anoniem gesprek
+  // ontstaan op basis van een ordernummer van de pakbon.
+  it('laat geen enkel type met zwakke identificatie uit chat ontstaan, behalve het interne', () => {
+    for (const t of ACTION_TYPES) {
+      if (t.slug === 'werkticket_aanmaken') continue;
+      if (t.channels.includes('chat')) {
+        expect(t.requiredIdentification).toBe('bevestigd');
+      }
+    }
+  });
+
+  it('geeft elk type een vervaltermijn', () => {
+    for (const t of ACTION_TYPES) expect(t.expiresAfterMinutes).toBeGreaterThan(0);
+  });
+});
+
+describe('mayProposeAction', () => {
+  it('laat een toegestaan type door', () => {
+    const r = mayProposeAction({
+      type: 'werkticket_aanmaken',
+      channel: 'chat',
+      identification: 'zwak',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('weigert een onbekend type', () => {
+    const r = mayProposeAction({ type: 'raket_lanceren', channel: 'mail', identification: 'bevestigd' });
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  // De kanaalinstelling geldt bovenop identificatie: een type dat op chat
+  // uitstaat ontstaat daar niet, ook niet met een bevestigde bezoeker.
+  it('weigert op een uitgeschakeld kanaal, ook bij de sterkste identificatie', () => {
+    const r = mayProposeAction({
+      type: 'adres_wijzigen',
+      channel: 'chat',
+      identification: 'bevestigd',
+    });
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.reason).toContain('chat');
+  });
+
+  it('weigert bij te zwakke identificatie', () => {
+    const r = mayProposeAction({
+      type: 'adres_wijzigen',
+      channel: 'mail',
+      identification: 'zwak',
+    });
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.reason).toContain('gematcht');
+  });
+});
+
+describe('identificatieniveaus', () => {
+  it('rangschikt van zwak naar bevestigd', () => {
+    expect(identificationSuffices('bevestigd', 'gematcht')).toBe(true);
+    expect(identificationSuffices('gematcht', 'gematcht')).toBe(true);
+    expect(identificationSuffices('zwak', 'gematcht')).toBe(false);
+    expect(identificationSuffices('gematcht', 'bevestigd')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('onderbouwing per veld', () => {
+  it('vindt een ongedekt veld diep in de payload', () => {
+    const missend = ungroundedFields(
+      { orderNumber: 'DEMO-1', address: { street: 'Kade 1', city: 'Utrecht' } },
+      [
+        { field: 'orderNumber', toolCallId: 'tc-1' },
+        { field: 'address.street', toolCallId: 'tc-2' },
+      ],
+    );
+    expect(missend).toEqual(['address.city']);
+  });
+
+  it('kijkt in array-regels, want daar zitten de bedragen', () => {
+    const missend = ungroundedFields({ lines: [{ amount: 340, description: 'Retour' }] }, [
+      { field: 'lines.0.description', toolCallId: 'tc-1' },
+    ]);
+    expect(missend).toEqual(['lines.0.amount']);
+  });
+
+  it('is tevreden als alles gedekt is', () => {
+    expect(ungroundedFields({ a: 1 }, [{ field: 'a', toolCallId: 'tc-1' }])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('autorisatiegrens', () => {
+  const credit = getActionType('creditnota_voorstellen')!;
+
+  it('laat een bedrag onder de drempel bij de medewerker', () => {
+    expect(requiredApproverRole(credit, { amount: 100 })).toBe('reviewer');
+  });
+
+  it('tilt een bedrag boven de drempel naar de beheerder', () => {
+    expect(requiredApproverRole(credit, { amount: 340 })).toBe('admin');
+  });
+
+  it('laat een type zonder drempel met rust', () => {
+    const ticket = getActionType('werkticket_aanmaken')!;
+    expect(requiredApproverRole(ticket, { amount: 10_000 })).toBe('reviewer');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('hervalidatie', () => {
+  it('ziet een veranderde orderstatus', () => {
+    const drift = preconditionDrift(
+      { orderNumber: 'DEMO-1', status: 'pending' },
+      { orderNumber: 'DEMO-1', status: 'shipped' },
+    );
+    expect(drift).toEqual([{ field: 'status', was: 'pending', nu: 'shipped' }]);
+  });
+
+  // Wat het bronsysteem er verder bij levert, is niet waarop het voorstel is
+  // gebaseerd. Meevergelijken zou elk voorstel op ruis laten afketsen.
+  it('negeert velden die niet in de preconditie stonden', () => {
+    expect(preconditionDrift({ status: 'pending' }, { status: 'pending', updatedAt: 'x' })).toEqual(
+      [],
+    );
+  });
+
+  it('ziet een veld dat verdwenen is', () => {
+    const drift = preconditionDrift({ status: 'pending' }, {});
+    expect(drift).toEqual([{ field: 'status', was: 'pending', nu: undefined }]);
+  });
+});
+
+describe('isExpired', () => {
+  it('is verlopen op het moment zelf', () => {
+    expect(isExpired({ expiresAt: '2026-08-16T09:00:00.000Z' }, nu)).toBe(true);
+  });
+  it('is nog geldig ervoor', () => {
+    expect(isExpired({ expiresAt: '2026-08-16T09:00:01.000Z' }, nu)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('evaluateApproval — de poort vóór uitvoeren', () => {
+  it('laat een schoon voorstel door', () => {
+    const r = evaluateApproval({
+      action: voorstel(),
+      actueel: {},
+      approverRole: 'reviewer',
+      now: nu,
+    });
+    expect(r).toEqual({ ok: true });
+  });
+
+  // De kern van de hele wijziging: veranderd = niet uitvoeren, terug in de
+  // wachtrij, met de afwijking zichtbaar.
+  it('weigert en verloopt als de situatie is veranderd', () => {
+    const r = evaluateApproval({
+      action: voorstel({
+        type: 'adres_wijzigen',
+        precondition: { orderNumber: 'DEMO-1', status: 'pending' },
+      }),
+      actueel: { orderNumber: 'DEMO-1', status: 'shipped' },
+      approverRole: 'reviewer',
+      now: nu,
+    });
+    expect(r).toMatchObject({ ok: false, status: 'verlopen' });
+    if (!r.ok) {
+      expect(r.reason).toContain('status');
+      expect(r.reason).toContain('shipped');
+    }
+  });
+
+  it('weigert een voorstel dat over de datum is', () => {
+    const r = evaluateApproval({
+      action: voorstel({ expiresAt: '2026-08-16T08:59:00.000Z' }),
+      actueel: {},
+      approverRole: 'reviewer',
+      now: nu,
+    });
+    expect(r).toMatchObject({ ok: false, status: 'verlopen' });
+  });
+
+  it('weigert een bedrag boven de drempel bij een medewerker', () => {
+    const r = evaluateApproval({
+      action: voorstel({ type: 'creditnota_voorstellen', payload: { amount: 340 } }),
+      actueel: {},
+      approverRole: 'reviewer',
+      now: nu,
+    });
+    expect(r).toMatchObject({ ok: false, status: 'afgewezen' });
+    if (!r.ok) expect(r.reason).toContain('beheerder');
+  });
+
+  it('laat datzelfde bedrag door bij een beheerder', () => {
+    const r = evaluateApproval({
+      action: voorstel({ type: 'creditnota_voorstellen', payload: { amount: 340 } }),
+      actueel: {},
+      approverRole: 'admin',
+      now: nu,
+    });
+    expect(r).toEqual({ ok: true });
+  });
+
+  it('laat een viewer niets goedkeuren', () => {
+    const r = evaluateApproval({
+      action: voorstel(),
+      actueel: {},
+      approverRole: 'viewer',
+      now: nu,
+    });
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  it('keurt niets twee keer goed', () => {
+    const r = evaluateApproval({
+      action: voorstel({ status: 'uitgevoerd' }),
+      actueel: {},
+      approverRole: 'admin',
+      now: nu,
+    });
+    expect(r).toMatchObject({ ok: false });
+  });
+});

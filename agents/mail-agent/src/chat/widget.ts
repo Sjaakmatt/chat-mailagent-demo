@@ -58,6 +58,11 @@ const PAGE = String.raw`<!doctype html>
   .msg.in { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
   .msg.out { align-self: flex-start; background: var(--muted); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
   .meta { align-self: center; font-size: 12px; color: var(--ink-soft); font-style: italic; }
+  /* Mededelingen die geen gespreksinhoud zijn (limiet bereikt, vertraging). */
+  .notice {
+    align-self: stretch; font-size: 13px; color: #b91c1c;
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px;
+  }
   form { display: flex; gap: 8px; }
   form input { flex: 1; }
   button {
@@ -77,8 +82,6 @@ const PAGE = String.raw`<!doctype html>
   </header>
 
   <div class="setup">
-    <label for="email">E-mailadres</label>
-    <input id="email" type="email" placeholder="klant@example.com" style="flex:1">
     <span class="hint">Nodig voor <code>systeem</code>-antwoorden en tickets.</span>
   </div>
 
@@ -109,7 +112,6 @@ const PAGE = String.raw`<!doctype html>
   var form = document.getElementById('form');
   var input = document.getElementById('input');
   var send = document.getElementById('send');
-  var email = document.getElementById('email');
 
   function add(text, cls) {
     var el = document.createElement('div');
@@ -117,6 +119,9 @@ const PAGE = String.raw`<!doctype html>
     el.textContent = text;
     log.appendChild(el);
     log.scrollTop = log.scrollHeight;
+    // Teruggeven zodat de wachtregel bijgewerkt kan worden in plaats van
+    // dat er telkens een nieuwe onder komt.
+    return el;
   }
 
   function setStatus(text, cls) {
@@ -151,19 +156,37 @@ const PAGE = String.raw`<!doctype html>
       if (data.messages.length) add('— eerdere berichten —', 'meta');
       return;
     }
-    if (data.type === 'message') add(data.body, 'msg out');
+    // Voortgang vervangt zichzelf in plaats van te stapelen: drie regels onder
+    // elkaar leest als drie gebeurtenissen, terwijl het één wachtende beurt is.
+    if (data.type === 'status') { setPending(data.body); return; }
+    if (data.type === 'message') { clearPending(); add(data.body, 'msg out'); return; }
+    if (data.type === 'notice') { clearPending(); add(data.body, 'notice'); return; }
   };
+
+  // Een wachtregel per beurt: pending is het element zelf, zodat de tekst
+  // wordt bijgewerkt in plaats van dat er een regel bij komt.
+  var pending = null;
+  function setPending(text) {
+    if (!pending) pending = add(text, 'meta');
+    else pending.textContent = text;
+  }
+  function clearPending() {
+    if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
+    pending = null;
+  }
 
   form.onsubmit = function (e) {
     e.preventDefault();
     var body = input.value.trim();
     if (!body || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ body: body, email: email.value.trim() || null }));
+    // Zelfde gedrag als de productiewidget: alleen tekst. Een adres in het
+    // bericht haalt de server er zelf uit.
+    ws.send(JSON.stringify({ body: body }));
     add(body, 'msg in');
     input.value = '';
-    // De agent doet z'n werk buiten de sessie om; even zichtbaar maken dat er
-    // iets loopt, anders lijkt het alsof er niets gebeurt.
-    add('de agent kijkt ernaar…', 'meta');
+    // Zichtbaar maken dat er iets loopt. De lus stuurt daarna zelf fasen
+    // ('routeren', 'opzoeken', 'schrijven') die deze regel vervangen.
+    setPending('de agent kijkt ernaar…');
   };
 
   send.disabled = true;

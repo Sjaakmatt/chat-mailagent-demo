@@ -10,14 +10,15 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  Inbox,
   BarChart3,
-  Settings,
-  FileClock,
-  ShieldCheck,
-  PlayCircle,
   ClipboardList,
+  FileClock,
+  Inbox,
   MessagesSquare,
+  PlayCircle,
+  Settings,
+  ShieldCheck,
+  ThumbsUp,
 } from "lucide-react";
 
 export interface NavItem {
@@ -33,7 +34,12 @@ export interface Brand {
   name: string;
   /**
    * Optioneel gesplitst logo: het eerste deel krijgt de accentkleur, het tweede
-   * de normale tekstkleur (bv. "sun" + "wise"). Leeg = gewoon `name` tonen.
+   * de normale tekstkleur (bv. `{ accent: "Factum", rest: "AI" }`). Leeg =
+   * gewoon `name` tonen.
+   *
+   * Alles wat dit toont loopt via `components/BrandMark.tsx`. Type de naam
+   * nergens anders in: hij stond ooit los in drie auth-schermen en bleef daar
+   * na een herbranding gewoon staan.
    */
   logo?: { accent: string; rest: string };
   /** Ondertitel onder het logo. */
@@ -51,12 +57,14 @@ export interface Brand {
 
 /**
  * Kern-navigatie. Een verse klant-agent heeft precies deze schermen:
- * werkbak → analytics → auditlog → beleid → toegang.
+ * werkbak → tickets → gesprekken → feedback → analytics → auditlog → beleid →
+ * toegang.
  */
 const CORE_NAV: NavItem[] = [
   { href: "/", label: "Werkbak", icon: Inbox },
   { href: "/tickets", label: "Tickets", icon: ClipboardList },
   { href: "/gesprekken", label: "Gesprekken", icon: MessagesSquare },
+  { href: "/feedback", label: "Feedback", icon: ThumbsUp },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/audit", label: "Auditlog", icon: FileClock },
   { href: "/policy", label: "Beleid", icon: Settings, adminOnly: true },

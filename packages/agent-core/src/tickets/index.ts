@@ -115,38 +115,106 @@ export function ticketReadiness(identity: TicketIdentity): TicketReadiness {
 export interface ConfirmationConfig {
   /**
    * Vaste opzet, per tenant instelbaar. `{number}` wordt vervangen door het
-   * ticketnummer; verder komt er niets uit een model.
+   * ticketnummer, `{reason}` door de reden waarom dit naar een mens gaat;
+   * verder komt er niets uit een model.
    *
    * Bewust géén doorlooptijdbelofte in de standaardtekst — wil een tenant die
    * wel, dan is dat een bewuste instelling en geen bijwerking.
    */
   template: string;
+  /**
+   * Wat er op `{reason}` komt als de beleidsregel er zelf geen meegeeft.
+   *
+   * Bewust generiek: dit is de terugval, niet de bedoeling. Een goede reden is
+   * categoriespecifiek ("een wijziging op een lopende order laten we altijd
+   * door een collega bevestigen") en die kent deze laag niet — die staat als
+   * data bij de beleidsregel (`aios_policy_rules.handover_reason`), per klant,
+   * en verandert zonder deploy.
+   */
+  defaultHandoverReason: string;
   /** Tekst als er (nog) geen ticket is omdat de identificatie ontbreekt. */
   needsIdentityText: string;
+  /** Als alleen het mailadres nog ontbreekt. Het ordernummer is al bekend. */
+  needsEmailText: string;
+  /** Als alleen het ordernummer nog ontbreekt. */
+  needsOrderText: string;
 }
 
 export const CONFIRMATION: ConfirmationConfig = {
+  // Drie dingen die een bezoeker op dit moment wil weten, en niet meer: wat er
+  // met zijn vraag gebeurt, waar dat nummer voor dient, en dat het gesprek nog
+  // openstaat. Een bevestiging die alleen een nummer noemt voelt als een
+  // afgesloten loket.
+  //
+  // Nog steeds géén doorlooptijd: dat is een afspraak per klant en hoort een
+  // bewuste instelling te zijn, geen bijwerking van de standaardtekst.
   template:
-    'Dit is uitzoekwerk voor een collega. Ik heb er ticket {number} voor ' +
-    'aangemaakt; je hoort zo snel mogelijk van ons.',
+    '{reason}\n\n' +
+    'Ik heb je vraag genoteerd onder ticket {number}. Bewaar dat nummer: noem ' +
+    'je het in een volgend bericht, dan pak ik dit gesprek er meteen bij. Je ' +
+    'krijgt bericht op het mailadres dat je hebt opgegeven.\n\n' +
+    'Kan ik je ondertussen ergens anders mee helpen?',
+  defaultHandoverReason:
+    'Dat zoekt een collega voor je uit — hier kan ik zelf niet over beslissen.',
   needsIdentityText:
     'Om dit voor je uit te zoeken heb ik je e-mailadres nodig, en als je het ' +
     'bij de hand hebt ook je ordernummer.',
+  // Waarom drie teksten en niet één: wie net zijn ordernummer heeft gegeven en
+  // dezelfde vraag terugkrijgt, denkt dat de chat kapot is. Erkennen wat er al
+  // binnen is, kost één zin en scheelt dat gevoel volledig.
+  needsEmailText:
+    'Dank je, dat ordernummer heb ik. Wat is het e-mailadres waarmee je hebt ' +
+    'besteld? Dan zoek ik het meteen op.',
+  needsOrderText:
+    'Dank je, dat mailadres heb ik. Heb je het ordernummer er ook bij? Dan ' +
+    'zoek ik het meteen op.',
 };
 
 /**
- * Vult het ticketnummer in. Ontbreekt de placeholder in een aangepaste
- * template, dan plakken we het nummer er achteraan in plaats van het stil te
- * laten verdwijnen — een bevestiging zonder nummer is waardeloos.
+ * Welke tekst hoort bij wat er nog ontbreekt.
+ *
+ * Zonder dit krijgt een bezoeker die net iets heeft aangeleverd letterlijk
+ * dezelfde vraag terug — en dat leest als een chat die niet luistert.
+ */
+export function identityPrompt(
+  have: { email?: string | null; order?: string | null },
+  config: ConfirmationConfig = CONFIRMATION,
+): string {
+  const email = Boolean(have.email?.trim());
+  const order = Boolean(have.order?.trim());
+  if (order && !email) return config.needsEmailText;
+  if (email && !order) return config.needsOrderText;
+  return config.needsIdentityText;
+}
+
+/**
+ * Vult het ticketnummer en de reden in. Ontbreekt de nummer-placeholder in een
+ * aangepaste template, dan plakken we het nummer er achteraan in plaats van het
+ * stil te laten verdwijnen — een bevestiging zonder nummer is waardeloos.
+ *
+ * `reason` komt van de beleidsregel die op deze categorie matchte en legt uit
+ * wáárom er een mens aan te pas komt. Dat is het verschil tussen "een collega
+ * kijkt ernaar" (klinkt als een afhouder) en "een wijziging op een lopende
+ * order laten we altijd door een collega bevestigen" (klinkt als beleid, want
+ * dat is het ook). Ontbreekt hij, dan valt de tekst terug op de generieke zin
+ * uit de config — nooit op iets dat een model heeft bedacht.
  */
 export function confirmationText(
   number: string,
   config: ConfirmationConfig = CONFIRMATION,
+  reason?: string | null,
 ): string {
-  if (config.template.includes('{number}')) {
-    return config.template.replaceAll('{number}', number);
+  // De laatste `??` is geen franje: `{reason}` is nieuw, dus een tenant kan een
+  // eigen config hebben die het veld niet kent. Zonder deze terugval staat er
+  // letterlijk "undefined" in een bericht aan een klant.
+  const withReason = config.template.replaceAll(
+    '{reason}',
+    reason?.trim() || config.defaultHandoverReason || CONFIRMATION.defaultHandoverReason,
+  );
+  if (withReason.includes('{number}')) {
+    return withReason.replaceAll('{number}', number);
   }
-  return `${config.template} (${number})`;
+  return `${withReason} (${number})`;
 }
 
 // ---------------------------------------------------------------------------

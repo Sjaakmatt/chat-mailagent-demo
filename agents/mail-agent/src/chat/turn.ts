@@ -21,6 +21,7 @@ import {
   mayRespondWithoutHuman,
   routingFor,
   CONFIRMATION,
+  identityPrompt,
   DOMAIN,
   type OutcomeDecision,
   type ReviewItem,
@@ -48,7 +49,12 @@ export async function finishChatTurn(
   outcome: OutcomeDecision | undefined,
   opts: { outOfDomain?: boolean; conversationId: string; category?: string | null },
 ): Promise<ChatTurnResult | null> {
-  const proposed = item.proposed as { body?: string; original?: Record<string, unknown> };
+  const proposed = item.proposed as {
+    body?: string;
+    original?: Record<string, unknown>;
+    classification?: unknown;
+    policy?: { handoverReason?: string };
+  };
   const drafted = (proposed.body ?? '').trim();
 
   const push = async (text: string): Promise<void> => {
@@ -72,26 +78,53 @@ export async function finishChatTurn(
   // een ticketnummer, niet het opgestelde antwoord — dat is voor de medewerker.
   if (routingFor(decided).createsTicket) {
     const original = (proposed.original ?? {}) as Record<string, unknown>;
+    const contactEmail = typeof original.from === 'string' ? original.from : null;
+
+    // Het ordernummer komt uit de classificatie, niet uit de payload — daar
+    // staat het niet in. De classifier haalt het uit het bericht óf uit het
+    // gesprek ervoor, precies zoals `orchestrate` het ook gebruikt om te
+    // bepalen of de bezoeker geïdentificeerd is. Hier iets anders lezen
+    // betekende dat een gegeven ordernummer nooit meetelde, en de bezoeker de
+    // vraag eindeloos terugkreeg.
+    const geclassificeerd = (proposed.classification ?? {}) as {
+      extracted?: Record<string, unknown>;
+    };
+    const uitClassificatie = geclassificeerd.extracted?.orderNumber;
+    const orderReference =
+      typeof uitClassificatie === 'string' && uitClassificatie.trim()
+        ? uitClassificatie
+        : typeof original.orderNumber === 'string'
+          ? original.orderNumber
+          : null;
+
+    // De regel die `plan` toepaste, zoals die op het ReviewItem is gezet. Staat
+    // onder `proposed` en niet op het item zelf — dat is de plek waar de
+    // orchestrator 'm neerlegt.
+    const toegepastBeleid = (proposed.policy ?? {}) as { handoverReason?: string };
+
     const ticket = await createTicket(env, {
       organizationId: item.organizationId,
       conversationId: opts.conversationId,
       reviewItemId: item.id,
       category: opts.category ?? null,
       summary: item.summary,
-      identity: {
-        contactEmail: typeof original.from === 'string' ? original.from : null,
-        orderReference:
-          typeof original.orderNumber === 'string' ? original.orderNumber : null,
-      },
+      identity: { contactEmail, orderReference },
+      // Uit de beleidsregel die op deze categorie matchte — zie steps.ts. Zo
+      // legt de bevestiging uit wélke afspraak hier geldt, in plaats van de
+      // bezoeker af te schepen met "een collega kijkt ernaar".
+      handoverReason: toegepastBeleid.handoverReason ?? null,
     });
 
     // Geen ticket = te weinig identificatie. Dan vragen we erom in plaats van
     // een ticket te maken waar niemand op kan terugkomen.
     if (!ticket) {
-      await push(CONFIRMATION.needsIdentityText);
+      // Vraag alleen naar wat er nog ontbreekt. Wie net zijn ordernummer gaf en
+      // dezelfde vraag terugkrijgt, denkt dat de chat kapot is.
+      const vraag = identityPrompt({ email: contactEmail, order: orderReference });
+      await push(vraag);
       return {
-        reply: CONFIRMATION.needsIdentityText,
-        reason: 'taak zonder bruikbare identificatie — om gegevens gevraagd',
+        reply: vraag,
+        reason: 'taak zonder volledige identificatie — om het ontbrekende gevraagd',
       };
     }
 
