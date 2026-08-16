@@ -133,6 +133,19 @@ export interface Env {
   FACTUMAI_MCP_CRM_URL?: string;
   FACTUMAI_MCP_ERP_URL?: string;
   FACTUMAI_MCP_MAIL_URL?: string;
+  /**
+   * Wélke mailbox van deze org de agent gebruikt (`instanceKey` uit het
+   * dashboard, bv. `mail-agent`).
+   *
+   * **Zet dit zodra de org meer dan één mailbox heeft gekoppeld.** Leeg
+   * betekent niet "geen keuze" maar "de primaire instance" — en dat is bij een
+   * organisatie doorgaans het adres waar echte klanten naartoe schrijven. Deze
+   * agent leest daar dan niet alleen uit, hij **antwoordt er ook vanuit**.
+   *
+   * De beschikbare sleutels staan in het dashboard bij de MCP-activaties van
+   * de org.
+   */
+  FACTUMAI_MCP_MAIL_INSTANCE_KEY?: string;
   FACTUMAI_MCP_SHIPPING_URL?: string;
   FACTUMAI_MCP_API_KEY?: string;
   /**
