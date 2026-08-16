@@ -1,0 +1,123 @@
+name: Klanten aanstoten
+
+# Zodra er iets op main landt, laten we elke klant-repo zijn upstream-sync
+# draaien. Anders staat een kernverbetering tot maandagochtend stil.
+#
+# Wat hier NIET gebeurt: mergen bij de klant. Dat blijft het werk van
+# `upstream-sync.yml` in de klant-repo zelf, met dezelfde twee uitkomsten als
+# altijd — schoon + groen gaat door naar main, conflict of rode test wordt een
+# PR. Deze workflow verandert alleen het *moment* waarop dat gebeurt, niet de
+# beslissing. Dat is met opzet: de veiligheid zit in de klant-workflow, en die
+# willen we niet op twee plekken hebben staan.
+#
+# Benodigd in DEZE repo (Settings → Secrets and variables → Actions):
+#
+#   variable CLIENT_REPOS         de klant-repo's, één per regel of
+#                                 komma-gescheiden. Bijvoorbeeld:
+#                                     org/klant-a-mail-agent
+#                                     org/klant-b-mail-agent
+#   secret   CLIENT_DISPATCH_TOKEN fine-grained PAT met alleen
+#                                 "Actions: Read and write" op precies die
+#                                 repo's. GITHUB_TOKEN kan dit niet — die
+#                                 komt de grens van deze repo niet over.
+#
+# Ontbreekt er een? Dan slaat de workflow schoon over en blijft de
+# maandag-cron in de klant-repo's het vangnet. Hij faalt nooit op een
+# ontbrekende configuratie.
+#
+# Waarom de lijst in een VARIABLE en niet in een bestand hier: klantnamen
+# horen niet in het fundament (zie CLAUDE.md, "Wat hier NIET in hoort"). Een
+# `clients.json` in de repo zou die regel breken en bij elke nieuwe klant een
+# commit op het fundament kosten.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: notify-clients
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  notify:
+    name: klant-repos aanstoten
+    runs-on: ubuntu-latest
+    steps:
+      - name: Voorwaarden
+        id: pre
+        env:
+          CLIENT_REPOS: ${{ vars.CLIENT_REPOS }}
+          DISPATCH_TOKEN: ${{ secrets.CLIENT_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          skip() { echo "::notice::$1"; echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          [ -n "${CLIENT_REPOS:-}" ] \
+            || skip "Variable CLIENT_REPOS niet gezet — niets aan te stoten. De maandag-cron in de klant-repo's blijft het vangnet."
+          [ -n "${DISPATCH_TOKEN:-}" ] \
+            || skip "Secret CLIENT_DISPATCH_TOKEN niet gezet — idem."
+
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Sync starten per klant
+        if: steps.pre.outputs.run == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CLIENT_DISPATCH_TOKEN }}
+          script: |
+            // Komma's én regeleindes toestaan, zodat de variabele leesbaar
+            // blijft als er tien klanten in staan.
+            const repos = `${{ vars.CLIENT_REPOS }}`
+              .split(/[\s,]+/)
+              .map((r) => r.trim())
+              .filter(Boolean);
+
+            const gelukt = [];
+            const mislukt = [];
+
+            for (const full of repos) {
+              const [owner, repo] = full.split('/');
+              if (!owner || !repo) {
+                mislukt.push(`${full} — geen owner/repo`);
+                continue;
+              }
+              try {
+                // Precies de trigger die de klant-workflow al had. Geen
+                // tweede code-pad bij de klant, dus niets extra om te
+                // onderhouden of te laten afwijken.
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,
+                  repo,
+                  workflow_id: 'upstream-sync.yml',
+                  ref: 'main',
+                });
+                gelukt.push(full);
+              } catch (err) {
+                // Eén onbereikbare klant mag de rest niet tegenhouden: een
+                // hernoemde repo of een token dat die ene niet dekt, is geen
+                // reden om de andere negen te laten wachten.
+                mislukt.push(`${full} — ${err.status ?? ''} ${err.message}`.trim());
+              }
+            }
+
+            for (const r of gelukt) core.notice(`Sync gestart: ${r}`);
+
+            // Luid, maar niet fataal. De maandag-cron haalt een gemiste klant
+            // alsnog op; een rode build hier zou suggereren dat de merge op
+            // het fundament mis is, en dat is niet zo.
+            for (const r of mislukt) core.warning(`Aanstoten mislukt: ${r}`);
+
+            core.summary
+              .addHeading('Klanten aangestoten', 3)
+              .addRaw(`${gelukt.length} van ${repos.length} gestart.`)
+              .write();
+
+            if (gelukt.length === 0 && repos.length > 0) {
+              core.setFailed(
+                'Geen enkele klant kon worden aangestoten — controleer ' +
+                  'CLIENT_DISPATCH_TOKEN en CLIENT_REPOS.',
+              );
+            }

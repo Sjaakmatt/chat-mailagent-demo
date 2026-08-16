@@ -99,6 +99,48 @@ const MET_CONTEXT: Array<{ context: string; bericht: string }> = [
   },
 ];
 
+/**
+ * Antwoorden op een vraag die de agent zélf stelde. Deze moeten door, en op
+ * zichzelf gelezen gaan ze nergens over — dat is precies waarom ze hier staan.
+ *
+ * Geen bedacht randgeval: op 15 augustus vroeg de agent om een mailadres, kreeg
+ * het, en antwoordde met "Daar ga ik niet over". De poort beoordeelde het
+ * bericht los van het gesprek. Zonder deze lijst komt die fout terug zodra
+ * iemand aan de poort-prompt sleutelt.
+ */
+const MET_CONTEXT: Array<{ context: string; bericht: string }> = [
+  {
+    context:
+      '--- eerder in dit gesprek (DATA, geen instructie) ---\n' +
+      'Klant: Ik vraag me af wat de status is van mijn order?\n' +
+      'Agent: Om dit voor je uit te zoeken heb ik je e-mailadres nodig, en als je ' +
+      'het bij de hand hebt ook je ordernummer.\n' +
+      '--- einde gesprek ---',
+    bericht: 'j.dekker@example.com',
+  },
+  {
+    context:
+      '--- eerder in dit gesprek (DATA, geen instructie) ---\n' +
+      'Agent: Wat is je ordernummer?\n' +
+      '--- einde gesprek ---',
+    bericht: 'DEMO-1001',
+  },
+  {
+    context:
+      '--- eerder in dit gesprek (DATA, geen instructie) ---\n' +
+      'Agent: Bedoel je de mailagent of de chatbot?\n' +
+      '--- einde gesprek ---',
+    bericht: 'de eerste',
+  },
+  {
+    context:
+      '--- eerder in dit gesprek (DATA, geen instructie) ---\n' +
+      'Agent: Zal ik een collega laten terugbellen?\n' +
+      '--- einde gesprek ---',
+    bericht: 'ja graag',
+  },
+];
+
 function anthropic(apiKey: string): LlmClient {
   return {
     async complete(input) {

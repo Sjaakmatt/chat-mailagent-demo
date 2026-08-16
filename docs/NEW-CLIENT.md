@@ -155,8 +155,29 @@ Vuistregel: een categorie verdient een eigen slug als er ánder beleid of een
 andere specialist bij hoort. Anders hoort 'ie bij `overig`. Meestal kom je uit
 op 8 à 12.
 
+**Vul de `hint` in, altijd.** Die regel gaat mee de classify-prompt in
+(`CATEGORY_GUIDE`) en is werkende configuratie, geen documentatie. Zonder hint
+raadt het model de betekenis uit de naam, en dan valt een bericht in de
+categorie die er het meest naar klínkt in plaats van waar het hoort — waarna het
+beleid van díé categorie draait en de agent iets vraagt wat niemand wilde vragen.
+
+Schrijf de **afbakening** op, niet de omschrijving. Noem vooral wanneer een
+categorie *niet* van toepassing is, en waar het bericht dan wél heen moet:
+
+```ts
+// zwak — herhaalt de naam
+{ slug: 'demo_aanvraag', label: 'Demo', specialist: 'escalate',
+  hint: 'demo-aanvragen' }
+
+// sterk — trekt de grens en wijst de andere kant aan
+{ slug: 'demo_aanvraag', label: 'Demo', specialist: 'escalate',
+  hint: 'ALLEEN als de bezoeker zelf om een demo of gesprek vraagt. Interesse ' +
+        'tonen in een product is dit NIET — dat is product_vraag' }
+```
+
 **Controle:** `pnpm -r test` — de taxonomie-tests bewaken dat elke categorie
-naar een bestaande specialist wijst en een label heeft.
+naar een bestaande specialist wijst, een label heeft, in `CATEGORY_GUIDE` staat
+en een hint draagt.
 
 ---
 
@@ -338,8 +359,15 @@ commit in het fundament raakt deze klant pas als je 'm binnenhaalt.
 
 ### Automatisch, via de sync-workflow
 
-`.github/workflows/upstream-sync.yml` kijkt elke maandag of het fundament
-vooruit is. Wat er dan gebeurt hangt af van jouw maatwerk:
+`.github/workflows/upstream-sync.yml` kijkt of het fundament vooruit is. Dat
+gebeurt op twee momenten:
+
+- **direct**, zodra er iets op `main` van het fundament landt — het fundament
+  stoot deze repo dan aan (zie *Direct aanstoten* hieronder);
+- **elke maandagochtend** als vangnet, voor het geval dat aanstoten niet
+  aankwam (token verlopen, repo hernoemd, klant nog niet in de lijst).
+
+Wat er dan gebeurt hangt af van jouw maatwerk:
 
 | Situatie                                   | Wat de workflow doet                          |
 | ------------------------------------------ | --------------------------------------------- |
@@ -355,6 +383,39 @@ Eenmalig instellen in de klant-repo:
 | secret `FUNDAMENT_DEPLOY_KEY`  | privé-helft van een read-only **deploy key**  |
 
 Ontbreekt er een? Dan slaat de workflow schoon over — hij faalt niet.
+
+#### Direct aanstoten
+
+Zonder dit blijft een kernverbetering tot maandagochtend liggen. Het aanstoten
+gebeurt vanuit **het fundament**, niet vanuit de klant:
+`.github/workflows/notify-clients.yml` draait daar bij elke push naar `main` en
+start `upstream-sync.yml` in elke klant-repo.
+
+Eenmalig instellen, in het **fundament**:
+
+| Wat                             | Waarde                                                   |
+| ------------------------------- | -------------------------------------------------------- |
+| variable `CLIENT_REPOS`         | de klant-repo's, één per regel of komma-gescheiden        |
+| secret `CLIENT_DISPATCH_TOKEN`  | fine-grained PAT, **alleen** `Actions: Read and write` op precies die repo's |
+
+Bij een nieuwe klant is dat één regel erbij in `CLIENT_REPOS`. Geen commit op
+het fundament — klantnamen horen niet in de code (zie `CLAUDE.md`), en daarom
+staat de lijst in een variabele.
+
+Drie dingen om te weten:
+
+- **`GITHUB_TOKEN` kan dit niet.** Die komt de grens van de eigen repo niet
+  over; cross-repo dispatch vraagt een eigen token. Dat is een echt recht:
+  wie dat token heeft, kan workflows starten in elke klant-repo die erin
+  staat. Scope 'm daarom strak en zet er niets anders op dan Actions.
+- **De beslissing blijft bij de klant.** Aanstoten betekent alleen "kijk nu",
+  niet "merge nu". Schoon + groen gaat door, een conflict wordt nog steeds een
+  PR. Deze workflow verandert het moment, niet de uitkomst.
+- **Eén onbereikbare klant houdt de rest niet tegen.** Mislukt er één, dan
+  komt er een waarschuwing en gaan de andere door; de maandag-cron haalt die
+  ene alsnog op.
+
+Niet ingesteld? Dan gebeurt er niets en blijft alleen de maandag-cron over.
 
 #### De deploy key aanmaken
 

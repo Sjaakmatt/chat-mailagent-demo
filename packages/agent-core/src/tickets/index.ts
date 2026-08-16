@@ -128,7 +128,8 @@ export interface ConfirmationConfig {
    * Bewust generiek: dit is de terugval, niet de bedoeling. Een goede reden is
    * categoriespecifiek ("een wijziging op een lopende order laten we altijd
    * door een collega bevestigen") en die kent deze laag niet — die staat als
-   * data bij de beleidsregel, per klant, en verandert zonder deploy.
+   * data bij de beleidsregel (`aios_policy_rules.handover_reason`), per klant,
+   * en verandert zonder deploy.
    */
   defaultHandoverReason: string;
   /** Tekst als er (nog) geen ticket is omdat de identificatie ontbreekt. */
@@ -144,11 +145,14 @@ export const CONFIRMATION: ConfirmationConfig = {
   // met zijn vraag gebeurt, waar dat nummer voor dient, en dat het gesprek nog
   // openstaat. Een bevestiging die alleen een nummer noemt voelt als een
   // afgesloten loket.
+  //
+  // Nog steeds géén doorlooptijd: dat is een afspraak per klant en hoort een
+  // bewuste instelling te zijn, geen bijwerking van de standaardtekst.
   template:
     '{reason}\n\n' +
     'Ik heb je vraag genoteerd onder ticket {number}. Bewaar dat nummer: noem ' +
     'je het in een volgend bericht, dan pak ik dit gesprek er meteen bij. Je ' +
-    'krijgt binnen één werkdag bericht op het mailadres dat je hebt opgegeven.\n\n' +
+    'krijgt bericht op het mailadres dat je hebt opgegeven.\n\n' +
     'Kan ik je ondertussen ergens anders mee helpen?',
   defaultHandoverReason:
     'Dat zoekt een collega voor je uit — hier kan ik zelf niet over beslissen.',

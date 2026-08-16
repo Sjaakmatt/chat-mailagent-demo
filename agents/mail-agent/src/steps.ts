@@ -6,7 +6,6 @@ import {
   isOutcome,
   outcomeFromClassification,
   renderPrompt,
-  CATEGORY_SLUGS,
   CATEGORY_GUIDE,
   getIntentConfig,
   knownSpecialistIds,
@@ -33,6 +32,8 @@ import {
 } from '@factumai/agent-core';
 import { DATA_CATEGORIES, type DataCategory } from '@factumai/agent-core';
 import type { Env } from './env.js';
+// De MCP-client en de Anthropic-client leven in agent-core, achter een subpad —
+// zo deelt de cockpit ze zonder dat de SDK's in de browserbundel belanden.
 import {
   callMcp,
   cfAccessHeaders,
@@ -476,13 +477,15 @@ interface FetchedMail {
   from?: { address?: string; name?: string } | null;
 }
 
-// Géén eigen McpEndpoint-alias meer: die miste `instanceKey`, en een lokale
-// kopie van een gedeeld contract is precies hoe je stilletjes de verkeerde
-// mailbox aanspreekt. Het echte type komt uit @factumai/agent-core/mcp.
-//
-// Om dezelfde reden is McpCtx nu gewoon TenantContext: sinds `dataCategories`
-// daarop staat, is een eigen vorm één type dat uit de pas kan lopen met wat de
-// MCP verwacht.
+// Géén eigen McpEndpoint-alias: die miste `instanceKey`, en een lokale kopie
+// van een gedeeld contract is precies hoe je stilletjes de verkeerde mailbox
+// aanspreekt. Het echte type komt uit @factumai/agent-core/mcp.
+/**
+ * De context die met elke MCP-call meegaat. Sinds `dataCategories` op
+ * `TenantContext` staat is dit geen eigen type meer — één type minder dat uit
+ * de pas kan lopen met wat de MCP verwacht, en `dataCategories` kán zo niet
+ * stilletjes wegvallen (harde regel 5).
+ */
 type McpCtx = TenantContext;
 
 /** Bijlagen/attachments: caps om kosten + storage te begrenzen. */

@@ -108,9 +108,9 @@ describe('bevestigingstekst', () => {
     const tekst = confirmationText(
       'PRO-2608-0042',
       CONFIRMATION,
-      'Een wijziging op een lopend abonnement bevestigen we altijd met een collega.',
+      'Een wijziging op een lopende bestelling bevestigen we altijd met een collega.',
     );
-    expect(tekst).toContain('lopend abonnement bevestigen we altijd met een collega');
+    expect(tekst).toContain('lopende bestelling bevestigen we altijd met een collega');
     expect(tekst).toContain('PRO-2608-0042');
     // De generieke zin hoort dan wég te zijn, niet erbij.
     expect(tekst).not.toContain(CONFIRMATION.defaultHandoverReason);

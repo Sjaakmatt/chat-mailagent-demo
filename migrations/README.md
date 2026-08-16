@@ -29,7 +29,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0022_allowlist_domains`    | `invited_by` + hele domeinen op de allowlist        |
 | `0023_demo_context`         | beleidsregels per categorie — **demo**, verzonnen cijfers |
 | `0024_demo_catalogus`       | assortiment + trajecten — **gegenereerd**, zie hieronder |
-| `0025_message_feedback`     | duim omhoog/omlaag per chatbericht                  |
+| `0025_message_feedback`     | duim + toelichting per chatantwoord, en het eval-label |
 | `0026_policy_handover_reason` | waarom een mens erbij komt, in de ticketbevestiging |
 | `0027_proposed_actions`     | voorgestelde acties: datamodel + statusmachine      |
 | `0030_review_items_module`  | `module` per voorstel — de werkbak tabt per proces   |

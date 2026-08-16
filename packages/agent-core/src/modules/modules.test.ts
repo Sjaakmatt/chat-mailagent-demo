@@ -48,12 +48,24 @@ describe('modulecontract', () => {
   it('geeft dezelfde slug in twee modules een eigen label', () => {
     // Precies waarom de vertaling per module gaat en niet via één gedeelde
     // tabel. Bewust getoetst tegen de eigen categorieën van de module en niet
-    // tegen een hardgecodeerd label: `taxonomy/` is het bestand dat je per
-    // klant aanpast, dus een kerntest die daarop leunt valt bij elke klant om.
+    // tegen een hardgecodeerd label: `taxonomy/` wordt bij elke klant opnieuw
+    // ingericht, dus een kerntest die op één labelwaarde leunt valt bij elke
+    // kloon om zonder dat er iets kapot is.
+    //
+    // De tweede module wordt hier afgeleid van de eerste slug van de
+    // klantenservice-module. Zonder die constructie zou de test slagen omdat de
+    // andere module de slug niet ként — dat toetst de vertaling niet, alleen de
+    // terugval op onbekend.
     const eigen = KLANTENSERVICE_MODULE.categories[0];
     expect(eigen).toBeDefined();
+
+    const botsend: ModuleDescriptor = {
+      ...SALES,
+      categories: [{ slug: eigen!.slug, label: `${eigen!.label} (sales)` }],
+    };
+
     expect(categoryLabelIn(KLANTENSERVICE_MODULE, eigen!.slug)).toBe(eigen!.label);
-    expect(categoryLabelIn(SALES, eigen!.slug)).not.toBe(eigen!.label);
+    expect(categoryLabelIn(botsend, eigen!.slug)).toBe(`${eigen!.label} (sales)`);
   });
 
   it('geeft een onbekende slug terug in plaats van hem te laten verdwijnen', () => {
