@@ -155,8 +155,29 @@ Vuistregel: een categorie verdient een eigen slug als er ánder beleid of een
 andere specialist bij hoort. Anders hoort 'ie bij `overig`. Meestal kom je uit
 op 8 à 12.
 
+**Vul de `hint` in, altijd.** Die regel gaat mee de classify-prompt in
+(`CATEGORY_GUIDE`) en is werkende configuratie, geen documentatie. Zonder hint
+raadt het model de betekenis uit de naam, en dan valt een bericht in de
+categorie die er het meest naar klínkt in plaats van waar het hoort — waarna het
+beleid van díé categorie draait en de agent iets vraagt wat niemand wilde vragen.
+
+Schrijf de **afbakening** op, niet de omschrijving. Noem vooral wanneer een
+categorie *niet* van toepassing is, en waar het bericht dan wél heen moet:
+
+```ts
+// zwak — herhaalt de naam
+{ slug: 'demo_aanvraag', label: 'Demo', specialist: 'escalate',
+  hint: 'demo-aanvragen' }
+
+// sterk — trekt de grens en wijst de andere kant aan
+{ slug: 'demo_aanvraag', label: 'Demo', specialist: 'escalate',
+  hint: 'ALLEEN als de bezoeker zelf om een demo of gesprek vraagt. Interesse ' +
+        'tonen in een product is dit NIET — dat is product_vraag' }
+```
+
 **Controle:** `pnpm -r test` — de taxonomie-tests bewaken dat elke categorie
-naar een bestaande specialist wijst en een label heeft.
+naar een bestaande specialist wijst, een label heeft, in `CATEGORY_GUIDE` staat
+en een hint draagt.
 
 ---
 

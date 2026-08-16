@@ -29,22 +29,110 @@ export interface CategoryDef {
    * kiest. Conservatief invullen: bij twijfel `escalate` (naar een mens).
    */
   specialist: SpecialistId;
+  /**
+   * Eén regel voor de classifier: wanneer hoort een bericht hier, en — vaak
+   * belangrijker — wanneer níét.
+   *
+   * Dit is geen documentatie maar werkende configuratie. Een kale lijst slugs
+   * laat het model raden wat een naam betekent, en dan valt een bericht in de
+   * categorie die er het meest naar klínkt in plaats van de categorie waar het
+   * hoort. Vervolgens draait het beleid van die verkeerde categorie, en vraagt
+   * de agent netjes iets wat niemand had willen vragen.
+   *
+   * Schrijf de afbakening op, niet de omschrijving. "Alleen als de klant zelf om
+   * X vraagt" stuurt beter dan "X-verzoeken".
+   */
+  hint?: string;
 }
 
-/** Neutrale startset — vervang per klant. */
+/**
+ * Neutrale startset — vervang per klant.
+ *
+ * De hints hieronder zijn de generieke webshop-afbakening. Ze zijn er om te
+ * laten zien wát een goede hint is; bij een klant herschrijf je ze mee met de
+ * categorieën zelf. Een categorie zonder hint werkt, maar classificeert
+ * slechter — zie `CATEGORY_GUIDE`.
+ */
 export const CATEGORIES: readonly CategoryDef[] = Object.freeze([
-  { slug: 'levertijd_status', label: 'Levertijd / status', specialist: 'simple_reply' },
-  { slug: 'order_wijziging', label: 'Orderwijziging', specialist: 'order_change' },
-  { slug: 'retour_ruilen', label: 'Retour / ruilen', specialist: 'order_change' },
-  { slug: 'garantie_claim', label: 'Garantieclaim', specialist: 'complaint' },
-  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply' },
-  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical' },
-  { slug: 'facturatie', label: 'Facturatie', specialist: 'simple_reply' },
-  { slug: 'klacht', label: 'Klacht', specialist: 'complaint' },
-  { slug: 'commercieel', label: 'Commercieel', specialist: 'escalate' },
-  { slug: 'gdpr_verzoek', label: 'Privacy / GDPR-verzoek', specialist: 'gdpr' },
-  { slug: 'overig', label: 'Overig', specialist: 'escalate' },
+  {
+    slug: 'levertijd_status',
+    label: 'Levertijd / status',
+    specialist: 'simple_reply',
+    hint: 'waar blijft mijn bestelling, wanneer komt het; gaat over een order die al geplaatst is',
+  },
+  {
+    slug: 'order_wijziging',
+    label: 'Orderwijziging',
+    specialist: 'order_change',
+    hint: 'iets erbij, eraf, ander adres of annuleren op een bestaande order',
+  },
+  {
+    slug: 'retour_ruilen',
+    label: 'Retour / ruilen',
+    specialist: 'order_change',
+    hint: 'terugsturen, omruilen, geld terug bij een geleverd artikel dat heel is',
+  },
+  {
+    slug: 'garantie_claim',
+    label: 'Garantieclaim',
+    specialist: 'complaint',
+    hint: 'artikel is stuk of defect binnen de garantietermijn — niet "past niet", dat is retour_ruilen',
+  },
+  {
+    slug: 'product_vraag',
+    label: 'Productvraag',
+    specialist: 'simple_reply',
+    hint: 'wat een artikel doet, kost, of kan; de standaard voor elke inhoudelijke vraag over het assortiment',
+  },
+  {
+    slug: 'technisch_probleem',
+    label: 'Technisch probleem',
+    specialist: 'technical',
+    hint: 'werkt niet zoals verwacht, maar er is nog niet vastgesteld dát er iets stuk is',
+  },
+  {
+    slug: 'facturatie',
+    label: 'Facturatie',
+    specialist: 'simple_reply',
+    hint: 'factuur, betaling, bedrag of BTW — de administratieve kant, niet het artikel',
+  },
+  {
+    slug: 'klacht',
+    label: 'Klacht',
+    specialist: 'complaint',
+    hint: 'de klant is ontevreden over hoe iets gelopen is, los van welk artikel het betrof',
+  },
+  {
+    slug: 'commercieel',
+    label: 'Commercieel',
+    specialist: 'escalate',
+    hint: 'ALLEEN als de schrijver zelf iets wil verkopen of samenwerken; interesse in ons assortiment is product_vraag',
+  },
+  {
+    slug: 'gdpr_verzoek',
+    label: 'Privacy / GDPR-verzoek',
+    specialist: 'gdpr',
+    hint: 'AVG-verzoek over de eigen gegevens van de schrijver: uitschrijven, verwijdering, inzage, dataportabiliteit. NIET een vraag over ons privacybeleid in het algemeen',
+  },
+  {
+    slug: 'overig',
+    label: 'Overig',
+    specialist: 'escalate',
+    hint: 'gaat wel over ons, maar past nergens anders; kies dit pas als geen enkele andere categorie past',
+  },
 ]);
+
+/**
+ * De categorielijst zoals de classifier 'm te zien krijgt: slug plus afbakening.
+ *
+ * Een kale opsomming van slugs laat het model de betekenis raden uit de naam,
+ * en dat gaat mis op precies de plek waar het duur is — een bericht belandt in
+ * de categorie die er het meest naar klinkt, waarna het beleid van díé categorie
+ * draait. Daarom krijgt de classifier de afbakening mee, niet alleen de naam.
+ */
+export const CATEGORY_GUIDE: string = CATEGORIES.map(
+  (c) => `- ${c.slug}${c.hint ? `: ${c.hint}` : ''}`,
+).join('\n');
 
 /** Alle slugs — voor de classify-prompt en validatie. */
 export const CATEGORY_SLUGS: readonly string[] = Object.freeze(

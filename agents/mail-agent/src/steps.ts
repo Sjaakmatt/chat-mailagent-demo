@@ -6,7 +6,7 @@ import {
   isOutcome,
   outcomeFromClassification,
   renderPrompt,
-  CATEGORY_SLUGS,
+  CATEGORY_GUIDE,
   getIntentConfig,
   knownSpecialistIds,
   type OrchestrationSteps,
@@ -613,10 +613,9 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               '  onbekend = gaat wel over ons, maar te vaag om te routeren. Dan vragen we door. ' +
               'Kies systeem alleen als er echt iets op te zoeken valt; zonder ordernummer is een ' +
               'statusvraag meestal onbekend of taak. ' +
-              'category MOET exact één van deze waarden zijn (kies de best passende, anders "overig"): ' +
-              `${CATEGORY_SLUGS.join(', ')}. ` +
-              'gdpr_verzoek = AVG/privacy-verzoek: uitschrijven mailinglist, verwijdering ' +
-              'persoonsgegevens, inzage data, recht op vergetelheid, dataportabiliteit. ' +
+              'category MOET exact één van deze waarden zijn (kies de best passende, anders "overig"). ' +
+              'Achter de dubbele punt staat de afbakening — die telt zwaarder dan hoe de naam klinkt:\n' +
+              `${CATEGORY_GUIDE}\n` +
               'needsRag=true als een goed antwoord huisstijl/historie/SOP nodig heeft. ' +
               'escalate=true bij een juridische dreiging (advocaat, rechtszaak, claim, ACM/' +
               'geschillencommissie, ingebrekestelling) of een andere ernstige/risicovolle ' +

@@ -3,6 +3,7 @@ import {
   CATEGORIES,
   CATEGORY_SLUGS,
   CATEGORY_LABELS,
+  CATEGORY_GUIDE,
   categoryToSpecialist,
   categoryLabel,
 } from './index.js';
@@ -30,6 +31,24 @@ describe('categorie-taxonomie', () => {
 
   it('bevat een overig-categorie als vangnet', () => {
     expect(CATEGORY_SLUGS).toContain('overig');
+  });
+
+  it('zet elke categorie in de gids die de classifier krijgt', () => {
+    // Staat een slug niet in de gids, dan kan het model hem niet kiezen terwijl
+    // de validatie hem wél accepteert — de categorie bestaat dan op papier maar
+    // wordt nooit toegekend.
+    for (const slug of CATEGORY_SLUGS) {
+      expect(CATEGORY_GUIDE, `slug '${slug}' ontbreekt in de gids`).toContain(`- ${slug}`);
+    }
+  });
+
+  it('geeft de startset een afbakening mee, niet alleen een naam', () => {
+    // Een hint is optioneel in het type — een klant mag er een leeglaten. Maar
+    // de startset die wij meeleveren hoort te laten zien hoe het moet, want dat
+    // is het voorbeeld waar elke kloon van vertrekt.
+    for (const c of CATEGORIES) {
+      expect(c.hint, `categorie '${c.slug}' heeft geen hint`).toBeTruthy();
+    }
   });
 
   it('valt terug op escalate bij een onbekende categorie', () => {
