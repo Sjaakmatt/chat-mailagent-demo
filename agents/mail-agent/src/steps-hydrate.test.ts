@@ -2,17 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Signal } from '@factumai/agent-core';
 
 const callMcp = vi.fn();
-vi.mock('./mcp.js', () => ({
+// Alleen de netwerkcall vervangen, de rest van de module echt laten. De mock
+// had `mcpBearer` en `cfAccessHeaders` met de hand nagebouwd; die kopieën
+// liepen achter zodra er iets bij kwam, en dan test je een module die niet
+// bestaat.
+vi.mock('./mcp.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./mcp.js')>()),
   callMcp: (...a: unknown[]) => callMcp(...a),
-  mcpBearer: (env: { FACTUMAI_MCP_INBOUND_SECRET?: string; FACTUMAI_MCP_API_KEY?: string }) =>
-    env.FACTUMAI_MCP_INBOUND_SECRET || env.FACTUMAI_MCP_API_KEY || undefined,
-  cfAccessHeaders: (env: { CF_ACCESS_CLIENT_ID?: string; CF_ACCESS_CLIENT_SECRET?: string }) =>
-    env.CF_ACCESS_CLIENT_ID && env.CF_ACCESS_CLIENT_SECRET
-      ? {
-          'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
-          'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
-        }
-      : {},
 }));
 
 import { hydrateSignal } from './steps.js';
@@ -67,5 +63,36 @@ describe('hydrateSignal', () => {
     const sig = mailSignal({ messageId: 'AAMk1' });
     const out = await hydrateSignal(env, sig);
     expect(out).toBe(sig);
+  });
+});
+
+/**
+ * De mailbox-keuze moet de hele weg afleggen: van env, via `mailEndpoint`,
+ * tot in de call. Blijft hij onderweg hangen, dan valt de MCP terug op de
+ * primaire instance — en dat is bij een organisatie meestal het adres waar
+ * echte klanten naartoe schrijven.
+ */
+describe('mailbox-keuze', () => {
+  it('geeft de ingestelde instance door aan de MCP-call', async () => {
+    callMcp.mockResolvedValue({ ok: true, data: { subject: 's', body: 'b' } });
+    const metInstance = {
+      ...env,
+      FACTUMAI_MCP_MAIL_INSTANCE_KEY: 'mail-agent',
+    } as unknown as Env;
+
+    await hydrateSignal(metInstance, mailSignal({ messageId: 'AAMk1' }));
+
+    expect(callMcp).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceKey: 'mail-agent' }),
+      expect.anything(),
+      'mail_get_message',
+      expect.anything(),
+    );
+  });
+
+  it('stuurt geen instance mee als er niets is ingesteld', async () => {
+    callMcp.mockResolvedValue({ ok: true, data: { subject: 's', body: 'b' } });
+    await hydrateSignal(env, mailSignal({ messageId: 'AAMk1' }));
+    expect(callMcp.mock.calls[0][0].instanceKey).toBeUndefined();
   });
 });

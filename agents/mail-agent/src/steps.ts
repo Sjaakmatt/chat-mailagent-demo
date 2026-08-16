@@ -32,7 +32,13 @@ import {
   type TenantContext,
 } from '@factumai/agent-core';
 import type { Env } from './env.js';
-import { callMcp, cfAccessHeaders, mcpBearer } from './mcp.js';
+import {
+  callMcp,
+  cfAccessHeaders,
+  mailEndpoint,
+  mcpBearer,
+  type McpEndpoint,
+} from './mcp.js';
 import { createAnthropicLlmClient } from './llm-anthropic.js';
 import { sendViaResend } from './resend.js';
 
@@ -446,7 +452,9 @@ interface FetchedMail {
   from?: { address?: string; name?: string } | null;
 }
 
-type McpEndpoint = { url: string; apiKey?: string; cfAccess?: Record<string, string> };
+// Géén eigen McpEndpoint-alias meer: die miste `instanceKey`, en een lokale
+// kopie van een gedeeld contract is precies hoe je stilletjes de verkeerde
+// mailbox aanspreekt. Het echte type komt uit mcp.ts.
 type McpCtx = { organizationId: string; agentId: string; toolCallId: string };
 
 /** Bijlagen/attachments: caps om kosten + storage te begrenzen. */
@@ -594,13 +602,10 @@ async function snapshotAttachments(
 export async function hydrateSignal(env: Env, signal: Signal): Promise<Signal> {
   const payload = (signal.payload ?? {}) as Record<string, unknown>;
   const messageId = typeof payload.messageId === 'string' ? payload.messageId : undefined;
-  if (signal.domain !== 'mail' || !messageId || !env.FACTUMAI_MCP_MAIL_URL) return signal;
+  if (signal.domain !== 'mail' || !messageId) return signal;
 
-  const mail: McpEndpoint = {
-    url: env.FACTUMAI_MCP_MAIL_URL,
-    apiKey: mcpBearer(env),
-    cfAccess: cfAccessHeaders(env),
-  };
+  const mail = mailEndpoint(env);
+  if (!mail) return signal;
   const ctx: McpCtx = {
     organizationId: signal.organizationId,
     agentId: 'aios-agent',
@@ -1119,10 +1124,10 @@ export async function deliverMailReply(
   env: Env,
   item: ReviewItem,
 ): Promise<{ ref?: string }> {
-  if (!env.FACTUMAI_MCP_MAIL_URL) {
+  const mail = mailEndpoint(env);
+  if (!mail) {
     throw new Error('FACTUMAI_MCP_MAIL_URL niet geconfigureerd — kan niet versturen');
   }
-  const mail = { url: env.FACTUMAI_MCP_MAIL_URL, apiKey: mcpBearer(env), cfAccess: cfAccessHeaders(env) };
   // Tenant-context met de ECHTE org-id van het ReviewItem, zodat de MCP de
   // tenant kan resolven (een placeholder geeft "Unknown tenant").
   const ctx = {
