@@ -93,7 +93,14 @@
         // cockpit heen worden gepromoot. Leeg = geen "Push naar prod"-knop;
         // staging blijft dan bruikbaar voor inspectie en testen.
         "AIOS_PARENT_ORG_ID": "org_factumai_internal",
-        "COCKPIT_MODE": "staging"
+        "COCKPIT_MODE": "staging",
+        // Zelfde afname en assistent-instellingen als prod — staging is er om
+        // te testen wat prod doet. Zonder LICENSED_MODULES ziet niemand hier
+        // iets (fail-closed), en dat lijkt dan op een kapotte staging.
+        "LICENSED_MODULES": "*",
+        "MODEL_ASSISTANT": "claude-sonnet-5",
+        "ASSISTANT_DOSSIER": "true",
+        "ASSISTANT_ANALYSE": "true"
       }
     }
   }
