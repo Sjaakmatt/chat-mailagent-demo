@@ -3,6 +3,7 @@ import {
   type DecisionLog,
   type ProgressPhase,
   type Signal,
+  type StepTiming,
 } from '@factumai/agent-core';
 import type { Env } from './env.js';
 import { createPlatformStore } from './store.js';
@@ -93,9 +94,11 @@ export async function runSignalTurn(
   const signal = await hydrateSignal(env, input);
 
   const startedAt = Date.now();
+  const timings: StepTiming[] = [];
   const result = await orchestrate(signal, {
     steps: buildOrchestrationSteps(env, llm),
     onProgress: opts.onProgress,
+    onTiming: (t) => timings.push(t),
   });
 
   // Dit blijft vóór het antwoord staan, en dat is geen slordigheid: bij uitkomst
@@ -115,8 +118,9 @@ export async function runSignalTurn(
     category: outOfDomain ? null : result.classification.category,
     specialist: outOfDomain ? null : (result.classification.specialist ?? null),
     outcome: result.outcome ?? null,
-    // Eén meting om de hele run; per-stap timing vraagt instrumentatie in
-    // agent-core en levert nu weinig op.
+    // Het totaal én de opdeling. Het totaal blijft de regel waarop je sorteert;
+    // de opdeling is wat een traag geval bruikbaar maakt. Zonder die tweede
+    // vertelt een log van dertig seconden je alleen dát het traag was.
     steps: [
       {
         step: 'orchestrate',
@@ -124,6 +128,7 @@ export async function runSignalTurn(
         model: env.MODEL_PLAN,
         outcome: outOfDomain ? 'gestopt op de domeingrens' : 'ReviewItem aangemaakt',
       },
+      ...timings.map((t) => ({ step: t.step, ms: t.ms })),
     ],
     sources: result.sources ?? [],
     ungrounded: result.ungrounded,

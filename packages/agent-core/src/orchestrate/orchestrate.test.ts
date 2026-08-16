@@ -334,3 +334,104 @@ describe('domeingrens in de orchestratie', () => {
     expect(calls).toEqual(['classify', 'resolve', 'plan']);
   });
 });
+
+describe('meten en melden', () => {
+  it('meldt een duur per stap, niet één getal om de hele lus', async () => {
+    const gemeten: Array<{ step: string; ms: number }> = [];
+    await orchestrate(signal, {
+      steps: steps({
+        classify: async () => ({
+          category: 'order_status',
+          confidence: 0.9,
+          needsRag: true,
+          extracted: {},
+        }),
+        retrieve: async () => [],
+      }),
+      onTiming: (t) => gemeten.push(t),
+    });
+
+    expect(gemeten.map((t) => t.step)).toEqual([
+      'route',
+      'resolve',
+      'retrieve',
+      'plan',
+      'ground',
+    ]);
+    for (const t of gemeten) expect(t.ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it('slaat retrieve over in de meting als de stap niet draait', async () => {
+    const gemeten: string[] = [];
+    await orchestrate(signal, {
+      steps: steps(),
+      onTiming: (t) => gemeten.push(t.step),
+    });
+    expect(gemeten).not.toContain('retrieve');
+  });
+
+  // Juist een stap die na twintig seconden omvalt wil je terugzien. Meet je
+  // alleen het geslaagde pad, dan is dat precies de meting die je kwijt bent.
+  it('meet een stap die faalt ook', async () => {
+    const gemeten: string[] = [];
+    await expect(
+      orchestrate(signal, {
+        steps: steps({
+          plan: async () => {
+            throw new Error('model down');
+          },
+        }),
+        onTiming: (t) => gemeten.push(t.step),
+      }),
+    ).rejects.toThrow('model down');
+    expect(gemeten).toContain('plan');
+  });
+
+  it('laat een kapotte meting de run niet raken', async () => {
+    const res = await orchestrate(signal, {
+      steps: steps(),
+      onTiming: () => {
+        throw new Error('log kapot');
+      },
+    });
+    expect(res.reviewItem.status).toBe('PENDING');
+  });
+
+  // Bij een taak krijgt de bezoeker geen antwoord maar een bevestiging. "Ik
+  // schrijf het antwoord" is dan een belofte die niet uitkomt.
+  it('meldt doorzetten in plaats van schrijven bij een taak', async () => {
+    const fasen: string[] = [];
+    await orchestrate(signal, {
+      steps: steps({
+        classify: async () => ({
+          category: 'order_wijziging',
+          outcome: 'taak',
+          confidence: 0.9,
+          needsRag: false,
+          extracted: {},
+        }),
+      }),
+      onProgress: (p) => fasen.push(p),
+    });
+    expect(fasen).toContain('doorzetten');
+    expect(fasen).not.toContain('schrijven');
+  });
+
+  it('meldt schrijven als er wél een antwoord voor de bezoeker komt', async () => {
+    const fasen: string[] = [];
+    await orchestrate(signal, {
+      steps: steps({
+        classify: async () => ({
+          category: 'levertijd_status',
+          outcome: 'systeem',
+          confidence: 0.9,
+          needsRag: false,
+          extracted: {},
+        }),
+      }),
+      onProgress: (p) => fasen.push(p),
+    });
+    expect(fasen).toContain('schrijven');
+    expect(fasen).not.toContain('doorzetten');
+  });
+});

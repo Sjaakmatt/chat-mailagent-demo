@@ -110,6 +110,11 @@ const PROGRESS_TEXT: Record<string, string> = {
   routeren: 'even kijken waar dit over gaat…',
   opzoeken: 'ik zoek het voor je op…',
   schrijven: 'ik schrijf het antwoord…',
+  // Bij een taak is "ik schrijf het antwoord" een belofte die niet uitkomt: de
+  // agent stelt een concept op voor een collega, en de bezoeker krijgt een
+  // bevestiging. Dat is precies het moment waarop iemand afhaakt omdat hij op
+  // iets anders zat te wachten dan wat er kwam.
+  doorzetten: 'dit leg ik voor aan een collega…',
 };
 
 interface SessionMessage {

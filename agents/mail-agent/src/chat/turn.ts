@@ -53,6 +53,7 @@ export async function finishChatTurn(
     body?: string;
     original?: Record<string, unknown>;
     classification?: unknown;
+    policy?: { handoverReason?: string };
   };
   const drafted = (proposed.body ?? '').trim();
 
@@ -96,6 +97,11 @@ export async function finishChatTurn(
           ? original.orderNumber
           : null;
 
+    // De regel die `plan` toepaste, zoals die op het ReviewItem is gezet. Staat
+    // onder `proposed` en niet op het item zelf — dat is de plek waar de
+    // orchestrator 'm neerlegt.
+    const toegepastBeleid = (proposed.policy ?? {}) as { handoverReason?: string };
+
     const ticket = await createTicket(env, {
       organizationId: item.organizationId,
       conversationId: opts.conversationId,
@@ -103,6 +109,10 @@ export async function finishChatTurn(
       category: opts.category ?? null,
       summary: item.summary,
       identity: { contactEmail, orderReference },
+      // Uit de beleidsregel die op deze categorie matchte — zie steps.ts. Zo
+      // legt de bevestiging uit wélke afspraak hier geldt, in plaats van de
+      // bezoeker af te schepen met "een collega kijkt ernaar".
+      handoverReason: toegepastBeleid.handoverReason ?? null,
     });
 
     // Geen ticket = te weinig identificatie. Dan vragen we erom in plaats van

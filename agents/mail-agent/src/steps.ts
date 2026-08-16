@@ -364,6 +364,8 @@ interface PolicyRuleRow {
   priority: number;
   action: string | null;
   creates_task: boolean | null;
+  /** Eén zin voor de klant: waarom komt hier een mens aan te pas. */
+  handover_reason: string | null;
 }
 
 /**
@@ -380,7 +382,7 @@ async function loadPolicyRules(env: Env): Promise<PolicyRuleRow[]> {
   url.searchParams.set('enabled', 'eq.true');
   url.searchParams.set(
     'select',
-    'id,name,applies_to,response_directive,priority,action,creates_task',
+    'id,name,applies_to,response_directive,priority,action,creates_task,handover_reason',
   );
   url.searchParams.set('order', 'priority.asc');
   const rows = await client.request<PolicyRuleRow[]>(storeCtx(env), url, { method: 'GET' });
@@ -852,6 +854,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               ruleName: rule.name,
               action: rule.action ?? undefined,
               createsTask: rule.creates_task === true,
+              handoverReason: rule.handover_reason ?? undefined,
             };
           }
         } catch {

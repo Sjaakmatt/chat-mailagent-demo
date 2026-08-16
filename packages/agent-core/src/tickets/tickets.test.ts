@@ -104,6 +104,37 @@ describe('bevestigingstekst', () => {
     expect(tekst).toContain('PRO-2608-0042');
   });
 
+  it('zet de reden van de beleidsregel in de tekst', () => {
+    const tekst = confirmationText(
+      'PRO-2608-0042',
+      CONFIRMATION,
+      'Een wijziging op een lopend abonnement bevestigen we altijd met een collega.',
+    );
+    expect(tekst).toContain('lopend abonnement bevestigen we altijd met een collega');
+    expect(tekst).toContain('PRO-2608-0042');
+    // De generieke zin hoort dan wég te zijn, niet erbij.
+    expect(tekst).not.toContain(CONFIRMATION.defaultHandoverReason);
+  });
+
+  it('valt terug op de generieke reden als de regel er geen heeft', () => {
+    for (const leeg of [undefined, null, '', '   ']) {
+      expect(confirmationText('PRO-2608-0042', CONFIRMATION, leeg)).toContain(
+        CONFIRMATION.defaultHandoverReason,
+      );
+    }
+  });
+
+  // Deze tekst gaat rechtstreeks naar een klant. Een config van vóór `{reason}`
+  // mag daar nooit het woord "undefined" in achterlaten.
+  it('schrijft nooit "undefined" bij een config zonder terugvalreden', () => {
+    const tekst = confirmationText('PRO-2608-0042', {
+      template: '{reason} Ticket {number}.',
+      needsIdentityText: '',
+    } as unknown as typeof CONFIRMATION);
+    expect(tekst).not.toContain('undefined');
+    expect(tekst).toContain('PRO-2608-0042');
+  });
+
   it('belooft standaard geen doorlooptijd', () => {
     expect(CONFIRMATION.template).not.toMatch(/\b\d+\s*(werk)?dag/i);
     expect(CONFIRMATION.template).not.toMatch(/binnen \d/i);

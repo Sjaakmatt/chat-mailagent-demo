@@ -166,6 +166,13 @@ export interface Plan {
      * `afterExecute`-domeinhook, die 'm invult (werkticket, CRM-update, …).
      */
     createsTask?: boolean;
+    /**
+     * Eén zin voor de klant: waarom komt er bij deze categorie een mens aan te
+     * pas. Gaat letterlijk de ticketbevestiging in (`confirmationText`), dus
+     * hij wordt nooit door een model aangeraakt en telt niet mee in de
+     * grounding — het is beleid, geen bewering over een order.
+     */
+    handoverReason?: string;
   };
   /**
    * Vertrouwde bronteksten voor de grounding-check (bv. de beleidsrichtlijn en
@@ -233,12 +240,26 @@ export interface OrchestrationSteps {
  * lekken. De teksten die de bezoeker ziet horen bij de aanroeper, niet hier —
  * die kent de taal en de toon van de klant.
  */
-export type ProgressPhase = 'routeren' | 'opzoeken' | 'schrijven';
+export type ProgressPhase = 'routeren' | 'opzoeken' | 'schrijven' | 'doorzetten';
+
+/** Eén gemeten stap uit de lus. Voedt het beslislog. */
+export interface StepTiming {
+  step: 'route' | 'resolve' | 'retrieve' | 'plan' | 'ground';
+  ms: number;
+}
 
 export interface OrchestrationDeps {
   steps: OrchestrationSteps;
   now?: () => string;
   newId?: () => string;
+  /**
+   * Duur per stap. Net als `onProgress` fire-and-forget.
+   *
+   * Waarom dit er is: één getal om de hele lus vertelt je dat een beurt dertig
+   * seconden kostte en verder niets. Of dat `retrieve`, `plan` of `ground` was,
+   * bepaalt volledig wat je eraan doet — en zonder deze meting is het gokken.
+   */
+  onTiming?: (timing: StepTiming) => void;
   /**
    * Wordt aangeroepen bij elke faseovergang. Synchroon en fire-and-forget: de
    * lus wacht er niet op en een fout hierin mag de run niet raken — een
@@ -276,6 +297,28 @@ function report(deps: OrchestrationDeps, phase: ProgressPhase): void {
     deps.onProgress?.(phase);
   } catch {
     // Bewust stil: dit is versiering, geen uitkomst.
+  }
+}
+
+/**
+ * Meet één stap. Ook bij een fout wordt de tijd gemeld — juist een stap die na
+ * twintig seconden omvalt wil je in het log terugzien, en dat is precies de
+ * meting die je kwijt bent als je alleen het geslaagde pad meet.
+ */
+async function meet<T>(
+  deps: OrchestrationDeps,
+  step: StepTiming['step'],
+  run: () => Promise<T>,
+): Promise<T> {
+  const start = Date.now();
+  try {
+    return await run();
+  } finally {
+    try {
+      deps.onTiming?.({ step, ms: Date.now() - start });
+    } catch {
+      // Zelfde afweging als bij report(): een meting mag geen beurt kosten.
+    }
   }
 }
 
@@ -340,7 +383,10 @@ export async function runRoute(
   deps: OrchestrationDeps,
 ): Promise<Classification> {
   report(deps, 'routeren');
-  if (!deps.steps.gate) return deps.steps.classify(signal);
+  // In een const, niet als `deps.steps.gate`: de narrowing van de guard
+  // hieronder overleeft de closure in `meet()` anders niet.
+  const gateStep = deps.steps.gate;
+  if (!gateStep) return meet(deps, 'route', () => deps.steps.classify(signal));
 
   // Poort en classificatie draaien **naast elkaar**, niet na elkaar.
   //
@@ -362,10 +408,12 @@ export async function runRoute(
   // De prijs is een classificatie-call die je bij een geweigerd bericht voor
   // niets betaalt. Dat is de goedkope tier en de rate limiting zit ervóór, dus
   // dat weegt niet op tegen een seconde wachten bij élk bericht dat wél deugt.
-  const [gate, classification] = await Promise.all([
-    deps.steps.gate(signal),
-    deps.steps.classify(signal).catch((err: unknown) => err),
-  ]);
+  const [gate, classification] = await meet(deps, 'route', () =>
+    Promise.all([
+      gateStep(signal),
+      deps.steps.classify(signal).catch((err: unknown) => err),
+    ]),
+  );
 
   if (!gate.inDomain) {
     return {
@@ -403,12 +451,13 @@ export async function runSpecialize(
   const { steps } = deps;
 
   report(deps, 'opzoeken');
-  const resolved = await steps.resolve(signal, classification);
+  const resolved = await meet(deps, 'resolve', () => steps.resolve(signal, classification));
 
   const recorder = new ToolCallRecorder();
+  const retrieveStep = steps.retrieve;
   const memory =
-    classification.needsRag && steps.retrieve
-      ? await steps.retrieve(signal, classification, resolved)
+    classification.needsRag && retrieveStep
+      ? await meet(deps, 'retrieve', () => retrieveStep(signal, classification, resolved))
       : [];
 
   // Multi-agent Fase 1: als de router een specialist heeft gekozen, laad de
@@ -420,21 +469,24 @@ export async function runSpecialize(
     ? getIntentConfig(classification.specialist)
     : undefined;
 
-  report(deps, 'schrijven');
-  const plan = await steps.plan({
-    signal,
-    classification,
-    resolved,
-    memory,
-    recorder,
-    intentConfig,
-  });
+  // Bij een taak schrijft de plan-stap geen antwoord voor de bezoeker maar een
+  // concept voor de werkbak. "Schrijven" is dan misleidend: iemand zit te
+  // wachten op een tekst die hij nooit krijgt. Zeg wat er wél gebeurt — de
+  // router weet dit al vóór de dure stap, dus dat kan op tijd.
+  report(deps, classification.outcome === 'taak' ? 'doorzetten' : 'schrijven');
+  const plan = await meet(deps, 'plan', () =>
+    steps.plan({
+      signal,
+      classification,
+      resolved,
+      memory,
+      recorder,
+      intentConfig,
+    }),
+  );
 
-  const { grounding, ungrounded } = validateGrounding(
-    plan.body,
-    plan.claims,
-    recorder,
-    plan.trustedText ?? [],
+  const { grounding, ungrounded } = await meet(deps, 'ground', async () =>
+    validateGrounding(plan.body, plan.claims, recorder, plan.trustedText ?? []),
   );
 
   const proposed: Record<string, unknown> = {
