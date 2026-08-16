@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { cockpitEnv, makeClient, listAuditEntriesForExport } from "@/lib/db";
-import { DOMAIN_AUDIT_SOURCES } from "@/lib/audit-sources";
+import { domainAuditSources } from "@/lib/audit-sources";
 import { auditEntriesToCsv } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const p = request.nextUrl.searchParams;
   const src = p.get("source");
-  const validSources = ["review", ...DOMAIN_AUDIT_SOURCES.map((d) => d.id)];
+  const validSources = ["review", ...domainAuditSources().map((d) => d.id)];
   const source: string = src && validSources.includes(src) ? src : "all";
   let entries;
   try {
