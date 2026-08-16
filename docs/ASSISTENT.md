@@ -132,15 +132,52 @@ registerbestand: de controle mag niet leunen op een lijst die iemand had moeten
 bijwerken. Een MCP die zich niet meldt telt als **niet gehaald** — onbereikbaar
 is niet hetzelfde als in orde.
 
+### Hoe laag 2 aan een cijfer komt
+
+In twee fasen, en die scheiding is de hele veiligheid:
+
+1. **Kiezen.** Het model krijgt de catalogus van beschikbare aggregaties en zegt
+   welke het wil, met welke argumenten. Meer niet.
+2. **Rekenen.** De MCP voert die aggregatie uit en geeft het getal terug mét
+   verantwoording. Het resultaat wordt een gewone bron, waarna het bestaande
+   antwoordpad van laag 1 het overneemt — inclusief de controle dat elk getal in
+   het antwoord uit een bron komt.
+
+Het model kiest dus wélke aggregatie zinvol is en interpreteert de uitkomst; het
+rekent nergens. Een tool-use-lus waarin het model zelf tools aanroept zou dat
+vervagen — nu is er letterlijk geen pad waarlangs een door het model bedacht
+getal het antwoord in komt.
+
+**Bestaat de gevraagde aggregatie niet, dan weigert hij.** Niet schatten, en niet
+een andere pakken die er ongeveer op lijkt. Die toets staat in code en niet in de
+prompt: een model dat wordt gevraagd niet te verzinnen, verzint soms toch.
+
+Ook een weigering: een vraag zonder periode. Een cijfer zonder periode zegt niets.
+
+### Het cijfer met zijn verantwoording
+
+Elk cijfer wordt getoond mét periode, populatie, definitie en uitgesloten
+records — **standaard zichtbaar, niet uitklapbaar**. Dat leest zwaarder. Doe het
+toch: wat achter een klik zit wordt niet gelezen en dus ook niet meegenomen naar
+de vergadering waar dat getal gebruikt wordt.
+
+Valt de verantwoording weg door de veldclassificatie (de vragensteller mag de
+populatie of definitie niet zien), dan weigert de assistent het cijfer helemaal.
+Een getal zonder controle is precies wat de briefing verbiedt.
+
 ## Wat er nog niet in zit
 
-- **De vraagroute van laag 2.** De schakelaar en de voorwaardencontrole staan;
-  de assistent kan nog geen aggregatie ópvragen. Dat is de volgende stap: de
-  aggregatietools als bron aanbieden, weigeren als de gevraagde aggregatie niet
-  bestaat, en elk cijfer tonen mét periode, populatie en definitie.
 - **Alleen bij een openstaand voorstel.** Het paneel hangt aan de itempagina. Een
-  invoerveld zonder open item — met de werkbak als context — komt als laag 2 er
-  is, want dan is er ook iets zinnigs te vragen zonder item.
+  invoerveld zonder open item — met de werkbak als context — is de logische
+  volgende stap nu laag 2 er is: een vraag over klachtenpercentages hoort niet
+  aan één mail te hangen.
+- **De catalogus is handmatig.** `AGGREGATION_CATALOG` in
+  `ui/lib/assistant/analyse-run.ts` beschrijft wat het model mag kiezen. De
+  namen komen uit de MCP's, de omschrijvingen niet — zodra een derde MCP
+  aggregaties aanbiedt hoort dit uit de MCP zelf te komen, want een omschrijving
+  die hier veroudert laat het model de verkeerde kiezen.
+- **Twee aggregaties.** Hoeveel er standaard in gaan is een open besluit uit de
+  briefing.
 - **Geen geheugen tussen vragen.** Elke vraag staat op zichzelf. Dat houdt de
   controle eerlijk: er is geen eerdere beurt waaruit een bewering kan lekken die
   niet meer in de bronnen staat.

@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { accessFor } from "@/lib/auth/access";
 import { moduleForRow } from "@/lib/modules";
 import { askAssistant, assistantEnabled } from "@/lib/assistant/run";
+import { analyseFlagSet } from "@/lib/assistant/analyse";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,20 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "Geen rechten op dit proces" }, { status: 403 });
   }
 
-  const { result, sources } = await askAssistant(env, client, mod, row, question);
+  // Laag 2 alleen als de vlag aanstaat én de vragensteller meer mag zien dan
+  // operationeel — anders is er niets te aggregeren wat hij mag zien.
+  const analyse =
+    analyseFlagSet(env) &&
+    me.categories.some((c) => c === "commercieel" || c === "financieel");
+
+  const { result, sources, aggregatie } = await askAssistant(
+    env,
+    client,
+    mod,
+    row,
+    question,
+    { analyse, categories: me.categories },
+  );
 
   // De bronnenlijst gaat altijd mee, ook bij een weigering: dan ziet de
   // medewerker wat de assistent wél had en kan hij zelf kijken.
@@ -90,5 +104,8 @@ export async function POST(request: Request): Promise<Response> {
     grounding: result.grounding,
     gebruikteBronnen: result.usedSources.map((s) => s.id),
     bronnen,
+    // Gaat apart mee, niet alleen als bron: de cockpit toont periode,
+    // populatie en definitie standaard zichtbaar bij het cijfer.
+    aggregatie: aggregatie ?? null,
   });
 }

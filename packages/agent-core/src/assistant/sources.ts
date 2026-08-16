@@ -19,7 +19,9 @@ export type AssistantSourceKind =
   /** Een beleidsregel uit de cockpit. */
   | 'beleid'
   /** Een eerder afgehandelde zaak die op deze lijkt. */
-  | 'eerdere_zaak';
+  | 'eerdere_zaak'
+  /** Een uitgevoerde aggregatie, met zijn volledige verantwoording (laag 2). */
+  | 'aggregatie';
 
 /**
  * Eén stuk context dat de assistent mag gebruiken.

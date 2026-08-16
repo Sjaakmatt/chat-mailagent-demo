@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sparkles, Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { CijferKaart, type Aggregatie } from "./CijferKaart";
 
 /**
  * Het raadpleegvenster naast het werk. Eén invoerveld, geen tweede.
@@ -35,7 +36,15 @@ interface GroundingRef {
 }
 
 type Antwoord =
-  | { ok: true; answer: string; grounding: GroundingRef[]; gebruikteBronnen: string[]; bronnen: Bron[] }
+  | {
+      ok: true;
+      answer: string;
+      grounding: GroundingRef[];
+      gebruikteBronnen: string[];
+      bronnen: Bron[];
+      /** Gevuld als de vraag een aggregatie opleverde (laag 2). */
+      aggregatie: Aggregatie | null;
+    }
   | { ok: false; reason: string; message: string; bronnen: Bron[] };
 
 const VOORBEELDEN = [
@@ -151,6 +160,10 @@ export function AssistantPanel({ reviewItemId }: { reviewItemId: string }) {
             <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed">
               {result.answer}
             </p>
+
+            {/* Het cijfer met zijn verantwoording. Boven de citaten, want dit
+                is wat de medewerker meeneemt naar buiten. */}
+            {result.aggregatie && <CijferKaart aggregatie={result.aggregatie} />}
 
             {result.grounding.length > 0 && (
               <ul className="mt-3 space-y-1">
