@@ -3,6 +3,7 @@ import {
   ACTION_STATUSES,
   ACTION_TYPES,
   canTransitionAction,
+  checkFieldBacking,
   evaluateApproval,
   getActionType,
   identificationLevel,
@@ -532,5 +533,77 @@ describe('proposableActionTypes', () => {
       now: nu,
     });
     expect(uit.actions).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('dekking per veldherkomst', () => {
+  const velden = [
+    { name: 'amount', label: 'Bedrag', hint: '', source: 'bron' as const },
+    { name: 'reason', label: 'Reden', hint: '', source: 'bericht' as const },
+  ];
+
+  it('accepteert een bronveld met een tool-call en een berichtveld met een messageId', () => {
+    expect(
+      checkFieldBacking({ amount: 89.95, reason: 'beschadigd' }, [
+        { field: 'amount', toolCallId: 'db.invoice' },
+        { field: 'reason', messageId: 'msg-1' },
+      ], velden),
+    ).toEqual([]);
+  });
+
+  it('weigert een bedrag dat alleen op het bericht leunt', () => {
+    // Dit is het geval waarvoor harde regel 4 bestaat: een bedrag dat de klant
+    // noemt is geen bedrag dat op de factuur staat.
+    const uit = checkFieldBacking({ amount: 500 }, [{ field: 'amount', messageId: 'msg-1' }], velden);
+    expect(uit).toHaveLength(1);
+    expect(uit[0].reason).toContain('tool-call');
+  });
+
+  it('laat een reden door zonder tool-call, want die staat in geen enkel systeem', () => {
+    expect(
+      checkFieldBacking({ reason: 'kwam kapot aan' }, [{ field: 'reason', messageId: 'msg-1' }], velden),
+    ).toEqual([]);
+  });
+
+  it('weigert een veld waarvoor helemaal niets is meegegeven', () => {
+    const uit = checkFieldBacking({ amount: 10 }, [], velden);
+    expect(uit[0].reason).toContain('geen onderbouwing');
+  });
+
+  it('behandelt een niet-gedeclareerd veld als bron', () => {
+    // Een vergeten declaratie mag de eis niet stilzwijgend versoepelen — dat is
+    // het soort gat waar je pas achterkomt als er iets verkeerds is geboekt.
+    const uit = checkFieldBacking({ onbekend: 'x' }, [{ field: 'onbekend', messageId: 'm' }], velden);
+    expect(uit).toHaveLength(1);
+    expect(uit[0].reason).toContain('tool-call');
+  });
+
+  it('laat een werkticket ontstaan uit puur de klantmail', () => {
+    // Precies het geval dat vóór deze splitsing onmogelijk was: het type dat
+    // bedoeld is om de machinerie op te beproeven, ketste af op zijn eigen
+    // omschrijving.
+    const { actions, rejected } = buildProposedActions({
+      planned: [
+        {
+          type: 'werkticket_aanmaken',
+          payload: { subject: 'Beschadigd artikel', description: 'Doos ingedrukt' },
+          evidence: [
+            { field: 'subject', messageId: 'msg-1' },
+            { field: 'description', messageId: 'msg-1' },
+          ],
+          precondition: {},
+          impact: 'Er wordt een werkticket aangemaakt.',
+        },
+      ],
+      channel: 'mail',
+      identification: 'zwak',
+      organizationId: 'org-demo',
+      runId: 'sig_1',
+      now: nu,
+    });
+    expect(rejected).toEqual([]);
+    expect(actions).toHaveLength(1);
   });
 });

@@ -1160,8 +1160,15 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
             '"impact": string}]. ' +
             'REGELS. `type` moet exact een van de types hieronder zijn. Voor ELK ' +
             'veld in `payload` hoort een regel in `evidence` met dezelfde ' +
-            'puntnotatie en de fact-id waar de waarde vandaan komt; een veld ' +
-            'zonder dekking laat het hele voorstel afketsen. `precondition` is ' +
+            'puntnotatie; een veld zonder onderbouwing laat het hele voorstel ' +
+            'afketsen. Er zijn twee soorten velden, en het verschil is hard:\n' +
+            '  [bron]    de waarde staat in een opgehaald systeem. Zet de ' +
+            'fact-id in `toolCallId`. Neem de waarde letterlijk over; verzin ' +
+            'nooit een bedrag of een nummer.\n' +
+            '  [bericht] de klant levert de waarde zelf aan (een nieuw adres, ' +
+            'de reden van een klacht). Die staat in geen enkel systeem. Zet ' +
+            '`messageId` op de messageId van de mail; `toolCallId` mag weg.\n' +
+            '`precondition` is ' +
             'de systeemstaat waarop je je baseert (bv. {"status": "open"}) — die ' +
             'wordt bij goedkeuring opnieuw opgehaald en vergeleken. `impact` is ' +
             'één zin in mensentaal over wat er verandert; die zin is wat de ' +
@@ -1172,7 +1179,10 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
                 (t) =>
                   `- ${t.slug} (${t.label})\n` +
                   t.payloadFields
-                    .map((v) => `    payload.${v.name} — ${v.hint}`)
+                    .map(
+                      (v) =>
+                        `    payload.${v.name} [${v.source ?? 'bron'}] — ${v.hint}`,
+                    )
                     .join('\n'),
               )
               .join('\n');
@@ -1216,7 +1226,10 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
           `over ...") maar noem geen verzonnen cijfers/data.`
         : conversationBlock(payload) +
           `Oorspronkelijke mail — onderwerp: ${payload.subject ?? ''}\n${payload.bodyText ?? ''}\n\n` +
-          `Contact: ${resolved.contactId ?? 'onbekend'}\n\n` +
+          `Contact: ${resolved.contactId ?? 'onbekend'}\n` +
+          // De messageId hoort in de prompt omdat een bericht-veld 'm als
+          // dekking meekrijgt. Zonder dit zou het model 'm moeten verzinnen.
+          `messageId van deze mail: ${typeof (signal.payload as { messageId?: unknown }).messageId === 'string' ? (signal.payload as { messageId: string }).messageId : signal.id}\n\n` +
           `Geverifieerde feiten (id → inhoud):\n${facts.map((f) => `- ${f.id}: ${f.text}`).join('\n') || '(geen)'}` +
           (fewShot ? `\n\n${fewShot}` : '');
 
