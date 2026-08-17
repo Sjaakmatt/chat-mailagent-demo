@@ -203,11 +203,41 @@ export function isOpenAction(status: ActionStatus): boolean {
 export interface FieldEvidence {
   /** Puntnotatie in de payload, bv. `address.postalCode` of `lines.0.amount`. */
   field: string;
-  /** De tool-call uit dezelfde run die deze waarde dekt. */
-  toolCallId: string;
-  /** Optioneel: het bronbericht waarin de klant dit vroeg. */
+  /**
+   * De tool-call uit dezelfde run die deze waarde dekt. Verplicht voor velden
+   * die een bewering over een bronsysteem zijn (`source: 'bron'`).
+   */
+  toolCallId?: string;
+  /**
+   * Het bronbericht waarin de klant dit opgaf. Volstaat voor velden die de
+   * klant zelf aanlevert (`source: 'bericht'`) — een nieuw adres of de reden
+   * van een klacht staat in geen enkel systeem, want dat is nu juist wat hij
+   * komt melden.
+   */
   messageId?: string;
 }
+
+/**
+ * Waar een payload-veld vandaan hoort te komen.
+ *
+ * Dit onderscheid ontbrak, en dat had een concreet gevolg: elk veld moest uit
+ * een tool-call komen, dus een werkticket met een omschrijving uit de klantmail
+ * ketste af op zijn eigen omschrijving. Juist het type dat bedoeld was om de
+ * machinerie op te beproeven, kon nooit ontstaan.
+ *
+ *   bron     een bewering over een systeem — een bedrag, een factuurnummer,
+ *            een orderstatus. Hier geldt harde regel 4 onverkort: geen
+ *            tool-call uit dezelfde run, geen voorstel.
+ *   bericht  iets wat de klant zelf aanlevert — een nieuw adres, de reden van
+ *            een retour. Dat staat in geen enkel systeem; eisen dat het uit een
+ *            bron komt is niet strenger maar onmogelijk.
+ *
+ * Het onderscheid is niet cosmetisch. Bij een creditnota is het precies de
+ * scheidslijn die ertoe doet: het bedrag komt uit de factuur, de reden uit de
+ * mail. Ze door elkaar halen betekent óf een verzonnen bedrag toelaten, óf geen
+ * enkele creditnota kunnen voorstellen.
+ */
+export type PayloadFieldSource = 'bron' | 'bericht';
 
 /**
  * Welke payload-velden missen dekking.
@@ -221,6 +251,52 @@ export function ungroundedFields(
 ): string[] {
   const gedekt = new Set(evidence.map((e) => e.field));
   return leafPaths(payload).filter((pad) => !gedekt.has(pad));
+}
+
+export interface FieldBackingProblem {
+  field: string;
+  reason: string;
+}
+
+/**
+ * Toetst per payload-veld of de dekking klopt bij waar het veld vandaan hoort.
+ *
+ * Strenger dan `ungroundedFields` op bron-velden en soepeler op bericht-velden,
+ * en dat is precies de bedoeling: een bedrag zonder tool-call is een verzonnen
+ * bedrag, maar een reden zonder tool-call is gewoon wat de klant schreef.
+ *
+ * Een veld dat niet in de registratie staat wordt als `bron` behandeld. Een
+ * vergeten declaratie hoort de eis niet stilzwijgend te versoepelen — dat is
+ * het soort gat waar je pas achterkomt als er iets verkeerds is weggeschreven.
+ */
+export function checkFieldBacking(
+  payload: Record<string, unknown>,
+  evidence: readonly FieldEvidence[],
+  fields: readonly ActionPayloadField[],
+): FieldBackingProblem[] {
+  const dekking = new Map(evidence.map((e) => [e.field, e]));
+  const herkomst = new Map(fields.map((f) => [f.name, f.source ?? 'bron']));
+
+  const uit: FieldBackingProblem[] = [];
+  for (const pad of leafPaths(payload)) {
+    const bewijs = dekking.get(pad);
+    if (!bewijs) {
+      uit.push({ field: pad, reason: 'geen onderbouwing meegegeven' });
+      continue;
+    }
+    const bron = herkomst.get(pad) ?? 'bron';
+    if (bron === 'bron' && !bewijs.toolCallId) {
+      uit.push({
+        field: pad,
+        reason: 'moet uit een tool-call van deze run komen, niet uit het bericht',
+      });
+      continue;
+    }
+    if (bron === 'bericht' && !bewijs.toolCallId && !bewijs.messageId) {
+      uit.push({ field: pad, reason: 'geen tool-call en geen bronbericht' });
+    }
+  }
+  return uit;
 }
 
 function leafPaths(value: unknown, prefix = ''): string[] {
@@ -298,6 +374,13 @@ export interface ActionPayloadField {
   label: string;
   /** Wat hier hoort te staan — gaat letterlijk de prompt in. */
   hint: string;
+  /**
+   * Waar de waarde vandaan hoort te komen. Bepaalt welke dekking volstaat.
+   *
+   * Ontbreekt hij, dan geldt `bron` — de strengste. Een vergeten veld hoort de
+   * eis niet stilzwijgend te versoepelen.
+   */
+  source?: PayloadFieldSource;
 }
 
 /**
@@ -324,8 +407,8 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
     payloadFields: [
-      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' },
-      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' },
+      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' , source: 'bericht' },
+      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' , source: 'bericht' },
     ],
   },
   {
@@ -340,7 +423,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     expiresAfterMinutes: 24 * 60,
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' },
+      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' , source: 'bericht' },
     ],
   },
   {
@@ -356,9 +439,9 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     expiresAfterMinutes: 12 * 60,
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' },
-      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' },
-      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' },
+      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' , source: 'bericht' },
+      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' , source: 'bericht' },
+      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' , source: 'bericht' },
     ],
   },
   {
@@ -374,7 +457,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
       { name: 'sku', label: 'Artikel', hint: 'het artikelnummer uit de opgehaalde orderregels' },
-      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' },
+      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' , source: 'bericht' },
     ],
   },
   {
@@ -410,7 +493,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     payloadFields: [
       { name: 'trackingCode', label: 'Trackingcode', hint: 'de trackingcode uit de opgehaalde zending' },
       { name: 'carrier', label: 'Vervoerder', hint: 'de vervoerder uit de opgehaalde zending' },
-      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' },
+      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' , source: 'bericht' },
     ],
   },
   {
@@ -427,7 +510,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     payloadFields: [
       { name: 'invoiceNumber', label: 'Factuurnummer', hint: 'het factuurnummer uit de opgehaalde factuur' },
       { name: 'amount', label: 'Bedrag', hint: 'bedrag in euro, uitsluitend uit de opgehaalde factuurregels' },
-      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' },
+      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' , source: 'bericht' },
     ],
   },
 ]);
@@ -583,11 +666,15 @@ export function buildProposedActions(input: ActionProposalInput): ActionProposal
       return;
     }
 
-    const ongedekt = ungroundedFields(voorstel.payload, voorstel.evidence);
-    if (ongedekt.length > 0) {
+    const problemen = checkFieldBacking(
+      voorstel.payload,
+      voorstel.evidence,
+      poort.def.payloadFields,
+    );
+    if (problemen.length > 0) {
       rejected.push({
         type: voorstel.type,
-        reason: `geen dekking voor ${ongedekt.join(', ')} — elk veld in de payload moet uit een tool-call van deze run komen`,
+        reason: problemen.map((p) => `${p.field}: ${p.reason}`).join('; '),
       });
       return;
     }
