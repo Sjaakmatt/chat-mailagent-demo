@@ -103,6 +103,8 @@ export interface Env {
   /** Workflow-bindings (durable execution). */
   ORCHESTRATION: Workflow<OrchestrationParams>;
   EXECUTE: Workflow<ExecuteParams>;
+  /** Uitvoeren van een goedgekeurde schrijfoperatie in een bronsysteem. */
+  ACTION_EXECUTE: Workflow<ActionExecuteParams>;
   /**
    * Fase 2 multi-agent — parallel aan ORCHESTRATION. De poller start
    * ROUTER i.p.v. ORCHESTRATION zodra `USE_MULTI_AGENT_ROUTER=true`.
@@ -222,6 +224,25 @@ export interface ExecuteParams {
   idempotencyKey: string;
 }
 
+/**
+ * Uitvoeren van één goedgekeurde schrijfoperatie.
+ *
+ * Alleen het id: de actie wordt in de Workflow opnieuw geladen in plaats van
+ * meegegeven. Tussen de klik en de step zit tijd, en een payload die je
+ * meestuurt is een momentopname van vóór die tijd.
+ */
+export interface ActionExecuteParams {
+  actionId: string;
+  /**
+   * De rol van wie er heeft goedgekeurd. Komt uit de sessie in de cockpit; hier
+   * is geen ingelogde gebruiker meer, en `evaluateApproval` heeft 'm nodig om de
+   * bedragsgrens te kunnen handhaven.
+   */
+  approverRole: 'viewer' | 'reviewer' | 'admin';
+  /** Wie er heeft goedgekeurd, voor de auditlog. */
+  approvedBy: string;
+}
+
 /** Router-Workflow (Fase 2): classificeert het Signal en dispatched een specialist. */
 export interface RouterParams {
   signalId: string;
@@ -281,6 +302,21 @@ export interface PlatformStore {
    * Moet ná het ReviewItem, want `review_item_id` heeft er een foreign key naar.
    */
   saveProposedActions(actions: readonly ProposedAction[]): Promise<void>;
+  /** Eén voorstel op id; null als het niet bestaat. */
+  loadProposedAction(actionId: string): Promise<ProposedAction | null>;
+  /**
+   * Zet de status van een voorstel, met de reden of de verwijzing erbij.
+   *
+   * `uitgevoerd` stempelt ook `decided_at` niet: dát moment was de goedkeuring
+   * in de cockpit, en die is daar al vastgelegd. Hier gaat het om wat er ná die
+   * beslissing is gebeurd.
+   */
+  markProposedAction(
+    actionId: string,
+    status: ProposedAction['status'],
+    reason?: string | null,
+    decidedBy?: string | null,
+  ): Promise<void>;
   markSignal(signalId: string, status: Signal['status']): Promise<void>;
   /**
    * Claimt een signaal om het te verwerken; `false` als een ander het al heeft.

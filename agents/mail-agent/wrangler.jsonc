@@ -31,6 +31,15 @@
       "binding": "EXECUTE",
       "class_name": "ExecuteWorkflow"
     },
+    // Uitvoeren van een goedgekeurde schrijfoperatie in een bronsysteem.
+    // Los van EXECUTE: dat gaat over het versturen van een antwoord, dit over
+    // het schrijven in andermans systeem. Andere hervalidatie, andere
+    // foutafhandeling.
+    {
+      "name": "__CLIENT_SLUG__-workflow-action-execute",
+      "binding": "ACTION_EXECUTE",
+      "class_name": "ActionExecuteWorkflow"
+    },
     // Fase 2 — multi-agent split. Coexisteert met ORCHESTRATION zodat de
     // feature-flag USE_MULTI_AGENT_ROUTER snel te switchen is.
     {
@@ -153,6 +162,11 @@
           "name": "__CLIENT_SLUG__-workflow-execute-staging",
           "binding": "EXECUTE",
           "class_name": "ExecuteWorkflow"
+        },
+        {
+          "name": "__CLIENT_SLUG__-workflow-action-execute-staging",
+          "binding": "ACTION_EXECUTE",
+          "class_name": "ActionExecuteWorkflow"
         },
         {
           "name": "__CLIENT_SLUG__-workflow-router-staging",

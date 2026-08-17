@@ -153,6 +153,25 @@ function proposedActionToRow(action: ProposedAction): ProposedActionRow {
   };
 }
 
+function rowToProposedAction(r: ProposedActionRow): ProposedAction {
+  return {
+    id: r.id,
+    organizationId: r.organization_id,
+    type: r.type,
+    payload: r.payload ?? {},
+    evidence: (r.evidence as ProposedAction['evidence']) ?? [],
+    precondition: r.precondition ?? {},
+    impact: r.impact,
+    status: r.status as ProposedAction['status'],
+    runId: r.signal_id,
+    reviewItemId: r.review_item_id,
+    idempotencyKey: r.idempotency_key,
+    reason: r.reason,
+    createdAt: r.created_at,
+    expiresAt: r.expires_at,
+  };
+}
+
 function reviewItemToRow(item: ReviewItem): ReviewItemRow {
   return {
     id: item.id,
@@ -282,6 +301,40 @@ export function createPlatformStore(env: Env): PlatformStore {
         // dus een herhaalde step schrijft dezelfde rij nog eens in plaats van
         // een tweede voorstel voor dezelfde actie aan te maken.
         prefer: 'return=minimal,resolution=merge-duplicates',
+      });
+    },
+
+    async loadProposedAction(actionId: string): Promise<ProposedAction | null> {
+      const url = client.tableUrl('aios_proposed_actions');
+      url.searchParams.set('id', `eq.${actionId}`);
+      url.searchParams.set('limit', '1');
+      const rows = await client.request<ProposedActionRow[]>(STORE_CTX, url, { method: 'GET' });
+      const row = Array.isArray(rows) ? rows[0] : undefined;
+      return row ? rowToProposedAction(row) : null;
+    },
+
+    async markProposedAction(
+      actionId: string,
+      status: ProposedAction['status'],
+      reason?: string | null,
+      decidedBy?: string | null,
+    ): Promise<void> {
+      const url = client.tableUrl('aios_proposed_actions');
+      url.searchParams.set('id', `eq.${actionId}`);
+      // Nooit over een eindstation heen. `uitgevoerd` betekent dat er iets in
+      // andermans systeem staat; die rij is historie, en een late run mag 'm
+      // niet alsnog op `mislukt` zetten.
+      url.searchParams.set('status', 'neq.uitgevoerd');
+      await client.request<unknown>(STORE_CTX, url, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status,
+          reason: reason ?? null,
+          ...(decidedBy
+            ? { decided_by: decidedBy, decided_at: new Date().toISOString() }
+            : {}),
+        }),
+        prefer: 'return=minimal',
       });
     },
 

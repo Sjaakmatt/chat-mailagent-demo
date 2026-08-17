@@ -27,6 +27,12 @@
       "binding": "EXECUTE",
       "class_name": "ExecuteWorkflow",
       "script_name": "__CLIENT_SLUG__-mail-agent"
+    },
+    {
+      "name": "__CLIENT_SLUG__-workflow-action-execute",
+      "binding": "ACTION_EXECUTE",
+      "class_name": "ActionExecuteWorkflow",
+      "script_name": "__CLIENT_SLUG__-mail-agent"
     }
   ],
 
@@ -82,6 +88,12 @@
           "name": "__CLIENT_SLUG__-workflow-execute-staging",
           "binding": "EXECUTE",
           "class_name": "ExecuteWorkflow",
+          "script_name": "__CLIENT_SLUG__-mail-agent-staging"
+        },
+        {
+          "name": "__CLIENT_SLUG__-workflow-action-execute-staging",
+          "binding": "ACTION_EXECUTE",
+          "class_name": "ActionExecuteWorkflow",
           "script_name": "__CLIENT_SLUG__-mail-agent-staging"
         }
       ],

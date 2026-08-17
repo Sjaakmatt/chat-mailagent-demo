@@ -5,6 +5,7 @@
  * - MailPoller        — DO-alarm poller (pgmq → Orchestration-Workflow)
  * - OrchestrationWorkflow — classify→resolve→retrieve→plan→ground → ReviewItem
  * - ExecuteWorkflow       — ná approve: idempotente side effect → memory → DONE
+ * - ActionExecuteWorkflow — ná approve van een schrijfoperatie: hervalideren → schrijven
  *
  * De fetch-handler is bewust minimaal: publieke inbound hoort op de domein-MCP
  * (verify+normalize+enqueue) en de cockpit-UI, niet hier. Dit endpoint dient
@@ -13,6 +14,7 @@
 import { MailPoller } from './poller-do.js';
 import { OrchestrationWorkflow } from './workflows/orchestration.js';
 import { ExecuteWorkflow } from './workflows/execute.js';
+import { ActionExecuteWorkflow } from './workflows/action-execute.js';
 import { RouterWorkflow } from './workflows/router.js';
 import { SpecialistWorkflow } from './workflows/specialist.js';
 import { AggregatorWorkflow } from './workflows/aggregator.js';
@@ -27,6 +29,7 @@ export {
   ChatSession,
   OrchestrationWorkflow,
   ExecuteWorkflow,
+  ActionExecuteWorkflow,
   RouterWorkflow,
   SpecialistWorkflow,
   AggregatorWorkflow,

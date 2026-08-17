@@ -26,7 +26,11 @@
  * achterloopt.
  */
 
-import { getActionType, type ProposedAction } from '@factumai/agent-core';
+import {
+  getActionType,
+  type PreconditionKind,
+  type ProposedAction,
+} from '@factumai/agent-core';
 import { callMcp, cfAccessHeaders, mcpBearer } from '@factumai/agent-core/mcp';
 import type { Env } from '../env.js';
 
@@ -51,6 +55,54 @@ export interface ActionExecutor {
  *   export const ACTION_EXECUTORS: ActionExecutor[] = demoExecutors;
  */
 export const ACTION_EXECUTORS: ActionExecutor[] = [];
+
+/**
+ * Haalt de huidige systeemstaat op waartegen de preconditie wordt getoetst.
+ *
+ * Per `preconditionKind` en niet per actietype: vier typen leunen op
+ * `orderstatus`, en die lookup vier keer registreren is vier kansen om er één
+ * te laten afwijken.
+ */
+export interface PreconditionReader {
+  kind: PreconditionKind;
+  read(ctx: ActionExecutionContext): Promise<Record<string, unknown>>;
+}
+
+/**
+ * Leeg in het fundament, net als `ACTION_EXECUTORS` — een klant- of demo-repo
+ * vult 'm met de lookups van zijn eigen bronsystemen.
+ */
+export const PRECONDITION_READERS: PreconditionReader[] = [];
+
+/**
+ * De actuele staat, of een fout als die niet te bepalen is.
+ *
+ * **Fail-closed, en dat is hier het hele punt.** Kan de preconditie niet worden
+ * opgehaald, dan weten we niet of het voorstel nog klopt — en dan is doorgaan
+ * precies het scenario waar de hervalidatie voor bestaat: de agent stelt om 9:15
+ * een creditnota van 340 euro voor, om 9:40 wordt de order aangepast, om 11:00
+ * drukt iemand op goedkeuren. Niet kunnen controleren is geen reden om het maar
+ * te doen.
+ *
+ * `geen` is de uitzondering: daar valt niets te verouderen, dus is de bewaarde
+ * preconditie zelf het antwoord en vindt `preconditionDrift` per definitie niets.
+ */
+export async function readCurrentState(
+  ctx: ActionExecutionContext,
+): Promise<Record<string, unknown>> {
+  const def = getActionType(ctx.action.type);
+  if (!def) throw new Error(`actietype ${ctx.action.type} bestaat niet meer in de registratie`);
+  if (def.preconditionKind === 'geen') return ctx.action.precondition;
+
+  const reader = PRECONDITION_READERS.find((r) => r.kind === def.preconditionKind);
+  if (!reader) {
+    throw new Error(
+      `geen lookup geregistreerd voor preconditie '${def.preconditionKind}' — ` +
+        `kan niet vaststellen of dit voorstel nog klopt, dus niets uitgevoerd`,
+    );
+  }
+  return reader.read(ctx);
+}
 
 /** De MCP-endpoint van dit doel, uit de env. */
 function mcpUrlFor(env: Env, mcp: string): string | undefined {
