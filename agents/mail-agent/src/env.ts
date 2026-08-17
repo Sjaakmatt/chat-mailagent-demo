@@ -4,6 +4,7 @@ import type {
   PartialResponse,
   Signal,
   ReviewItem,
+  ProposedAction,
 } from '@factumai/agent-core';
 import type { MailPoller } from './poller-do.js';
 import type { ChatSession } from './chat/session-do.js';
@@ -272,6 +273,14 @@ export interface PlatformStore {
    * ondertussen verouderd kan zijn.
    */
   markReviewItemHandled(reviewItemId: string, actor: string): Promise<void>;
+  /**
+   * Zet klaargezette schrijfoperaties weg. Idempotent op `id` — een Workflow-
+   * step mag opnieuw draaien, en dan hoort dezelfde actie één rij te blijven
+   * in plaats van een tweede creditnota van hetzelfde bedrag op te leveren.
+   *
+   * Moet ná het ReviewItem, want `review_item_id` heeft er een foreign key naar.
+   */
+  saveProposedActions(actions: readonly ProposedAction[]): Promise<void>;
   markSignal(signalId: string, status: Signal['status']): Promise<void>;
   /**
    * Claimt een signaal om het te verwerken; `false` als een ander het al heeft.

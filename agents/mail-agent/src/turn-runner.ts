@@ -107,6 +107,22 @@ export async function runSignalTurn(
   // falen — en dan krijgt de bezoeker een bevestiging zonder ticket erachter.
   await store.saveReviewItem(result.reviewItem);
 
+  // Direct erna, en vóór het antwoord: `review_item_id` heeft een foreign key
+  // naar de rij hierboven, en bij chat gaat de bevestiging zo de deur uit.
+  //
+  // Fail-soft, met opzet asymmetrisch. Er staat op dit moment nog niets in enig
+  // bronsysteem — dat is het hele principe van een voorstel — dus een mislukte
+  // opslag betekent alleen dat een medewerker het handmatig doet. Dat is
+  // vervelend. De hele beurt laten klappen en de klant zonder antwoord laten
+  // zitten is erger.
+  if (result.actions && result.actions.length > 0) {
+    try {
+      await store.saveProposedActions(result.actions);
+    } catch (err) {
+      console.error('[acties] klaarzetten mislukt — geen voorstel in de werkbak:', err);
+    }
+  }
+
   const outOfDomain = result.classification.outOfDomain;
   const log: DecisionLog = {
     signalId: signal.id,
@@ -136,6 +152,24 @@ export async function runSignalTurn(
     confidence: result.reviewItem.confidence ?? null,
     createdAt: new Date().toISOString(),
   };
+
+  // Wat er is klaargezet, en net zo belangrijk: wat níét en waarom. Zonder die
+  // tweede helft staat er "geen actie" in de werkbak en kan niemand zien of er
+  // niets te doen was of dat een bedrag geen dekking had.
+  const klaargezet = result.actions ?? [];
+  const geweigerd = result.rejectedActions ?? [];
+  if (klaargezet.length > 0 || geweigerd.length > 0) {
+    log.steps.push({
+      step: 'acties',
+      outcome: [
+        klaargezet.length > 0
+          ? `klaargezet: ${klaargezet.map((a) => a.type).join(', ')}`
+          : 'niets klaargezet',
+        ...geweigerd.map((r) => `geweigerd ${r.type}: ${r.reason}`),
+        `identificatie: ${result.identification ?? 'onbekend'}`,
+      ].join(' | '),
+    });
+  }
 
   let reply: string | undefined;
 
