@@ -36,6 +36,14 @@ import {
   type OutcomeDecision,
 } from '../outcomes/index.js';
 import { channelForDomain } from '../channels/index.js';
+import {
+  buildProposedActions,
+  identificationLevel,
+  type IdentificationLevel,
+  type PlannedAction,
+  type ProposedAction,
+  type RejectedProposal,
+} from '../actions/index.js';
 import type { DecisionSource } from '../decision-log/index.js';
 
 export interface Classification {
@@ -197,6 +205,25 @@ export interface Plan {
    * geen bron heeft geraadpleegd; dan telt dat als geen systeemantwoord.
    */
   systemAnswer?: boolean;
+  /**
+   * Schrijfoperaties die de agent wil klaarzetten in een bronsysteem —
+   * creditnota, adreswijziging, nalevering. Nog niets uitgevoerd: pas ná
+   * goedkeuring in de werkbak gebeurt er iets.
+   *
+   * Wat het model hier neerzet is een **voorstel**, geen besluit. De poorten
+   * eromheen (kanaal, identificatie, dekking per veld) draaien in
+   * `buildProposedActions` en niet in de prompt — anders zou een model dat zich
+   * vergist ook meteen zijn eigen rem kunnen loszetten.
+   */
+  actions?: PlannedAction[];
+  /**
+   * Het adres dat het bronsysteem bij de opgehaalde order/factuur teruggaf.
+   *
+   * Hiermee komt de identificatie van "iemand noemt een ordernummer" op
+   * "het bronsysteem knoopt dit adres aan deze order". Alleen vullen als de
+   * lookup echt iets teruggaf — zie `identificationLevel`.
+   */
+  sourceEmail?: string | null;
 }
 
 export interface PlanInput {
@@ -285,6 +312,22 @@ export interface OrchestrationResult {
   outcome?: OutcomeDecision;
   /** Geraadpleegde bronnen in deze run — voedt het beslislog. */
   sources?: DecisionSource[];
+  /**
+   * Klaargezette schrijfoperaties, al langs alle poorten. Leeg als de plan-stap
+   * er geen voorstelde of ze allemaal zijn geweigerd.
+   */
+  actions?: ProposedAction[];
+  /**
+   * Voorstellen die niet door de poort kwamen, met de reden.
+   *
+   * Staat naast `actions` en niet erin, want dit is geen werkvoorraad maar
+   * verantwoording. Zonder deze lijst staat er in de werkbak "geen actie" en
+   * kan niemand zien of dat kwam doordat er niets te doen was of doordat een
+   * bedrag geen dekking had.
+   */
+  rejectedActions?: RejectedProposal[];
+  /** Hoe zeker we weten wie dit vraagt. Bepaalde welke acties mochten ontstaan. */
+  identification?: IdentificationLevel;
 }
 
 function defaultId(): string {
@@ -561,7 +604,41 @@ export async function runSpecialize(
     hit: true,
   }));
 
-  return { reviewItem, classification, resolved, ungrounded, outcome, sources };
+  // De schrijfoperaties, ná het ReviewItem omdat ze eraan hangen.
+  //
+  // Het identificatieniveau wordt hier afgeleid en niet door de plan-stap
+  // gemeld. Dat is bewust: het model schrijft de payload, en als het ook zijn
+  // eigen zekerheid over de klant mocht opgeven, zou het de poort kunnen
+  // openzetten die precies daarvoor bedoeld is.
+  const identification = identificationLevel({
+    senderAddress: typeof payload.from === 'string' ? payload.from : null,
+    orderReference:
+      typeof classification.extracted.orderNumber === 'string'
+        ? classification.extracted.orderNumber
+        : null,
+    sourceEmail: plan.sourceEmail ?? null,
+  });
+  const { actions, rejected: rejectedActions } = buildProposedActions({
+    planned: plan.actions ?? [],
+    channel,
+    identification,
+    organizationId: signal.organizationId,
+    runId: signal.id,
+    reviewItemId: reviewItem.id,
+    now: new Date(reviewItem.createdAt),
+  });
+
+  return {
+    reviewItem,
+    classification,
+    resolved,
+    ungrounded,
+    outcome,
+    sources,
+    actions,
+    rejectedActions,
+    identification,
+  };
 }
 
 /**

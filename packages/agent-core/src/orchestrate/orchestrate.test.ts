@@ -435,3 +435,91 @@ describe('meten en melden', () => {
     expect(fasen).not.toContain('doorzetten');
   });
 });
+
+describe('orchestrate — schrijfoperaties klaarzetten', () => {
+  const creditnota = {
+    type: 'creditnota_voorstellen',
+    payload: { invoiceNumber: 'F-42', amount: 89.95 },
+    evidence: [
+      { field: 'invoiceNumber', toolCallId: 'tc-inv' },
+      { field: 'amount', toolCallId: 'tc-inv' },
+    ],
+    precondition: { invoiceNumber: 'F-42', status: 'open' },
+    impact: 'Creditnota van € 89,95 op factuur F-42.',
+  };
+
+  /** Plan-stap die één creditnota voorstelt en het bronadres teruggeeft. */
+  function planMetActie(over: { sourceEmail?: string | null } = {}) {
+    return steps({
+      plan: async ({ recorder }) => {
+        recorder.record({ toolCallId: 'tc-inv', tool: 'erp.get_invoice' });
+        return {
+          kind: 'draft_email' as const,
+          summary: 'Klacht over beschadigd artikel',
+          body: 'We crediteren het bedrag.',
+          claims: [],
+          sourceEmail:
+            'sourceEmail' in over ? (over.sourceEmail ?? null) : 'klant@example.com',
+          actions: [creditnota],
+        };
+      },
+    });
+  }
+
+  it('zet de actie klaar als het bronsysteem adres en order aan elkaar knoopt', async () => {
+    const res = await orchestrate(signal, { steps: planMetActie() });
+
+    expect(res.identification).toBe('gematcht');
+    expect(res.actions).toHaveLength(1);
+    expect(res.actions?.[0].type).toBe('creditnota_voorstellen');
+    // Klaargezet, niet uitgevoerd. Er staat op dit moment niets in het
+    // bronsysteem — dat is het hele principe.
+    expect(res.actions?.[0].status).toBe('voorgesteld');
+    expect(res.actions?.[0].reviewItemId).toBe(res.reviewItem.id);
+    expect(res.rejectedActions).toEqual([]);
+  });
+
+  it('weigert dezelfde actie als de order niet op dit adres staat', async () => {
+    // Precies de fraudevector: iemand kent het ordernummer maar mailt vanaf een
+    // ander adres. Het concept-antwoord komt er nog steeds, de schrijfactie niet.
+    const res = await orchestrate(signal, {
+      steps: planMetActie({ sourceEmail: 'iemand.anders@example.com' }),
+    });
+
+    expect(res.identification).toBe('zwak');
+    expect(res.actions).toEqual([]);
+    expect(res.rejectedActions?.[0].reason).toContain('gematcht');
+    // En de lus loopt gewoon door: er ligt een concept voor een mens.
+    expect(res.reviewItem.status).toBe('PENDING');
+  });
+
+  it('houdt de actie tegen als een payload-veld geen dekking heeft', async () => {
+    const res = await orchestrate(signal, {
+      steps: steps({
+        plan: async ({ recorder }) => {
+          recorder.record({ toolCallId: 'tc-inv', tool: 'erp.get_invoice' });
+          return {
+            kind: 'draft_email' as const,
+            summary: 'Klacht',
+            body: 'We crediteren het bedrag.',
+            claims: [],
+            sourceEmail: 'klant@example.com',
+            // Het bedrag is nergens op gebaseerd — juist het veld dat geld kost.
+            actions: [
+              { ...creditnota, evidence: [{ field: 'invoiceNumber', toolCallId: 'tc-inv' }] },
+            ],
+          };
+        },
+      }),
+    });
+
+    expect(res.actions).toEqual([]);
+    expect(res.rejectedActions?.[0].reason).toContain('amount');
+  });
+
+  it('doet niets bijzonders als de plan-stap geen acties voorstelt', async () => {
+    const res = await orchestrate(signal, { steps: steps() });
+    expect(res.actions).toEqual([]);
+    expect(res.rejectedActions).toEqual([]);
+  });
+});
