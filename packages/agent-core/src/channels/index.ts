@@ -36,6 +36,22 @@ export interface ChannelDef {
    * `true` hoort een strakkere autonomie-afweging en een kortere poll-cadans.
    */
   realtime: boolean;
+  /**
+   * Wacht een item van dit kanaal in de werkbak op een mens?
+   *
+   * Bewust een eigen veld en niet `!realtime`. Dat zijn twee verschillende
+   * uitspraken die vandaag toevallig samenvallen: `realtime` zegt hoe snel er
+   * een antwoord moet komen, dit zegt wie er beslist. Een kanaal kan snel zijn
+   * én toch review nodig hebben — telefonie waar een medewerker meeluistert,
+   * bijvoorbeeld. Ze samenvoegen zou dat onderscheid ongemerkt weggooien.
+   *
+   * Bij `false` produceert de lus nog steeds een ReviewItem — dat is de
+   * verankering waar het beslislog en (bij uitkomst `taak`) het ticket aan
+   * hangen — maar de werkbak toont het niet. Het gesprek staat al onder
+   * Gesprekken en het werk onder Tickets; het item er als derde kopie bij zetten
+   * maakt van de wachtrij een plek waar drie dingen door elkaar lopen.
+   */
+  queuesForReview: boolean;
 }
 
 export const MAIL_CHANNEL: ChannelDef = {
@@ -45,6 +61,9 @@ export const MAIL_CHANNEL: ChannelDef = {
   signalTypes: ['mail.received'],
   reviewItemKind: 'draft_email',
   realtime: false,
+  // Mail is de werkbak zoals hij bedoeld is: een concept dat wacht tot een mens
+  // het goedkeurt. Harde regel 1.
+  queuesForReview: true,
 };
 
 /**
@@ -63,6 +82,11 @@ export const CHAT_CHANNEL: ChannelDef = {
   signalTypes: ['chat.message'],
   reviewItemKind: 'draft_chat_reply',
   realtime: true,
+  // Niet in de werkbak. Tegen de tijd dat een medewerker het item zou zien, is
+  // het antwoord al bij de bezoeker — er valt niets meer goed te keuren. Wat er
+  // wél te doen valt, staat waar het thuishoort: het gesprek onder Gesprekken,
+  // en bij uitkomst `taak` het uitzoekwerk onder Tickets.
+  queuesForReview: false,
 };
 
 /**
@@ -86,6 +110,19 @@ export function channelForKind(kind: string): ChannelDef | undefined {
 /** Welk kanaal hoort bij dit Signal-domein? */
 export function channelForDomain(domain: string): ChannelDef | undefined {
   return BY_DOMAIN.get(domain);
+}
+
+/**
+ * De ReviewItem-soorten die **niet** in de werkbak horen.
+ *
+ * Een uitsluitlijst en geen toelatingslijst, en dat is het hele punt: een module
+ * die z'n eigen soort produceert (een magazijnbon, een factuurvoorstel) hoort
+ * gewoon in de werkbak zonder zich ergens te melden. Alleen een kanaal dat zijn
+ * werk elders afhandelt, haalt zichzelf hier weg. Andersom zou elke nieuwe
+ * automatisering onzichtbaar beginnen tot iemand ontdekt dat er een lijst is.
+ */
+export function kindsHandledOutsideWorkbench(): string[] {
+  return CHANNELS.filter((c) => !c.queuesForReview).map((c) => c.reviewItemKind);
 }
 
 /** Is dit Signal-type door een geregistreerd kanaal af te handelen? */

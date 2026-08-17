@@ -5,6 +5,7 @@ import { CockpitDbClient, makeCockpitClient } from "./tenant-query";
 import type { ReviewItemRow, ReviewStatus } from "./review";
 import {
   fromDecisionLogRow,
+  kindsHandledOutsideWorkbench,
   type DecisionLog,
   type DecisionLogRow,
 } from "@factumai/agent-core";
@@ -51,11 +52,30 @@ export function makeClient(env: CockpitEnv): CockpitDbClient {
   return makeCockpitClient(env);
 }
 
-/** ReviewItems voor de werkbak: PENDING + recent besliste (laatste 7 dagen). */
+/**
+ * ReviewItems voor de werkbak: PENDING + recent besliste (laatste 7 dagen).
+ *
+ * Minus de soorten van kanalen die hun werk elders afhandelen — vandaag alleen
+ * chat. De werkbak is de plek waar een mens beslist; bij chat is er niets meer
+ * te beslissen tegen de tijd dat het item hier zou staan. Dat gesprek staat
+ * onder Gesprekken en het uitzoekwerk onder Tickets, en een derde kopie in de
+ * wachtrij maakt van die drie schermen één hoop.
+ *
+ * De uitsluiting komt uit de kanaal-registry in agent-core en staat niet hier:
+ * de cockpit is de schil en hoort `draft_chat_reply` niet bij naam te kennen.
+ * Zie `kindsHandledOutsideWorkbench()`.
+ */
 export async function listReviewItems(
   client: CockpitDbClient,
 ): Promise<ReviewItemRow[]> {
   const url = client.tableUrl("aios_review_items");
+  const buiten = kindsHandledOutsideWorkbench();
+  // Server-side wegfilteren, niet ná het ophalen: anders vult chat de limiet van
+  // 200 met items die toch niet getoond worden en verdwijnt echt reviewwerk
+  // onderaan uit beeld.
+  if (buiten.length > 0) {
+    url.searchParams.set("kind", `not.in.(${buiten.join(",")})`);
+  }
   url.searchParams.set("order", "created_at.desc");
   url.searchParams.set("limit", "200");
   const rows = await client.request<ReviewItemRow[]>(CTX, url, {
