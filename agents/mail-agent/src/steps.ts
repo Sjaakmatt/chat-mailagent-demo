@@ -454,10 +454,19 @@ function parseActions(waarde: unknown): PlannedAction[] {
     const evidence = Array.isArray(a.evidence)
       ? a.evidence
           .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
-          .filter((e) => typeof e.field === 'string' && typeof e.toolCallId === 'string')
+          // Eén van beide volstaat, en dat is niet soepelheid maar het hele
+          // onderscheid: een bronveld leunt op een tool-call, een berichtveld op
+          // de mail. Eisen dat `toolCallId` er is, gooit precies de onderbouwing
+          // weg die een berichtveld heeft — en dan ketst het voorstel af op een
+          // dekking die het wél had meegegeven.
+          .filter(
+            (e) =>
+              typeof e.field === 'string' &&
+              (typeof e.toolCallId === 'string' || typeof e.messageId === 'string'),
+          )
           .map((e) => ({
             field: e.field as string,
-            toolCallId: e.toolCallId as string,
+            ...(typeof e.toolCallId === 'string' ? { toolCallId: e.toolCallId } : {}),
             ...(typeof e.messageId === 'string' ? { messageId: e.messageId } : {}),
           }))
       : [];

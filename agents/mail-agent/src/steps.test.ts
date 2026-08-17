@@ -299,3 +299,46 @@ describe('parsePlan — voorgestelde schrijfoperaties', () => {
     expect(p.actions).toEqual([]);
   });
 });
+
+describe('parsePlan — onderbouwing uit het bericht', () => {
+  it('houdt een onderbouwing die alleen een messageId heeft', () => {
+    // Dit ging fout in productie: de parser eiste een toolCallId en gooide
+    // daarmee precies de onderbouwing weg die een berichtveld meegeeft. Het
+    // voorstel ketste daarna af op een dekking die het wél had gegeven.
+    const p = parsePlan(
+      JSON.stringify({
+        summary: "s",
+        body: "b",
+        actions: [
+          {
+            type: "werkticket_aanmaken",
+            payload: { subject: "Beschadigd artikel" },
+            evidence: [{ field: "subject", messageId: "msg-1" }],
+            precondition: {},
+            impact: "Werkticket aanmaken.",
+          },
+        ],
+      }),
+    );
+    expect(p.actions?.[0].evidence).toEqual([{ field: "subject", messageId: "msg-1" }]);
+  });
+
+  it('gooit een onderbouwing zonder enige verwijzing wel weg', () => {
+    const p = parsePlan(
+      JSON.stringify({
+        summary: "s",
+        body: "b",
+        actions: [
+          {
+            type: "werkticket_aanmaken",
+            payload: { subject: "x" },
+            evidence: [{ field: "subject" }],
+            precondition: {},
+            impact: "Werkticket aanmaken.",
+          },
+        ],
+      }),
+    );
+    expect(p.actions?.[0].evidence).toEqual([]);
+  });
+});
