@@ -84,6 +84,35 @@ alter table public.demo_carrier_investigations  enable row level security;
 -- Eén factuur per order uit 0005. DEMO-1002 is de klacht-order (afgeleverd,
 -- beschadigd aangekomen) — dat is het scenario waar de creditnota op draait.
 
+-- Eén order erbij met twéé regels, want een onvolledige levering vraagt om een
+-- order waar iets van kán ontbreken. De orders uit 0005 hebben allemaal één
+-- regel; daar valt niets half aan te leveren.
+insert into public.demo_orders (order_number, customer_email, customer_name, status, total_value, currency, carrier, tracking_code, data) values
+('DEMO-1004', 's.bakker@example.com', 'Sanne Bakker', 'delivered', 238, 'EUR', 'PostNL', '3SDEMO0001004',
+ '{"orderNumber":"DEMO-1004","customerEmail":"s.bakker@example.com","customerName":"Sanne Bakker","orderDate":"2026-08-08T11:20:00Z","totalValue":238,"currency":"EUR","items":[{"sku":"DEMO-SKU-A","productName":"Demoproduct A","quantity":1,"unitPrice":149},{"sku":"DEMO-SKU-B","productName":"Demoproduct B","quantity":1,"unitPrice":89}],"shippingAddress":{"street":"Voorbeeldkade 9","postalCode":"9700 DD","city":"Groningen","country":"NL"},"status":"delivered","trackingCode":"3SDEMO0001004","carrier":"PostNL"}'::jsonb)
+on conflict (order_number) do update set
+  customer_email=excluded.customer_email, customer_name=excluded.customer_name,
+  status=excluded.status, total_value=excluded.total_value, currency=excluded.currency,
+  carrier=excluded.carrier, tracking_code=excluded.tracking_code, data=excluded.data;
+
+insert into public.demo_order_tracking (tracking_code, carrier, current_status, data) values
+('3SDEMO0001004', 'PostNL', 'Afgeleverd',
+ '{"trackingCode":"3SDEMO0001004","carrier":"PostNL","currentStatus":"Afgeleverd","estimatedDelivery":"2026-08-10T17:00:00Z","events":[{"timestamp":"2026-08-10T13:20:00Z","status":"Afgeleverd aan ontvanger","location":"Groningen"}]}'::jsonb)
+on conflict (tracking_code) do update set
+  carrier=excluded.carrier, current_status=excluded.current_status, data=excluded.data;
+
+insert into public.demo_customers (email, name, data) values
+('s.bakker@example.com', 'Sanne Bakker', '{"email":"s.bakker@example.com","name":"Sanne Bakker","orderCount":1}'::jsonb)
+on conflict (email) do update set name=excluded.name, data=excluded.data;
+
+insert into public.demo_invoices (invoice_number, order_number, customer_email, status, total_value, currency, data) values
+('F-2026-1004', 'DEMO-1004', 's.bakker@example.com', 'open', 238, 'EUR',
+ '{"invoiceNumber":"F-2026-1004","orderNumber":"DEMO-1004","customerEmail":"s.bakker@example.com","invoiceDate":"2026-08-08","status":"open","currency":"EUR","totalValue":238,"lines":[{"sku":"DEMO-SKU-A","description":"Demoproduct A","quantity":1,"unitPrice":149,"lineTotal":149},{"sku":"DEMO-SKU-B","description":"Demoproduct B","quantity":1,"unitPrice":89,"lineTotal":89}]}'::jsonb)
+on conflict (invoice_number) do update set
+  order_number=excluded.order_number, customer_email=excluded.customer_email,
+  status=excluded.status, total_value=excluded.total_value,
+  currency=excluded.currency, data=excluded.data;
+
 insert into public.demo_invoices (invoice_number, order_number, customer_email, status, total_value, currency, data) values
 ('F-2026-1001', 'DEMO-1001', 'j.dekker@example.com', 'open', 149, 'EUR',
  '{"invoiceNumber":"F-2026-1001","orderNumber":"DEMO-1001","customerEmail":"j.dekker@example.com","invoiceDate":"2026-08-06","status":"open","currency":"EUR","totalValue":149,"lines":[{"sku":"DEMO-SKU-A","description":"Demoproduct A","quantity":1,"unitPrice":149,"lineTotal":149}]}'::jsonb),
