@@ -19,7 +19,7 @@ client:
   # Datalocatie. 'eu' tenzij expliciet anders afgesproken.
   residency: "eu"
   # FactumAI org-id (cuid) — invullen ná het aanmaken van de tenant.
-  org_id: "org_factumai_internal"
+  org_id: "cmswxtuuo000i04k2h6rthn2o"
   # Org-id van het test-tenant (staging). Leeg laten tot je 'm aanmaakt.
   test_org_id: ""
 
@@ -132,7 +132,7 @@ notes: >
   voordat de widget publiek staat.
 
   Tenant: er is bewust GEEN aparte org aangemaakt. De demo draait op de
-  bestaande interne org `org_factumai_internal`. Gevolg om te onthouden: de
+  bestaande interne org `cmswxtuuo000i04k2h6rthn2o`. Gevolg om te onthouden: de
   agent resolvet MCP-credentials op tenant-id, dus onder deze org wijst de
   mail-MCP naar de echte FactumAI-mailbox. Daarom is stap 7 (mail-MCP koppelen)
   NIET gedaan en voeden we de demo via de demo-pagina en de chatwidget, die

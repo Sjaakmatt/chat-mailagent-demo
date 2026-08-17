@@ -75,7 +75,7 @@
     // Ontbrekend of andere waarde = oud gedrag — snelle rollback zonder deploy.
     "USE_MULTI_AGENT_ROUTER": "false",
     // FactumAI org-id van deze klant — vul in na het aanmaken van de tenant.
-    "AIOS_ORG_ID": "org_factumai_internal",
+    "AIOS_ORG_ID": "cmswxtuuo000i04k2h6rthn2o",
     // Wélke gekoppelde mailbox de agent gebruikt. Deze org heeft er meerdere,
     // en leeg laten betekent NIET "geen keuze" maar "de primaire" — dat is hier
     // Info@factumai.nl, waar echte klanten naartoe schrijven. De agent leest

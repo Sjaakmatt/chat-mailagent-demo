@@ -35,7 +35,7 @@
   "vars": {
     "CLIENT_NAME": "Factum Webshop",
     "AIOS_RAG_ENABLED": "false",
-    "AIOS_ORG_ID": "org_factumai_internal",
+    "AIOS_ORG_ID": "cmswxtuuo000i04k2h6rthn2o",
     // De afdelingen die deze klant heeft AFGENOMEN. Wij verkopen per afdeling;
     // dit is het plafond waar de beheerder van de klant niet overheen kan.
     // Dit is onze eigen demo-tenant, vandaar de joker.
@@ -92,7 +92,7 @@
         // Cuid van de klant-org (parent) — waar changes vanuit deze staging-
         // cockpit heen worden gepromoot. Leeg = geen "Push naar prod"-knop;
         // staging blijft dan bruikbaar voor inspectie en testen.
-        "AIOS_PARENT_ORG_ID": "org_factumai_internal",
+        "AIOS_PARENT_ORG_ID": "cmswxtuuo000i04k2h6rthn2o",
         "COCKPIT_MODE": "staging",
         // Zelfde afname en assistent-instellingen als prod — staging is er om
         // te testen wat prod doet. Zonder LICENSED_MODULES ziet niemand hier
