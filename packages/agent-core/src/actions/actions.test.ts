@@ -12,6 +12,7 @@ import {
   buildProposedActions,
   mayProposeAction,
   preconditionDrift,
+  proposableActionTypes,
   requiredApproverRole,
   ungroundedFields,
   type ProposedAction,
@@ -464,5 +465,72 @@ describe('buildProposedActions', () => {
     expect(actions).toHaveLength(1);
     expect(rejected).toHaveLength(1);
     expect(rejected[0].type).toBe('bestaat_niet');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('payloadvelden', () => {
+  it('geeft elk type minstens één veld', () => {
+    // Een type zonder velden levert een prompt op waarin het model zelf mag
+    // verzinnen wat de payload is — en dat is precies wat de registratie moet
+    // voorkomen.
+    for (const t of ACTION_TYPES) {
+      expect(t.payloadFields.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('geeft elk veld een label en een hint', () => {
+    for (const t of ACTION_TYPES) {
+      for (const v of t.payloadFields) {
+        expect(v.label.trim().length).toBeGreaterThan(0);
+        expect(v.hint.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('proposableActionTypes', () => {
+  it('laat bij mail met gematcht de creditnota zien maar niet de retour', () => {
+    const slugs = proposableActionTypes({
+      channel: 'mail',
+      identification: 'gematcht',
+    }).map((t) => t.slug);
+    expect(slugs).toContain('creditnota_voorstellen');
+    // Retour vraagt om bevestigd; die noemen zou het model een belofte aan de
+    // klant laten schrijven voor iets dat daarna wordt geweigerd.
+    expect(slugs).not.toContain('retour_aanmelden');
+  });
+
+  it('houdt bij chat alleen over wat daar mag', () => {
+    const slugs = proposableActionTypes({
+      channel: 'chat',
+      identification: 'zwak',
+    }).map((t) => t.slug);
+    expect(slugs).toEqual(['werkticket_aanmaken']);
+  });
+
+  it('is een hulpmiddel voor de prompt, geen vervanging van de poort', () => {
+    // Wat hier niet in staat, moet alsnog stuklopen op buildProposedActions.
+    const uit = buildProposedActions({
+      planned: [
+        {
+          type: 'creditnota_voorstellen',
+          payload: { invoiceNumber: 'F-1', amount: 10 },
+          evidence: [
+            { field: 'invoiceNumber', toolCallId: 'tc' },
+            { field: 'amount', toolCallId: 'tc' },
+          ],
+          precondition: {},
+          impact: 'Creditnota.',
+        },
+      ],
+      channel: 'chat',
+      identification: 'zwak',
+      organizationId: 'org-demo',
+      runId: 'sig_1',
+      now: nu,
+    });
+    expect(uit.actions).toEqual([]);
   });
 });

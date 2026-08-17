@@ -280,6 +280,24 @@ export interface ActionTypeDef {
   amountThreshold?: number;
   /** Hoe lang een voorstel geldig blijft. Daarna: verlopen. */
   expiresAfterMinutes: number;
+  /**
+   * De velden die de payload moet bevatten.
+   *
+   * Eén lijst die twee dingen voedt: wat het model mag invullen (de prompt
+   * wordt hieruit opgebouwd) en hoe een veld heet voor een mens (de modal toont
+   * "Bedrag", niet `amount`). Bewust niet twee lijsten — die lopen uit elkaar,
+   * en dan staat er in het goedkeurscherm een ander veld dan de agent invulde.
+   */
+  payloadFields: readonly ActionPayloadField[];
+}
+
+export interface ActionPayloadField {
+  /** Sleutel in de payload, in puntnotatie voor geneste velden. */
+  name: string;
+  /** Kop in het goedkeurscherm. */
+  label: string;
+  /** Wat hier hoort te staan — gaat letterlijk de prompt in. */
+  hint: string;
 }
 
 /**
@@ -305,6 +323,10 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'zwak',
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' },
+      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' },
+    ],
   },
   {
     slug: 'order_annuleren',
@@ -316,6 +338,10 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
     expiresAfterMinutes: 24 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' },
+    ],
   },
   {
     slug: 'adres_wijzigen',
@@ -328,6 +354,12 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
     expiresAfterMinutes: 12 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' },
+      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' },
+      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' },
+    ],
   },
   {
     slug: 'retour_aanmelden',
@@ -339,6 +371,11 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'bevestigd',
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'sku', label: 'Artikel', hint: 'het artikelnummer uit de opgehaalde orderregels' },
+      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' },
+    ],
   },
   {
     slug: 'nalevering_aanmaken',
@@ -351,6 +388,11 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'sku', label: 'Artikel', hint: 'het artikelnummer dat ontbrak, uit de orderregels' },
+      { name: 'quantity', label: 'Aantal', hint: 'hoeveel er nageleverd moet worden' },
+    ],
   },
   {
     slug: 'onderzoek_vervoerder',
@@ -365,6 +407,11 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'trackingCode', label: 'Trackingcode', hint: 'de trackingcode uit de opgehaalde zending' },
+      { name: 'carrier', label: 'Vervoerder', hint: 'de vervoerder uit de opgehaalde zending' },
+      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' },
+    ],
   },
   {
     slug: 'creditnota_voorstellen',
@@ -377,6 +424,11 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     // Geld. Boven dit bedrag moet een admin het doen.
     amountThreshold: 250,
     expiresAfterMinutes: 24 * 60,
+    payloadFields: [
+      { name: 'invoiceNumber', label: 'Factuurnummer', hint: 'het factuurnummer uit de opgehaalde factuur' },
+      { name: 'amount', label: 'Bedrag', hint: 'bedrag in euro, uitsluitend uit de opgehaalde factuurregels' },
+      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' },
+    ],
   },
 ]);
 
@@ -386,6 +438,29 @@ export const ACTION_TYPE_SLUGS: readonly string[] = Object.freeze(
 
 export function getActionType(slug: string): ActionTypeDef | undefined {
   return ACTION_TYPES.find((t) => t.slug === slug);
+}
+
+/**
+ * De typen die in deze situatie überhaupt kunnen ontstaan.
+ *
+ * Hiermee wordt de prompt opgebouwd. Een type dat toch zou afketsen niet
+ * noemen scheelt niet alleen tokens: een model dat een creditnota voorstelt
+ * die vervolgens wordt geweigerd, schrijft er meestal ook een antwoord bij
+ * waarin het de klant dat bedrag belooft.
+ *
+ * Dit is een hulpmiddel voor de prompt, geen vervanging van de poort.
+ * `buildProposedActions` toetst alles alsnog — een model dat een type noemt dat
+ * hier niet in stond, komt daar niet doorheen.
+ */
+export function proposableActionTypes(input: {
+  channel: ChannelId;
+  identification: IdentificationLevel;
+}): ActionTypeDef[] {
+  return ACTION_TYPES.filter(
+    (t) =>
+      t.channels.includes(input.channel) &&
+      identificationSuffices(input.identification, t.requiredIdentification),
+  );
 }
 
 // ---------------------------------------------------------------------------
