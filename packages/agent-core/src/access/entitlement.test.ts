@@ -187,3 +187,41 @@ describe('samenspel met de rolgrants', () => {
     ]);
   });
 });
+
+describe('de joker zoals hij uit de database komt', () => {
+  // `allowed_emails.modules` is een text[]; PostgREST levert dat als `['*']`,
+  // niet als de string '*'. Dat is structureel toewijsbaar aan `ModuleSet`,
+  // dus TypeScript ziet het verschil niet — en `has()` valt dan door naar
+  // `.includes(module)`, wat op `['*']` voor elke module false is.
+  //
+  // Gevolg in productie: een beheerder met modules `{*}` mocht nergens in. De
+  // werkbak was leeg en de module-schermen verdwenen uit de zijbalk, zonder
+  // foutmelding. De afname liep wél door `parseModuleSet` en dit niet.
+  //
+  // De bestaande tests gaven altijd de string door en misten het daarom.
+  it('behandelt de array-joker gelijk aan de string-joker', () => {
+    const me = access({ role: 'admin', licensed: ['*'], userModules: ['*'] });
+    expect(me.mayEnter('klantenservice')).toBe(true);
+    expect(me.mayEnter('sales')).toBe(true);
+  });
+
+  it('doet dat ook als alleen de gebruikerskant ruw is', () => {
+    const me = access({ role: 'admin', licensed: ALL_MODULES, userModules: ['*'] });
+    expect(me.mayEnter('klantenservice')).toBe(true);
+  });
+
+  it('laat een lege lijst wél dicht — dat is de fail-closed die we willen', () => {
+    const me = access({ role: 'admin', licensed: ALL_MODULES, userModules: [] });
+    expect(me.mayEnter('klantenservice')).toBe(false);
+  });
+
+  it('houdt een concrete lijst concreet', () => {
+    const me = access({
+      role: 'admin',
+      licensed: ['klantenservice', 'sales'],
+      userModules: ['klantenservice'],
+    });
+    expect(me.mayEnter('klantenservice')).toBe(true);
+    expect(me.mayEnter('sales')).toBe(false);
+  });
+});

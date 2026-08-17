@@ -94,7 +94,21 @@ export function resolveUserAccess(
   input: UserAccessInput,
   roleAccess: ResolvedAccess,
 ): ResolvedAccess {
-  const { licensed, userModules } = input;
+  // Beide verzamelingen hier normaliseren, en niet bij de aanroeper.
+  //
+  // `ModuleSet` is `'*' | ModuleId[]`, en een ruwe `string[]` uit de database
+  // past daar structureel op — dus TypeScript vangt het niet als iemand
+  // `allowed_emails.modules` ongeparsed doorgeeft. Dan is de joker de ARRAY
+  // `['*']` in plaats van de STRING `'*'`, en `has()` valt door naar
+  // `.includes(module)`: die array bevat geen enkele module-id, dus de
+  // gebruiker mag nergens in. Fail-closed, maar om de verkeerde reden — en het
+  // ziet er in de cockpit uit als een lege werkbak zonder foutmelding.
+  //
+  // Precies dat is één keer gebeurd: de afname liep wél door `parseModuleSet`
+  // en de gebruikersmodules niet. `parseModuleSet` is idempotent, dus dit
+  // tweemaal aanroepen kan geen kwaad.
+  const licensed = parseModuleSet(input.licensed);
+  const userModules = parseModuleSet(input.userModules);
 
   const mayEnter = (module: ModuleId): boolean =>
     // Volgorde is bewust: de afname eerst. Dat is de grens die de klant niet
