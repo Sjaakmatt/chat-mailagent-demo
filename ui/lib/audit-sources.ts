@@ -11,6 +11,7 @@
  * Werkend voorbeeld: `examples/warehouse-module/ui/lib/warehouse-audit.ts`.
  */
 
+import { moduleAuditSources } from "./modules";
 import type { AuditEntry, AuditQuery } from "./db";
 import type { CockpitDbClient } from "./tenant-query";
 
@@ -46,20 +47,42 @@ export interface DomainAuditSource {
 }
 
 /**
- * Actieve domein-auditbronnen. Aanhaken:
+ * Klantspecifieke auditbronnen — bronnen die niet bij een module horen maar bij
+ * één klant. Aanhaken:
  *
  *   import { warehouseAuditSource } from "./warehouse-audit";
- *   export const DOMAIN_AUDIT_SOURCES: DomainAuditSource[] = [warehouseAuditSource];
+ *   export const CLIENT_AUDIT_SOURCES: DomainAuditSource[] = [warehouseAuditSource];
+ *
+ * Hoort de bron bij een automatisering, zet 'm dan op de module (`auditSource`)
+ * in plaats van hier — dan verhuist hij mee als die module verhuist.
  */
-export const DOMAIN_AUDIT_SOURCES: DomainAuditSource[] = [];
+export const CLIENT_AUDIT_SOURCES: DomainAuditSource[] = [];
+
+/**
+ * Alle auditbronnen: die van de geregistreerde modules, plus de klantspecifieke
+ * hierboven.
+ *
+ * **Een functie en geen const.** De modules importeren de database-laag, en die
+ * importeert dit bestand — een const zou tijdens die cyclus als `undefined`
+ * kunnen landen bij de eerste lezer. Lui uitrekenen breekt dat: op het moment
+ * dat iemand dit áánroept, is alles geladen.
+ *
+ * Modules eerst: een klant die een bron met dezelfde id registreert, wint
+ * daarmee niet stilzwijgend van zijn eigen module — dubbele id's horen op te
+ * vallen in de bron-dropdown, niet weggefilterd te worden.
+ */
+export function domainAuditSources(): DomainAuditSource[] {
+  return [...moduleAuditSources(), ...CLIENT_AUDIT_SOURCES];
+}
 
 /** Alle acties die door domeinbronnen geproduceerd kunnen worden. */
 export function domainAuditActions(): string[] {
-  return [...new Set(DOMAIN_AUDIT_SOURCES.flatMap((s) => s.actions))];
+  return [...new Set(domainAuditSources().flatMap((s) => s.actions))];
 }
 
 /** Bronnen die passen bij de gevraagde `source`-filter ("all" = allemaal). */
 export function selectedDomainSources(source: string): DomainAuditSource[] {
-  if (source === "all") return DOMAIN_AUDIT_SOURCES;
-  return DOMAIN_AUDIT_SOURCES.filter((s) => s.id === source);
+  const all = domainAuditSources();
+  if (source === "all") return all;
+  return all.filter((s) => s.id === source);
 }
