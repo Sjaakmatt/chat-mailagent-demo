@@ -70,6 +70,75 @@ export function identificationSuffices(
   return IDENTIFICATION_RANK[have] >= IDENTIFICATION_RANK[required];
 }
 
+/**
+ * De feiten waaruit het identificatieniveau volgt.
+ *
+ * Bewust feiten en geen oordeel. Het model mag niet zelf melden hoe zeker het
+ * van de klant is — dat is precies de bewering die je niet aan een model wil
+ * overlaten als er een creditnota aan hangt. De lus leidt het niveau af uit wat
+ * er daadwerkelijk is opgehaald.
+ */
+export interface IdentityEvidence {
+  /** Afzender zoals het kanaal 'm aanleverde. Bij mail: het From-adres. */
+  senderAddress?: string | null;
+  /** Ordernummer uit het bericht of de classificatie. */
+  orderReference?: string | null;
+  /**
+   * Het adres dat in het bronsysteem bij die order staat. Alleen gevuld als de
+   * lookup daadwerkelijk iets teruggaf — een mislukte call is `null`, geen
+   * lege string, want "niet gevonden" en "leeg veld" zijn niet hetzelfde.
+   */
+  sourceEmail?: string | null;
+  /**
+   * Heeft de klant in deze run actief bevestigd dat hij het is (klik op een
+   * eenmalige link, code uit een tweede kanaal)?
+   *
+   * Vandaag bestaat dat mechanisme nog niet en staat dit dus altijd op false.
+   * Dat is geen omissie maar de rem die werkt: actietypen die `bevestigd`
+   * eisen, ontstaan simpelweg niet. Liever een type dat nog niet kan dan een
+   * type dat kan op grond van een adres dat op de pakbon staat.
+   */
+  confirmed?: boolean;
+}
+
+function normaliseerAdres(waarde: string | null | undefined): string | null {
+  const t = (waarde ?? '').trim().toLowerCase();
+  return t.length > 0 ? t : null;
+}
+
+/**
+ * Leidt het identificatieniveau af uit de feiten van deze run.
+ *
+ * De trap:
+ *
+ *   bevestigd  de klant heeft actief bevestigd dat hij het is
+ *   gematcht   het opgegeven ordernummer is teruggevonden én het adres dat
+ *              daarbij in het bronsysteem staat, is het adres waar dit bericht
+ *              vandaan komt
+ *   zwak       al het overige
+ *
+ * `gematcht` vraagt om die twee samen, en niet om één ervan. Een ordernummer
+ * alleen is bezit van een papiertje: het staat op de pakbon, in de
+ * bevestigingsmail en soms op het pakket. Een adres alleen zegt niets over
+ * wélke order het gaat. Pas als het bronsysteem bevestigt dat die twee bij
+ * elkaar horen, is er iets tegen een bron gehouden.
+ *
+ * Bij chat weegt dat lichter dan bij mail — daar typt de bezoeker het From-adres
+ * zelf in plaats van dat een mailsysteem het aanlevert. Dat verschil zit niet
+ * hier maar in `ACTION_TYPES.channels`: de gevaarlijke typen staan op chat
+ * gewoon uit.
+ */
+export function identificationLevel(evidence: IdentityEvidence): IdentificationLevel {
+  if (evidence.confirmed === true) return 'bevestigd';
+  const afzender = normaliseerAdres(evidence.senderAddress);
+  const bron = normaliseerAdres(evidence.sourceEmail);
+  const order = (evidence.orderReference ?? '').trim();
+  if (order.length > 0 && afzender !== null && bron !== null && afzender === bron) {
+    return 'gematcht';
+  }
+  return 'zwak';
+}
+
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
@@ -211,6 +280,24 @@ export interface ActionTypeDef {
   amountThreshold?: number;
   /** Hoe lang een voorstel geldig blijft. Daarna: verlopen. */
   expiresAfterMinutes: number;
+  /**
+   * De velden die de payload moet bevatten.
+   *
+   * Eén lijst die twee dingen voedt: wat het model mag invullen (de prompt
+   * wordt hieruit opgebouwd) en hoe een veld heet voor een mens (de modal toont
+   * "Bedrag", niet `amount`). Bewust niet twee lijsten — die lopen uit elkaar,
+   * en dan staat er in het goedkeurscherm een ander veld dan de agent invulde.
+   */
+  payloadFields: readonly ActionPayloadField[];
+}
+
+export interface ActionPayloadField {
+  /** Sleutel in de payload, in puntnotatie voor geneste velden. */
+  name: string;
+  /** Kop in het goedkeurscherm. */
+  label: string;
+  /** Wat hier hoort te staan — gaat letterlijk de prompt in. */
+  hint: string;
 }
 
 /**
@@ -236,6 +323,10 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'zwak',
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' },
+      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' },
+    ],
   },
   {
     slug: 'order_annuleren',
@@ -247,6 +338,10 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
     expiresAfterMinutes: 24 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' },
+    ],
   },
   {
     slug: 'adres_wijzigen',
@@ -259,6 +354,12 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
     expiresAfterMinutes: 12 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' },
+      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' },
+      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' },
+    ],
   },
   {
     slug: 'retour_aanmelden',
@@ -270,6 +371,47 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     requiredIdentification: 'bevestigd',
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'sku', label: 'Artikel', hint: 'het artikelnummer uit de opgehaalde orderregels' },
+      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' },
+    ],
+  },
+  {
+    slug: 'nalevering_aanmaken',
+    label: 'Nalevering aanmaken',
+    target: { mcp: 'erp', tool: 'create_backorder_shipment' },
+    preconditionKind: 'orderstatus',
+    // Er gaan goederen de deur uit. Niet vanuit een chatgesprek waar de
+    // bezoeker het afzenderadres zelf intypt.
+    channels: ['mail'],
+    requiredIdentification: 'gematcht',
+    approverRole: 'reviewer',
+    expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
+      { name: 'sku', label: 'Artikel', hint: 'het artikelnummer dat ontbrak, uit de orderregels' },
+      { name: 'quantity', label: 'Aantal', hint: 'hoeveel er nageleverd moet worden' },
+    ],
+  },
+  {
+    slug: 'onderzoek_vervoerder',
+    label: 'Onderzoek bij vervoerder starten',
+    target: { mcp: 'shipping', tool: 'shipping_open_investigation' },
+    preconditionKind: 'geen',
+    // Geen geld en geen goederen, dus lichter dan een creditnota. Maar er komt
+    // wél een dossier over andermans pakket bij een externe partij te liggen,
+    // en dat is precies wat een anoniem gesprek niet in gang moet kunnen
+    // zetten. Vandaar mail, en daar gematcht.
+    channels: ['mail'],
+    requiredIdentification: 'gematcht',
+    approverRole: 'reviewer',
+    expiresAfterMinutes: 7 * 24 * 60,
+    payloadFields: [
+      { name: 'trackingCode', label: 'Trackingcode', hint: 'de trackingcode uit de opgehaalde zending' },
+      { name: 'carrier', label: 'Vervoerder', hint: 'de vervoerder uit de opgehaalde zending' },
+      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' },
+    ],
   },
   {
     slug: 'creditnota_voorstellen',
@@ -282,6 +424,11 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     // Geld. Boven dit bedrag moet een admin het doen.
     amountThreshold: 250,
     expiresAfterMinutes: 24 * 60,
+    payloadFields: [
+      { name: 'invoiceNumber', label: 'Factuurnummer', hint: 'het factuurnummer uit de opgehaalde factuur' },
+      { name: 'amount', label: 'Bedrag', hint: 'bedrag in euro, uitsluitend uit de opgehaalde factuurregels' },
+      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' },
+    ],
   },
 ]);
 
@@ -291,6 +438,29 @@ export const ACTION_TYPE_SLUGS: readonly string[] = Object.freeze(
 
 export function getActionType(slug: string): ActionTypeDef | undefined {
   return ACTION_TYPES.find((t) => t.slug === slug);
+}
+
+/**
+ * De typen die in deze situatie überhaupt kunnen ontstaan.
+ *
+ * Hiermee wordt de prompt opgebouwd. Een type dat toch zou afketsen niet
+ * noemen scheelt niet alleen tokens: een model dat een creditnota voorstelt
+ * die vervolgens wordt geweigerd, schrijft er meestal ook een antwoord bij
+ * waarin het de klant dat bedrag belooft.
+ *
+ * Dit is een hulpmiddel voor de prompt, geen vervanging van de poort.
+ * `buildProposedActions` toetst alles alsnog — een model dat een type noemt dat
+ * hier niet in stond, komt daar niet doorheen.
+ */
+export function proposableActionTypes(input: {
+  channel: ChannelId;
+  identification: IdentificationLevel;
+}): ActionTypeDef[] {
+  return ACTION_TYPES.filter(
+    (t) =>
+      t.channels.includes(input.channel) &&
+      identificationSuffices(input.identification, t.requiredIdentification),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +494,137 @@ export interface ProposedAction {
   reason?: string | null;
   createdAt: string;
   expiresAt: string;
+}
+
+/**
+ * Wat de plan-stap voorstelt, vóór validatie.
+ *
+ * Dit is het enige wat het model over een actie mag zeggen: welk geregistreerd
+ * type, met welke payload, waar elk veld vandaan komt, en waarop het voorstel
+ * is gebaseerd. Het mag geen niveau, geen goedkeurder en geen vervaldatum
+ * noemen — dat zijn de dingen die het zou kunnen gebruiken om zijn eigen
+ * poorten open te zetten. Die vult `buildProposedActions` in vanuit de
+ * registratie.
+ */
+export interface PlannedAction {
+  /** Slug uit `ACTION_TYPES`. Een onbekende slug wordt geweigerd, niet gemaakt. */
+  type: string;
+  payload: Record<string, unknown>;
+  evidence: FieldEvidence[];
+  precondition: Record<string, unknown>;
+  /** Wat er verandert, in mensentaal. Dit is wat het scherm groot toont. */
+  impact: string;
+}
+
+export interface ActionProposalInput {
+  planned: readonly PlannedAction[];
+  channel: ChannelId;
+  identification: IdentificationLevel;
+  organizationId: string;
+  /** De run die dit voortbracht — in de praktijk het signal-id. */
+  runId: string;
+  reviewItemId?: string | null;
+  now: Date;
+}
+
+/** Een voorstel dat niet is doorgegaan, met de reden. Gaat het beslislog in. */
+export interface RejectedProposal {
+  type: string;
+  reason: string;
+}
+
+export interface ActionProposalResult {
+  actions: ProposedAction[];
+  /**
+   * De geweigerde voorstellen. Deze lijst is de reden dat dit een resultaat is
+   * en geen filter: zonder de redenen staat er straks "geen actie voorgesteld"
+   * in de werkbak en kan niemand zien waaróm niet — en dan lijkt een poort die
+   * z'n werk doet op een agent die niets kan.
+   */
+  rejected: RejectedProposal[];
+}
+
+/**
+ * Zet voorstellen van de plan-stap om in gevalideerde `ProposedAction`s.
+ *
+ * Drie poorten, in deze volgorde:
+ *
+ *   1. **Mag dit type hier ontstaan** — `mayProposeAction`: bestaat het type,
+ *      staat het aan op dit kanaal, is de identificatie sterk genoeg.
+ *   2. **Is elk payload-veld gedekt** — `ungroundedFields`. Elk veld is een
+ *      feitelijke bewering, en een bedrag zonder dekking is precies het geval
+ *      waarvoor harde regel 4 bestaat.
+ *   3. **Is er een impact-tekst** — zonder die zin staat er in de modal een
+ *      knop waarvan niemand kan zien wat hij doet.
+ *
+ * Een gezakt voorstel wordt **niet afgezwakt maar geweigerd**. Een creditnota
+ * met één ongedekt bedrag half doorlaten is geen halve fout; het is dezelfde
+ * fout met een geruststellender scherm eromheen.
+ *
+ * ## Idempotentie
+ *
+ * `id` en `idempotencyKey` zijn afgeleid van de run en de positie in de lijst,
+ * niet van een teller of toeval. Een Workflow-step mag opnieuw draaien; met een
+ * willekeurig id zou dat een tweede voorstel opleveren voor dezelfde actie, en
+ * dan staan er twee creditnota's van 340 euro in de werkbak.
+ */
+export function buildProposedActions(input: ActionProposalInput): ActionProposalResult {
+  const actions: ProposedAction[] = [];
+  const rejected: RejectedProposal[] = [];
+
+  input.planned.forEach((voorstel, index) => {
+    const poort = mayProposeAction({
+      type: voorstel.type,
+      channel: input.channel,
+      identification: input.identification,
+    });
+    if (!poort.ok) {
+      rejected.push({ type: voorstel.type, reason: poort.reason });
+      return;
+    }
+
+    const ongedekt = ungroundedFields(voorstel.payload, voorstel.evidence);
+    if (ongedekt.length > 0) {
+      rejected.push({
+        type: voorstel.type,
+        reason: `geen dekking voor ${ongedekt.join(', ')} — elk veld in de payload moet uit een tool-call van deze run komen`,
+      });
+      return;
+    }
+
+    const impact = voorstel.impact.trim();
+    if (impact.length === 0) {
+      rejected.push({
+        type: voorstel.type,
+        reason: 'geen impact-omschrijving — dan kan een mens niet zien waar hij ja tegen zegt',
+      });
+      return;
+    }
+
+    const vervalt = new Date(
+      input.now.getTime() + poort.def.expiresAfterMinutes * 60 * 1000,
+    );
+    // Stabiel op (run, positie): een herhaalde step levert dezelfde rij op in
+    // plaats van een tweede voorstel.
+    const sleutel = `${input.runId}-${index}`;
+    actions.push({
+      id: `pa_${sleutel}`,
+      organizationId: input.organizationId,
+      type: poort.def.slug,
+      payload: voorstel.payload,
+      evidence: voorstel.evidence,
+      precondition: voorstel.precondition,
+      impact,
+      status: 'voorgesteld',
+      runId: input.runId,
+      reviewItemId: input.reviewItemId ?? null,
+      idempotencyKey: `act-${sleutel}`,
+      createdAt: input.now.toISOString(),
+      expiresAt: vervalt.toISOString(),
+    });
+  });
+
+  return { actions, rejected };
 }
 
 /**

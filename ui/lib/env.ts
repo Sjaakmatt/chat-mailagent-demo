@@ -132,4 +132,16 @@ export interface CockpitEnv {
 
   /** Workflow-binding naar aios-agent → ExecuteWorkflow. */
   EXECUTE: Workflow<ExecuteParams>;
+  /**
+   * Workflow-binding naar aios-agent → ActionExecuteWorkflow.
+   *
+   * Het schrijven zelf hoort daar en niet hier: harde regel 3. Deze route
+   * beslist of het mag; de Workflow doet het, idempotent en met een tweede
+   * hervalidatie vlak vóór de schrijfactie.
+   */
+  ACTION_EXECUTE: Workflow<{
+    actionId: string;
+    approverRole: 'viewer' | 'reviewer' | 'admin';
+    approvedBy: string;
+  }>;
 }

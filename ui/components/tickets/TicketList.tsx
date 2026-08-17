@@ -6,6 +6,8 @@ import { Loader2, Hand, Check, X, RotateCcw } from "lucide-react";
 import type { Ticket, TicketStatus } from "@factumai/agent-core";
 import { cn } from "@/lib/utils";
 import { timeAgoNL } from "@/lib/utils";
+import { ActionReview } from "@/components/actions/ActionReview";
+import type { ActionViewModel } from "@/lib/actions";
 
 type Role = "admin" | "reviewer" | "viewer";
 
@@ -42,6 +44,7 @@ export function TicketList({
   tickets,
   role,
   compact = false,
+  actionsByReviewItem,
 }: {
   title: string;
   description: string;
@@ -49,6 +52,12 @@ export function TicketList({
   tickets: Ticket[];
   role?: Role | null;
   compact?: boolean;
+  /**
+   * Klaargezette schrijfoperaties per ReviewItem. Het ticket is waar het
+   * uitzoekwerk leeft, dus is het ook de plek waar een medewerker de bijbehorende
+   * actie wil aftekenen — zonder eerst naar het conceptscherm te hoeven.
+   */
+  actionsByReviewItem?: Record<string, ActionViewModel[]>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -135,6 +144,17 @@ export function TicketList({
                       </div>
                     )}
                   </dl>
+                )}
+
+                {/* Voorgestelde schrijfoperaties bij dit ticket. Boven de
+                    statusknoppen: eerst zien wat de agent wil doen, dan pas
+                    beslissen of het ticket verder mag. */}
+                {(actionsByReviewItem?.[t.reviewItemId ?? ""] ?? []).length > 0 && (
+                  <div className="mt-2">
+                    <ActionReview
+                      actions={actionsByReviewItem?.[t.reviewItemId ?? ""] ?? []}
+                    />
+                  </div>
                 )}
 
                 {mayAct && actionsFor(t.status).length > 0 && (

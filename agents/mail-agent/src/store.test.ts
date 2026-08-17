@@ -22,18 +22,33 @@ const env = {
   AIOS_SUPABASE_SERVICE_ROLE_KEY: 'service-role',
 } as unknown as Env;
 
-let calls: { url: string; method?: string; body?: string }[] = [];
+let calls: {
+  url: string;
+  method?: string;
+  body?: string;
+  headers?: Record<string, string>;
+}[] = [];
 
 beforeEach(() => {
   calls = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: unknown, init: { method?: string; body?: string } = {}) => {
-      calls.push({ url: String(url), method: init.method, body: init.body });
-      // 200 met een lege body; `Response` weigert een body bij 204, en met
-      // `return=minimal` maakt de inhoud hier toch niet uit.
-      return new Response('', { status: 200 });
-    }),
+    vi.fn(
+      async (
+        url: unknown,
+        init: { method?: string; body?: string; headers?: Record<string, string> } = {},
+      ) => {
+        calls.push({
+          url: String(url),
+          method: init.method,
+          body: init.body,
+          headers: init.headers,
+        });
+        // 200 met een lege body; `Response` weigert een body bij 204, en met
+        // `return=minimal` maakt de inhoud hier toch niet uit.
+        return new Response('', { status: 200 });
+      },
+    ),
   );
 });
 
@@ -67,5 +82,42 @@ describe('markReviewItemHandled', () => {
     // Dit is de hele bescherming: heeft een medewerker het item intussen
     // afgekeurd, dan matcht de PATCH niets en blijft dat oordeel staan.
     expect(url.searchParams.get('status')).toBe('eq.PENDING');
+  });
+});
+
+describe('saveProposedActions', () => {
+  const actie = {
+    id: 'pa_sig1-0',
+    organizationId: 'org-demo',
+    type: 'creditnota_voorstellen',
+    payload: { invoiceNumber: 'F-42', amount: 89.95 },
+    evidence: [{ field: 'amount', toolCallId: 'tc-1' }],
+    precondition: { status: 'open' },
+    impact: 'Creditnota van € 89,95.',
+    status: 'voorgesteld' as const,
+    runId: 'sig_1',
+    reviewItemId: 'ri_1',
+    idempotencyKey: 'act-sig1-0',
+    createdAt: '2026-08-17T09:00:00.000Z',
+    expiresAt: '2026-08-18T09:00:00.000Z',
+  };
+
+  it('schrijft de run weg als signal_id en merget op de sleutel', async () => {
+    await createPlatformStore(env).saveProposedActions([actie]);
+
+    expect(calls).toHaveLength(1);
+    const rows = JSON.parse(calls[0].body ?? '[]');
+    expect(rows[0].signal_id).toBe('sig_1');
+    expect(rows[0].review_item_id).toBe('ri_1');
+    expect(rows[0].status).toBe('voorgesteld');
+    // Zonder merge levert een herhaalde Workflow-step een tweede creditnota op.
+    expect(calls[0].headers?.Prefer ?? '').toContain('merge-duplicates');
+  });
+
+  it('doet geen request als er niets klaar te zetten valt', async () => {
+    // Een lege POST naar PostgREST is geen no-op maar een verzoek; dat wil je
+    // niet bij elke mail die geen actie oplevert.
+    await createPlatformStore(env).saveProposedActions([]);
+    expect(calls).toEqual([]);
   });
 });

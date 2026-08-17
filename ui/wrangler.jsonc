@@ -27,6 +27,12 @@
       "binding": "EXECUTE",
       "class_name": "ExecuteWorkflow",
       "script_name": "factum-webshop-mail-agent"
+    },
+    {
+      "name": "factum-webshop-workflow-action-execute",
+      "binding": "ACTION_EXECUTE",
+      "class_name": "ActionExecuteWorkflow",
+      "script_name": "factum-webshop-mail-agent"
     }
   ],
 
@@ -79,6 +85,12 @@
           "name": "factum-webshop-workflow-execute-staging",
           "binding": "EXECUTE",
           "class_name": "ExecuteWorkflow",
+          "script_name": "factum-webshop-mail-agent-staging"
+        },
+        {
+          "name": "factum-webshop-workflow-action-execute-staging",
+          "binding": "ACTION_EXECUTE",
+          "class_name": "ActionExecuteWorkflow",
           "script_name": "factum-webshop-mail-agent-staging"
         }
       ],

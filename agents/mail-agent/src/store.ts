@@ -10,6 +10,7 @@ import type {
   PartialResponse,
   PartialResponseStatus,
   PartialToolCall,
+  ProposedAction,
   ReviewItem,
   Signal,
   SignalStatus,
@@ -106,6 +107,68 @@ function rowToReviewItem(r: ReviewItemRow): ReviewItem {
     decidedAt: r.decided_at,
     executedAt: r.executed_at,
     createdAt: r.created_at,
+  };
+}
+
+/**
+ * Rij-vorm van een klaargezette schrijfoperatie (`aios_proposed_actions`).
+ *
+ * `runId` heet in de database `signal_id`. Dat is geen slordigheid maar het
+ * verschil tussen de twee lagen: in de kern is het "de run die dit voortbracht",
+ * in de database een foreign key naar het signaal waar die run op draaide.
+ */
+interface ProposedActionRow {
+  id: string;
+  organization_id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  evidence: unknown;
+  precondition: Record<string, unknown>;
+  impact: string;
+  status: string;
+  signal_id: string;
+  review_item_id: string | null;
+  idempotency_key: string;
+  reason: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+function proposedActionToRow(action: ProposedAction): ProposedActionRow {
+  return {
+    id: action.id,
+    organization_id: action.organizationId,
+    type: action.type,
+    payload: action.payload,
+    evidence: action.evidence,
+    precondition: action.precondition,
+    impact: action.impact,
+    status: action.status,
+    signal_id: action.runId,
+    review_item_id: action.reviewItemId ?? null,
+    idempotency_key: action.idempotencyKey,
+    reason: action.reason ?? null,
+    created_at: action.createdAt,
+    expires_at: action.expiresAt,
+  };
+}
+
+function rowToProposedAction(r: ProposedActionRow): ProposedAction {
+  return {
+    id: r.id,
+    organizationId: r.organization_id,
+    type: r.type,
+    payload: r.payload ?? {},
+    evidence: (r.evidence as ProposedAction['evidence']) ?? [],
+    precondition: r.precondition ?? {},
+    impact: r.impact,
+    status: r.status as ProposedAction['status'],
+    runId: r.signal_id,
+    reviewItemId: r.review_item_id,
+    idempotencyKey: r.idempotency_key,
+    reason: r.reason,
+    createdAt: r.created_at,
+    expiresAt: r.expires_at,
   };
 }
 
@@ -226,6 +289,53 @@ export function createPlatformStore(env: Env): PlatformStore {
       const row = Array.isArray(rows) ? rows[0] : undefined;
       if (!row) throw new Error(`ReviewItem ${reviewItemId} niet gevonden in de klant-DB`);
       return rowToReviewItem(row);
+    },
+
+    async saveProposedActions(actions: readonly ProposedAction[]): Promise<void> {
+      if (actions.length === 0) return;
+      const url = client.tableUrl('aios_proposed_actions');
+      await client.request<unknown>(STORE_CTX, url, {
+        method: 'POST',
+        body: JSON.stringify(actions.map(proposedActionToRow)),
+        // Merge op de primaire sleutel: het id is afgeleid van run + positie,
+        // dus een herhaalde step schrijft dezelfde rij nog eens in plaats van
+        // een tweede voorstel voor dezelfde actie aan te maken.
+        prefer: 'return=minimal,resolution=merge-duplicates',
+      });
+    },
+
+    async loadProposedAction(actionId: string): Promise<ProposedAction | null> {
+      const url = client.tableUrl('aios_proposed_actions');
+      url.searchParams.set('id', `eq.${actionId}`);
+      url.searchParams.set('limit', '1');
+      const rows = await client.request<ProposedActionRow[]>(STORE_CTX, url, { method: 'GET' });
+      const row = Array.isArray(rows) ? rows[0] : undefined;
+      return row ? rowToProposedAction(row) : null;
+    },
+
+    async markProposedAction(
+      actionId: string,
+      status: ProposedAction['status'],
+      reason?: string | null,
+      decidedBy?: string | null,
+    ): Promise<void> {
+      const url = client.tableUrl('aios_proposed_actions');
+      url.searchParams.set('id', `eq.${actionId}`);
+      // Nooit over een eindstation heen. `uitgevoerd` betekent dat er iets in
+      // andermans systeem staat; die rij is historie, en een late run mag 'm
+      // niet alsnog op `mislukt` zetten.
+      url.searchParams.set('status', 'neq.uitgevoerd');
+      await client.request<unknown>(STORE_CTX, url, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status,
+          reason: reason ?? null,
+          ...(decidedBy
+            ? { decided_by: decidedBy, decided_at: new Date().toISOString() }
+            : {}),
+        }),
+        prefer: 'return=minimal',
+      });
     },
 
     async markReviewItemHandled(reviewItemId: string, actor: string): Promise<void> {

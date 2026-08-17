@@ -241,3 +241,61 @@ describe('parsePlan', () => {
     expect(p.claims).toEqual([{ value: '5', toolCallId: 'erp.get_order' }]);
   });
 });
+
+describe('parsePlan — voorgestelde schrijfoperaties', () => {
+  const geldig = {
+    type: 'creditnota_voorstellen',
+    payload: { invoiceNumber: 'F-42', amount: 89.95 },
+    evidence: [
+      { field: 'invoiceNumber', toolCallId: 'db.invoice' },
+      { field: 'amount', toolCallId: 'db.invoice' },
+    ],
+    precondition: { status: 'open' },
+    impact: 'Creditnota van € 89,95 op factuur F-42.',
+  };
+
+  it('leest een compleet voorstel terug', () => {
+    const p = parsePlan(JSON.stringify({ summary: 's', body: 'b', actions: [geldig] }));
+    expect(p.actions).toHaveLength(1);
+    expect(p.actions?.[0].type).toBe('creditnota_voorstellen');
+    expect(p.actions?.[0].evidence).toHaveLength(2);
+  });
+
+  it('geeft een lege lijst als het model geen acties noemt', () => {
+    const p = parsePlan(JSON.stringify({ summary: 's', body: 'b' }));
+    expect(p.actions).toEqual([]);
+  });
+
+  it('gooit een voorstel zonder impact weg in plaats van er een te verzinnen', () => {
+    const { impact: _weg, ...zonder } = geldig;
+    const p = parsePlan(JSON.stringify({ summary: 's', body: 'b', actions: [zonder] }));
+    expect(p.actions).toEqual([]);
+  });
+
+  it('vult een ontbrekende evidence niet aan', () => {
+    // Aanvullen zou betekenen dat wij een dekking verzinnen voor een bedrag.
+    // Het voorstel komt door met een lege evidence en ketst daarna af op de
+    // dekkingscontrole — dat is waar die controle voor is.
+    const { evidence: _weg, ...zonder } = geldig;
+    const p = parsePlan(JSON.stringify({ summary: 's', body: 'b', actions: [zonder] }));
+    expect(p.actions?.[0].evidence).toEqual([]);
+  });
+
+  it('overleeft rommel: een string, een null en een lege payload', () => {
+    const p = parsePlan(
+      JSON.stringify({
+        summary: 's',
+        body: 'b',
+        actions: ['onzin', null, { type: 'x' }, geldig],
+      }),
+    );
+    // Eén kapot voorstel mag de rest niet meeslepen.
+    expect(p.actions).toHaveLength(1);
+    expect(p.actions?.[0].type).toBe('creditnota_voorstellen');
+  });
+
+  it('negeert acties als het model er geen lijst van maakt', () => {
+    const p = parsePlan(JSON.stringify({ summary: 's', body: 'b', actions: 'creditnota' }));
+    expect(p.actions).toEqual([]);
+  });
+});

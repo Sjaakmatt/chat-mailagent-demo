@@ -5,11 +5,14 @@ import {
   canTransitionAction,
   evaluateApproval,
   getActionType,
+  identificationLevel,
   identificationSuffices,
   isExpired,
   isOpenAction,
+  buildProposedActions,
   mayProposeAction,
   preconditionDrift,
+  proposableActionTypes,
   requiredApproverRole,
   ungroundedFields,
   type ProposedAction,
@@ -311,5 +314,223 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
       now: nu,
     });
     expect(r).toMatchObject({ ok: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('identificatieniveau afleiden', () => {
+  it('is gematcht als het bronsysteem adres en order aan elkaar knoopt', () => {
+    expect(
+      identificationLevel({
+        senderAddress: 'k.dekker@example.nl',
+        orderReference: 'DEMO-1001',
+        sourceEmail: 'k.dekker@example.nl',
+      }),
+    ).toBe('gematcht');
+  });
+
+  it('trekt zich niets aan van hoofdletters en spaties', () => {
+    // Mailadressen komen uit headers en formuliervelden; daar zit rommel in.
+    // Daarop een niveau laten zakken zou de agent laten struikelen over iets
+    // wat niets met identiteit te maken heeft.
+    expect(
+      identificationLevel({
+        senderAddress: '  K.Dekker@Example.NL ',
+        orderReference: ' DEMO-1001 ',
+        sourceEmail: 'k.dekker@example.nl',
+      }),
+    ).toBe('gematcht');
+  });
+
+  it('blijft zwak als alleen het ordernummer klopt', () => {
+    // Een ordernummer is bezit van een papiertje: het staat op de pakbon, in
+    // de bevestigingsmail en soms op het pakket zelf.
+    expect(
+      identificationLevel({ senderAddress: 'iemand@elders.nl', orderReference: 'DEMO-1001' }),
+    ).toBe('zwak');
+  });
+
+  it('blijft zwak als het adres niet is dat van de order', () => {
+    expect(
+      identificationLevel({
+        senderAddress: 'fraude@elders.nl',
+        orderReference: 'DEMO-1001',
+        sourceEmail: 'k.dekker@example.nl',
+      }),
+    ).toBe('zwak');
+  });
+
+  it('blijft zwak zonder ordernummer, ook met een adres uit de bron', () => {
+    expect(
+      identificationLevel({
+        senderAddress: 'k.dekker@example.nl',
+        sourceEmail: 'k.dekker@example.nl',
+      }),
+    ).toBe('zwak');
+  });
+
+  it('is bevestigd alleen als de klant dat actief deed', () => {
+    expect(identificationLevel({ confirmed: true })).toBe('bevestigd');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('buildProposedActions', () => {
+  const basis = {
+    channel: 'mail' as const,
+    identification: 'gematcht' as const,
+    organizationId: 'org-demo',
+    runId: 'sig_1',
+    reviewItemId: 'ri_1',
+    now: nu,
+  };
+
+  const creditnota = {
+    type: 'creditnota_voorstellen',
+    payload: { invoiceNumber: 'F-2026-0042', amount: 89.95 },
+    evidence: [
+      { field: 'invoiceNumber', toolCallId: 'tc-1' },
+      { field: 'amount', toolCallId: 'tc-2' },
+    ],
+    precondition: { invoiceNumber: 'F-2026-0042', status: 'open' },
+    impact: 'Creditnota van € 89,95 op factuur F-2026-0042.',
+  };
+
+  it('bouwt een geldig voorstel met vervaldatum uit de registratie', () => {
+    const { actions, rejected } = buildProposedActions({ ...basis, planned: [creditnota] });
+    expect(rejected).toEqual([]);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].status).toBe('voorgesteld');
+    expect(actions[0].reviewItemId).toBe('ri_1');
+    // 24 uur, uit ACTION_TYPES — niet uit iets wat het model meegaf.
+    expect(actions[0].expiresAt).toBe('2026-08-17T09:00:00.000Z');
+  });
+
+  it('geeft dezelfde run dezelfde sleutels, zodat een herhaalde step niet dubbel voorstelt', () => {
+    const eerste = buildProposedActions({ ...basis, planned: [creditnota] });
+    const tweede = buildProposedActions({ ...basis, planned: [creditnota] });
+    expect(tweede.actions[0].id).toBe(eerste.actions[0].id);
+    expect(tweede.actions[0].idempotencyKey).toBe(eerste.actions[0].idempotencyKey);
+  });
+
+  it('weigert een payload-veld zonder dekking in plaats van het weg te laten', () => {
+    // Het bedrag half doorlaten is niet een halve fout — het is dezelfde fout
+    // met een geruststellender scherm eromheen.
+    const { actions, rejected } = buildProposedActions({
+      ...basis,
+      planned: [{ ...creditnota, evidence: [{ field: 'invoiceNumber', toolCallId: 'tc-1' }] }],
+    });
+    expect(actions).toEqual([]);
+    expect(rejected[0].reason).toContain('amount');
+  });
+
+  it('weigert een type dat op dit kanaal uitstaat, met de reden erbij', () => {
+    const { actions, rejected } = buildProposedActions({
+      ...basis,
+      channel: 'chat',
+      planned: [creditnota],
+    });
+    expect(actions).toEqual([]);
+    expect(rejected[0].reason).toContain('chat');
+  });
+
+  it('weigert bij te zwakke identificatie', () => {
+    const { actions, rejected } = buildProposedActions({
+      ...basis,
+      identification: 'zwak',
+      planned: [creditnota],
+    });
+    expect(actions).toEqual([]);
+    expect(rejected[0].reason).toContain('gematcht');
+  });
+
+  it('weigert een voorstel zonder impact-tekst', () => {
+    const { actions, rejected } = buildProposedActions({
+      ...basis,
+      planned: [{ ...creditnota, impact: '   ' }],
+    });
+    expect(actions).toEqual([]);
+    expect(rejected[0].reason).toContain('impact');
+  });
+
+  it('laat de goede door en houdt de slechte tegen in dezelfde run', () => {
+    // Eén kapot voorstel mag de rest niet meeslepen: dan zou een agent die
+    // vier dingen ziet en er één fout doet, helemaal niets meer opleveren.
+    const { actions, rejected } = buildProposedActions({
+      ...basis,
+      planned: [creditnota, { ...creditnota, type: 'bestaat_niet' }],
+    });
+    expect(actions).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].type).toBe('bestaat_niet');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('payloadvelden', () => {
+  it('geeft elk type minstens één veld', () => {
+    // Een type zonder velden levert een prompt op waarin het model zelf mag
+    // verzinnen wat de payload is — en dat is precies wat de registratie moet
+    // voorkomen.
+    for (const t of ACTION_TYPES) {
+      expect(t.payloadFields.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('geeft elk veld een label en een hint', () => {
+    for (const t of ACTION_TYPES) {
+      for (const v of t.payloadFields) {
+        expect(v.label.trim().length).toBeGreaterThan(0);
+        expect(v.hint.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('proposableActionTypes', () => {
+  it('laat bij mail met gematcht de creditnota zien maar niet de retour', () => {
+    const slugs = proposableActionTypes({
+      channel: 'mail',
+      identification: 'gematcht',
+    }).map((t) => t.slug);
+    expect(slugs).toContain('creditnota_voorstellen');
+    // Retour vraagt om bevestigd; die noemen zou het model een belofte aan de
+    // klant laten schrijven voor iets dat daarna wordt geweigerd.
+    expect(slugs).not.toContain('retour_aanmelden');
+  });
+
+  it('houdt bij chat alleen over wat daar mag', () => {
+    const slugs = proposableActionTypes({
+      channel: 'chat',
+      identification: 'zwak',
+    }).map((t) => t.slug);
+    expect(slugs).toEqual(['werkticket_aanmaken']);
+  });
+
+  it('is een hulpmiddel voor de prompt, geen vervanging van de poort', () => {
+    // Wat hier niet in staat, moet alsnog stuklopen op buildProposedActions.
+    const uit = buildProposedActions({
+      planned: [
+        {
+          type: 'creditnota_voorstellen',
+          payload: { invoiceNumber: 'F-1', amount: 10 },
+          evidence: [
+            { field: 'invoiceNumber', toolCallId: 'tc' },
+            { field: 'amount', toolCallId: 'tc' },
+          ],
+          precondition: {},
+          impact: 'Creditnota.',
+        },
+      ],
+      channel: 'chat',
+      identification: 'zwak',
+      organizationId: 'org-demo',
+      runId: 'sig_1',
+      now: nu,
+    });
+    expect(uit.actions).toEqual([]);
   });
 });

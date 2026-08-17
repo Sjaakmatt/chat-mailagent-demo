@@ -31,6 +31,12 @@ import {
   type TenantContext,
 } from '@factumai/agent-core';
 import { DATA_CATEGORIES, type DataCategory } from '@factumai/agent-core';
+import {
+  channelForDomain,
+  identificationLevel,
+  proposableActionTypes,
+  type PlannedAction,
+} from '@factumai/agent-core';
 import type { Env } from './env.js';
 // De MCP-client en de Anthropic-client leven in agent-core, achter een subpad —
 // zo deelt de cockpit ze zonder dat de SDK's in de browserbundel belanden.
@@ -215,16 +221,21 @@ function selectMentioned(ruwe: CatalogRow[], tekst: string): Array<Record<string
 async function lookupOrderFromDb(
   env: Env,
   orderNumber: string,
-): Promise<{ order?: unknown; tracking?: unknown }> {
+): Promise<{ order?: unknown; tracking?: unknown; customerEmail?: string | null }> {
   const client = new SupabaseClient(
     new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
     { projectUrl: env.AIOS_SUPABASE_URL },
   );
   const orderUrl = client.tableUrl('demo_orders');
   orderUrl.searchParams.set('order_number', `eq.${orderNumber}`);
-  orderUrl.searchParams.set('select', 'data,tracking_code');
+  // `customer_email` erbij: dat adres is wat het ordernummer van "iemand noemt
+  // een nummer" naar "het bronsysteem knoopt dit adres aan deze order" tilt —
+  // zie `identificationLevel` in agent-core.
+  orderUrl.searchParams.set('select', 'data,tracking_code,customer_email');
   orderUrl.searchParams.set('limit', '1');
-  const orders = await client.request<Array<{ data: unknown; tracking_code: string | null }>>(
+  const orders = await client.request<
+    Array<{ data: unknown; tracking_code: string | null; customer_email: string | null }>
+  >(
     storeCtx(env),
     orderUrl,
     { method: 'GET' },
@@ -241,7 +252,37 @@ async function lookupOrderFromDb(
     const tr = await client.request<Array<{ data: unknown }>>(storeCtx(env), tUrl, { method: 'GET' });
     tracking = Array.isArray(tr) && tr[0] ? tr[0].data : undefined;
   }
-  return { order: row.data, tracking };
+  return { order: row.data, tracking, customerEmail: row.customer_email };
+}
+
+/**
+ * De factuur bij een order, uit de demo-tabellen.
+ *
+ * Apart van de order en niet als veld erop: één order kan meer dan één factuur
+ * hebben (deellevering, nalevering, correctie), en een creditnota hoort bij een
+ * fáctuur. Zou dit uit de order komen, dan is "crediteer 89,95" niet te
+ * herleiden naar wat er precies is gefactureerd — en dat is nu juist het veld
+ * waar de onderbouwing aan hangt.
+ *
+ * Bij een echte klant vervangt de ERP-/CRM-MCP deze lookup.
+ */
+async function lookupInvoiceFromDb(
+  env: Env,
+  orderNumber: string,
+): Promise<unknown | undefined> {
+  const client = new SupabaseClient(
+    new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
+    { projectUrl: env.AIOS_SUPABASE_URL },
+  );
+  const url = client.tableUrl('demo_invoices');
+  url.searchParams.set('order_number', `eq.${orderNumber}`);
+  url.searchParams.set('select', 'data');
+  url.searchParams.set('order', 'created_at.desc');
+  url.searchParams.set('limit', '1');
+  const rijen = await client.request<Array<{ data: unknown }>>(storeCtx(env), url, {
+    method: 'GET',
+  });
+  return Array.isArray(rijen) && rijen[0] ? rijen[0].data : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +424,56 @@ export function parsePlan(text: string): Omit<Plan, 'kind'> {
     subject: typeof o.subject === 'string' ? o.subject : undefined,
     body: typeof o.body === 'string' ? o.body : '',
     claims,
+    actions: parseActions(o.actions),
   };
+}
+
+/**
+ * Leest de voorgestelde schrijfoperaties uit de LLM-output.
+ *
+ * Bewust streng in wat het accepteert, en zonder te repareren. Een voorstel met
+ * een halve payload of een ontbrekende `evidence` wordt hier weggegooid in
+ * plaats van aangevuld — aanvullen zou betekenen dat wíj een veld verzinnen in
+ * een creditnota, en dat is precies wat de onderbouwingseis moet uitsluiten.
+ *
+ * Een kapot voorstel sleept de rest niet mee: het concept-antwoord staat er nog
+ * steeds en de andere voorstellen ook. Een agent die één ding fout doet en
+ * daarom niets meer oplevert, is slechter dan een agent die drie van de vier
+ * dingen klaarzet.
+ */
+function parseActions(waarde: unknown): PlannedAction[] {
+  if (!Array.isArray(waarde)) return [];
+  const uit: PlannedAction[] = [];
+  for (const rauw of waarde) {
+    if (!rauw || typeof rauw !== 'object') continue;
+    const a = rauw as Record<string, unknown>;
+    if (typeof a.type !== 'string' || a.type.length === 0) continue;
+    if (!a.payload || typeof a.payload !== 'object' || Array.isArray(a.payload)) continue;
+    if (typeof a.impact !== 'string') continue;
+
+    const evidence = Array.isArray(a.evidence)
+      ? a.evidence
+          .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+          .filter((e) => typeof e.field === 'string' && typeof e.toolCallId === 'string')
+          .map((e) => ({
+            field: e.field as string,
+            toolCallId: e.toolCallId as string,
+            ...(typeof e.messageId === 'string' ? { messageId: e.messageId } : {}),
+          }))
+      : [];
+
+    uit.push({
+      type: a.type,
+      payload: a.payload as Record<string, unknown>,
+      evidence,
+      precondition:
+        a.precondition && typeof a.precondition === 'object' && !Array.isArray(a.precondition)
+          ? (a.precondition as Record<string, unknown>)
+          : {},
+      impact: a.impact,
+    });
+  }
+  return uit;
 }
 
 /** Beleidsregel-rij uit `aios_policy_rules` (cockpit-policy). */
@@ -739,6 +829,8 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         subject?: string;
         bodyText?: string;
         context?: unknown;
+        /** Afzender zoals het kanaal 'm aanleverde; voedt de identificatie. */
+        from?: string;
       };
       return evaluateDomainGate(
         {
@@ -852,6 +944,8 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         subject?: string;
         bodyText?: string;
         context?: unknown;
+        /** Afzender zoals het kanaal 'm aanleverde; voedt de identificatie. */
+        from?: string;
       };
       const orderNumber = classification.extracted.orderNumber as string | undefined;
 
@@ -967,8 +1061,14 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         }
       }
 
+      // Het adres dat het bronsysteem bij de order teruggaf. Blijft null als er
+      // geen order is gevonden — en dan blijft de identificatie `zwak`, wat
+      // betekent dat er geen schrijfactie ontstaat. Dat is de bedoeling.
+      let sourceEmail: string | null = null;
+
       if (orderNumber) {
-        const { order, tracking } = await lookupOrderFromDb(env, orderNumber);
+        const { order, tracking, customerEmail } = await lookupOrderFromDb(env, orderNumber);
+        sourceEmail = customerEmail ?? null;
         if (order) {
           recorder.record({ toolCallId: 'db.order', tool: 'db.demo_orders' });
           facts.push({ id: 'db.order', text: `Order ${orderNumber}: ${JSON.stringify(order)}` });
@@ -976,6 +1076,27 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         if (tracking) {
           recorder.record({ toolCallId: 'db.tracking', tool: 'db.demo_order_tracking' });
           facts.push({ id: 'db.tracking', text: `Tracking ${orderNumber}: ${JSON.stringify(tracking)}` });
+        }
+
+        // De factuur erbij, want zonder factuurnummer en factuurregels kan een
+        // creditnota niet onderbouwd worden — en een creditnota zonder dekking
+        // per veld komt niet door de poort.
+        try {
+          const invoice = await lookupInvoiceFromDb(env, orderNumber);
+          if (invoice) {
+            recorder.record({ toolCallId: 'db.invoice', tool: 'db.demo_invoices' });
+            facts.push({
+              id: 'db.invoice',
+              text: `Factuur bij order ${orderNumber}: ${JSON.stringify(invoice)}`,
+            });
+          }
+        } catch (err) {
+          // Fail-soft: geen factuur betekent geen creditnota-voorstel, niet een
+          // gestrande mail.
+          console.warn(
+            '[factuur] ophalen mislukt:',
+            err instanceof Error ? err.message : String(err),
+          );
         }
       }
 
@@ -1004,10 +1125,63 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         'oppakt (bv. "Wij zoeken dit voor u uit en nemen zo spoedig mogelijk ' +
         'contact met u op."). Nooit een lege string retourneren.';
 
+      // Welke schrijfoperaties kán deze mail opleveren?
+      //
+      // De lijst komt uit de registratie in agent-core en wordt gefilterd op
+      // wat hier daadwerkelijk zou mogen ontstaan. Een type noemen dat toch
+      // afketst scheelt niet alleen tokens: een model dat een creditnota
+      // voorstelt die daarna wordt geweigerd, schrijft er meestal ook een
+      // antwoord bij waarin het de klant dat bedrag belooft.
+      //
+      // Dit is een hulpmiddel voor de prompt en geen poort. Wat het model hier
+      // ook neerzet, `buildProposedActions` toetst het opnieuw — kanaal,
+      // identificatie, dekking per veld. De prompt kan de rem niet loszetten.
+      const kanaal = channelForDomain(signal.domain)?.id ?? signal.domain;
+      const mogelijk = isCompoundTask
+        ? []
+        : proposableActionTypes({
+            channel: kanaal,
+            identification: identificationLevel({
+              senderAddress: typeof payload.from === 'string' ? payload.from : null,
+              orderReference: orderNumber ?? null,
+              sourceEmail,
+            }),
+          });
+
+      const actieContract =
+        mogelijk.length === 0
+          ? ''
+          : 'SCHRIJFOPERATIES. Je mag voorstellen om iets in een bronsysteem ' +
+            'klaar te zetten. Er gebeurt niets tot een mens het goedkeurt, dus ' +
+            'stel voor wat logisch volgt uit de vraag — maar verzin niets. ' +
+            'Zet ze in `actions`; laat het veld weg als er niets te doen valt. ' +
+            'Vorm: [{"type": string, "payload": object, "evidence": ' +
+            '[{"field": string, "toolCallId": string}], "precondition": object, ' +
+            '"impact": string}]. ' +
+            'REGELS. `type` moet exact een van de types hieronder zijn. Voor ELK ' +
+            'veld in `payload` hoort een regel in `evidence` met dezelfde ' +
+            'puntnotatie en de fact-id waar de waarde vandaan komt; een veld ' +
+            'zonder dekking laat het hele voorstel afketsen. `precondition` is ' +
+            'de systeemstaat waarop je je baseert (bv. {"status": "open"}) — die ' +
+            'wordt bij goedkeuring opnieuw opgehaald en vergeleken. `impact` is ' +
+            'één zin in mensentaal over wat er verandert; die zin is wat de ' +
+            'medewerker leest voordat hij ja zegt.\n\n' +
+            'BESCHIKBARE TYPES:\n' +
+            mogelijk
+              .map(
+                (t) =>
+                  `- ${t.slug} (${t.label})\n` +
+                  t.payloadFields
+                    .map((v) => `    payload.${v.name} — ${v.hint}`)
+                    .join('\n'),
+              )
+              .join('\n');
+
       const systemLayers = [
         renderPrompt(activeIntent.systemPrompt, { client: clientName(env) }),
         outputContract,
       ];
+      if (actieContract) systemLayers.push(actieContract);
       if (policyDirective) {
         systemLayers.push(
           `BELEIDSRICHTLIJN voor categorie "${classification.category}" ` +
@@ -1089,6 +1263,9 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         // telt niet mee — dan degradeert de uitkomst `systeem` naar `taak` in
         // plaats van dat de agent het gat zelf invult.
         systemAnswer: facts.length > 0,
+        // Het adres uit de bron, waaruit `orchestrate` het identificatieniveau
+        // afleidt. Niet het niveau zelf: dat mag het model niet bepalen.
+        sourceEmail,
       };
     },
   };
