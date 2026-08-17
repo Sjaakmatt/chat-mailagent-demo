@@ -544,11 +544,12 @@ describe('dekking per veldherkomst', () => {
     { name: 'reason', label: 'Reden', hint: '', source: 'bericht' as const },
   ];
 
-  it('accepteert een bronveld met een tool-call en een berichtveld met een messageId', () => {
+  it('accepteert een bronveld met een tool-call en een berichtveld zonder iets', () => {
+    // Het berichtveld hoeft niets te bewijzen: er is precies één bericht in een
+    // run, dus een verwijzing ernaar voegt geen informatie toe.
     expect(
       checkFieldBacking({ amount: 89.95, reason: 'beschadigd' }, [
         { field: 'amount', toolCallId: 'db.invoice' },
-        { field: 'reason', messageId: 'msg-1' },
       ], velden),
     ).toEqual([]);
   });
@@ -561,15 +562,13 @@ describe('dekking per veldherkomst', () => {
     expect(uit[0].reason).toContain('tool-call');
   });
 
-  it('laat een reden door zonder tool-call, want die staat in geen enkel systeem', () => {
-    expect(
-      checkFieldBacking({ reason: 'kwam kapot aan' }, [{ field: 'reason', messageId: 'msg-1' }], velden),
-    ).toEqual([]);
+  it('laat een reden door zonder enige onderbouwing, want die staat in geen systeem', () => {
+    expect(checkFieldBacking({ reason: 'kwam kapot aan' }, [], velden)).toEqual([]);
   });
 
   it('weigert een veld waarvoor helemaal niets is meegegeven', () => {
     const uit = checkFieldBacking({ amount: 10 }, [], velden);
-    expect(uit[0].reason).toContain('geen onderbouwing');
+    expect(uit[0].reason).toContain('geen tool-call');
   });
 
   it('behandelt een niet-gedeclareerd veld als bron', () => {
@@ -589,10 +588,8 @@ describe('dekking per veldherkomst', () => {
         {
           type: 'werkticket_aanmaken',
           payload: { subject: 'Beschadigd artikel', description: 'Doos ingedrukt' },
-          evidence: [
-            { field: 'subject', messageId: 'msg-1' },
-            { field: 'description', messageId: 'msg-1' },
-          ],
+          // Geen evidence: beide velden komen uit de mail.
+          evidence: [],
           precondition: {},
           impact: 'Er wordt een werkticket aangemaakt.',
         },

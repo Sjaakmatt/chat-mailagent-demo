@@ -279,21 +279,27 @@ export function checkFieldBacking(
 
   const uit: FieldBackingProblem[] = [];
   for (const pad of leafPaths(payload)) {
+    // Een berichtveld hoeft niets te bewijzen.
+    //
+    // Er is precies één bericht in een run, dus een verwijzing ernaar voegt
+    // geen informatie toe — hij is altijd dezelfde. Hem tóch eisen levert
+    // alleen een faalpad op: vergeet het model die ene regel, dan sneuvelt een
+    // verder correct voorstel op een formaliteit. Dat is één keer gebeurd, en
+    // de logregel wees naar het model terwijl het ontwerp de fout was.
+    //
+    // De harde eis blijft staan waar hij iets betekent: een getal of een
+    // identifier die uit een systeem komt, moet aanwijsbaar uit dát systeem
+    // komen.
+    if ((herkomst.get(pad) ?? 'bron') === 'bericht') continue;
+
     const bewijs = dekking.get(pad);
-    if (!bewijs) {
-      uit.push({ field: pad, reason: 'geen onderbouwing meegegeven' });
-      continue;
-    }
-    const bron = herkomst.get(pad) ?? 'bron';
-    if (bron === 'bron' && !bewijs.toolCallId) {
+    if (!bewijs?.toolCallId) {
       uit.push({
         field: pad,
-        reason: 'moet uit een tool-call van deze run komen, niet uit het bericht',
+        reason: bewijs
+          ? 'alleen een verwijzing naar het bericht; dit veld moet uit een tool-call van deze run komen'
+          : 'geen tool-call uit deze run die deze waarde dekt',
       });
-      continue;
-    }
-    if (bron === 'bericht' && !bewijs.toolCallId && !bewijs.messageId) {
-      uit.push({ field: pad, reason: 'geen tool-call en geen bronbericht' });
     }
   }
   return uit;
