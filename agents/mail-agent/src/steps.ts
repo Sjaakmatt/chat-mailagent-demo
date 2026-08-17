@@ -255,6 +255,36 @@ async function lookupOrderFromDb(
   return { order: row.data, tracking, customerEmail: row.customer_email };
 }
 
+/**
+ * De factuur bij een order, uit de demo-tabellen.
+ *
+ * Apart van de order en niet als veld erop: één order kan meer dan één factuur
+ * hebben (deellevering, nalevering, correctie), en een creditnota hoort bij een
+ * fáctuur. Zou dit uit de order komen, dan is "crediteer 89,95" niet te
+ * herleiden naar wat er precies is gefactureerd — en dat is nu juist het veld
+ * waar de onderbouwing aan hangt.
+ *
+ * Bij een echte klant vervangt de ERP-/CRM-MCP deze lookup.
+ */
+async function lookupInvoiceFromDb(
+  env: Env,
+  orderNumber: string,
+): Promise<unknown | undefined> {
+  const client = new SupabaseClient(
+    new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
+    { projectUrl: env.AIOS_SUPABASE_URL },
+  );
+  const url = client.tableUrl('demo_invoices');
+  url.searchParams.set('order_number', `eq.${orderNumber}`);
+  url.searchParams.set('select', 'data');
+  url.searchParams.set('order', 'created_at.desc');
+  url.searchParams.set('limit', '1');
+  const rijen = await client.request<Array<{ data: unknown }>>(storeCtx(env), url, {
+    method: 'GET',
+  });
+  return Array.isArray(rijen) && rijen[0] ? rijen[0].data : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Categorie ⇄ specialist-mapping (Fase 1 multi-agent-brug)
 // ---------------------------------------------------------------------------
@@ -1046,6 +1076,27 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         if (tracking) {
           recorder.record({ toolCallId: 'db.tracking', tool: 'db.demo_order_tracking' });
           facts.push({ id: 'db.tracking', text: `Tracking ${orderNumber}: ${JSON.stringify(tracking)}` });
+        }
+
+        // De factuur erbij, want zonder factuurnummer en factuurregels kan een
+        // creditnota niet onderbouwd worden — en een creditnota zonder dekking
+        // per veld komt niet door de poort.
+        try {
+          const invoice = await lookupInvoiceFromDb(env, orderNumber);
+          if (invoice) {
+            recorder.record({ toolCallId: 'db.invoice', tool: 'db.demo_invoices' });
+            facts.push({
+              id: 'db.invoice',
+              text: `Factuur bij order ${orderNumber}: ${JSON.stringify(invoice)}`,
+            });
+          }
+        } catch (err) {
+          // Fail-soft: geen factuur betekent geen creditnota-voorstel, niet een
+          // gestrande mail.
+          console.warn(
+            '[factuur] ophalen mislukt:',
+            err instanceof Error ? err.message : String(err),
+          );
         }
       }
 

@@ -33,6 +33,11 @@ import {
 } from '@factumai/agent-core';
 import { callMcp, cfAccessHeaders, mcpBearer } from '@factumai/agent-core/mcp';
 import type { Env } from '../env.js';
+import {
+  DEMO_EXECUTORS,
+  DEMO_PRECONDITION_READERS,
+  demoSystemsEnabled,
+} from './demo-systems.js';
 
 export interface ActionExecutionContext {
   env: Env;
@@ -94,7 +99,13 @@ export async function readCurrentState(
   if (!def) throw new Error(`actietype ${ctx.action.type} bestaat niet meer in de registratie`);
   if (def.preconditionKind === 'geen') return ctx.action.precondition;
 
-  const reader = PRECONDITION_READERS.find((r) => r.kind === def.preconditionKind);
+  // Klantregistraties eerst; die zijn expliciet neergezet. De demo-lookups zijn
+  // een vangnet en horen nooit een echte koppeling te overrulen.
+  const reader =
+    PRECONDITION_READERS.find((r) => r.kind === def.preconditionKind) ??
+    (demoSystemsEnabled(ctx.env)
+      ? DEMO_PRECONDITION_READERS.find((r) => r.kind === def.preconditionKind)
+      : undefined);
   if (!reader) {
     throw new Error(
       `geen lookup geregistreerd voor preconditie '${def.preconditionKind}' — ` +
@@ -122,7 +133,12 @@ function mcpUrlFor(env: Env, mcp: string): string | undefined {
 export async function executeAction(ctx: ActionExecutionContext): Promise<{ ref?: string }> {
   const { env, action } = ctx;
 
-  const eigen = ACTION_EXECUTORS.find((e) => e.type === action.type);
+  // Volgorde: klant, dan demo, dan de MCP uit de registratie. Een klant die een
+  // eigen uitvoerder neerzet wint altijd; een demo-uitvoerder springt alleen bij
+  // als DEMO_MODE aanstaat.
+  const eigen =
+    ACTION_EXECUTORS.find((e) => e.type === action.type) ??
+    (demoSystemsEnabled(env) ? DEMO_EXECUTORS.find((e) => e.type === action.type) : undefined);
   if (eigen) return eigen.run(ctx);
 
   const def = getActionType(action.type);
