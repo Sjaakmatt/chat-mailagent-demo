@@ -3,6 +3,11 @@ import { KLANTENSERVICE_MODULE, type Ticket } from "@factumai/agent-core";
 import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { listTickets } from "@/lib/tickets";
+import {
+  listActionsByReviewItem,
+  toActionViewModel,
+  type ActionViewModel,
+} from "@/lib/actions";
 import { TicketList } from "@/components/tickets/TicketList";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +29,20 @@ export default async function TicketsPage() {
 
   let tickets: Ticket[] = [];
   let loadError: string | null = null;
+  // Eén query voor de hele lijst, niet één per ticket: bij twintig open tickets
+  // is dat het verschil tussen één request en twintig seriële.
+  let actionsByReviewItem: Record<string, ActionViewModel[]> = {};
   try {
-    tickets = await listTickets(makeClient(cockpitEnv()));
+    const client = makeClient(cockpitEnv());
+    tickets = await listTickets(client);
+    const nu = new Date();
+    const perItem = await listActionsByReviewItem(
+      client,
+      tickets.map((t) => t.reviewItemId).filter((id): id is string => Boolean(id)),
+    );
+    actionsByReviewItem = Object.fromEntries(
+      [...perItem].map(([id, acties]) => [id, acties.map((a) => toActionViewModel(a, nu))]),
+    );
   } catch (err) {
     loadError = err instanceof Error ? err.message : String(err);
   }
@@ -57,6 +74,7 @@ export default async function TicketsPage() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-3">
             <TicketList
+              actionsByReviewItem={actionsByReviewItem}
               title="Open"
               description="Nog niemand mee bezig"
               tone="review"
@@ -64,6 +82,7 @@ export default async function TicketsPage() {
               role={user.role}
             />
             <TicketList
+              actionsByReviewItem={actionsByReviewItem}
               title="Opgepakt"
               description="Iemand is ermee bezig"
               tone="progress"
@@ -71,6 +90,7 @@ export default async function TicketsPage() {
               role={user.role}
             />
             <TicketList
+              actionsByReviewItem={actionsByReviewItem}
               title="Afgerond"
               description="Laatste 7 dagen"
               tone="done"

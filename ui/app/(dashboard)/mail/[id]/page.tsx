@@ -23,6 +23,12 @@ import { signAttachmentUrl } from "@/lib/storage";
 import { ReviewForm } from "@/components/mail-detail/ReviewForm";
 import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
 import { DecisionPanel } from "@/components/mail-detail/DecisionPanel";
+import { ActionReview } from "@/components/actions/ActionReview";
+import {
+  listActionsForRun,
+  toActionViewModel,
+  type ActionViewModel,
+} from "@/lib/actions";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { assistantEnabled } from "@/lib/assistant/run";
 import { CompoundBreakdown } from "@/components/mail-detail/CompoundBreakdown";
@@ -159,17 +165,27 @@ export default async function ReviewDetailPage({
   // `extraEvents` aan <CaseTimeline> — zie examples/warehouse-module.
   let edits: Awaited<ReturnType<typeof listReviewEdits>> = [];
   let decisionLog: Awaited<ReturnType<typeof getDecisionLog>> = null;
+  // Klaargezette schrijfoperaties uit dezelfde run. Op `signal_id` en niet op
+  // dit ReviewItem: een actie kan bestaan zonder concept-antwoord, en zoeken op
+  // het item zou juist die gevallen missen.
+  let actions: ActionViewModel[] = [];
   try {
     if (env) {
       const client = makeClient(env);
-      [edits, decisionLog] = await Promise.all([
+      const nu = new Date();
+      const [e, log, acties] = await Promise.all([
         listReviewEdits(client, row.id),
         getDecisionLog(client, row.id),
+        row.signal_id ? listActionsForRun(client, row.signal_id) : Promise.resolve([]),
       ]);
+      edits = e;
+      decisionLog = log;
+      actions = acties.map((a) => toActionViewModel(a, nu));
     }
   } catch {
     edits = [];
     decisionLog = null;
+    actions = [];
   }
 
   return (
@@ -254,6 +270,15 @@ export default async function ReviewDetailPage({
               <Panel title="Tijdlijn">
                 <CaseTimeline item={row} edits={edits} />
               </Panel>
+
+              {/* Boven de beslissing: wat er nog moet gebeuren gaat vóór wat er
+                  al is gebeurd. Een openstaand voorstel is werk, het beslislog
+                  is verantwoording. */}
+              {actions.length > 0 && (
+                <Panel title="Voorgestelde acties">
+                  <ActionReview actions={actions} />
+                </Panel>
+              )}
 
               <Panel title="Beslissing">
                 <DecisionPanel log={decisionLog} />

@@ -108,6 +108,41 @@ export async function listActionsForRun(
   return Array.isArray(rows) ? rows.map(rowToAction) : [];
 }
 
+/**
+ * De voorstellen die bij een reeks ReviewItems horen, gegroepeerd per item.
+ *
+ * Eén query voor de hele ticketlijst in plaats van één per ticket. Bij twintig
+ * open tickets is dat het verschil tussen één request en twintig — en die
+ * twintig zijn allemaal serieel, want ze hangen aan het renderen van de rij.
+ *
+ * Hier wél op `review_item_id`: een ticket ontstaat alleen bij uitkomst `taak`,
+ * en dan is er per definitie een ReviewItem om aan te hangen.
+ */
+export async function listActionsByReviewItem(
+  client: CockpitDbClient,
+  reviewItemIds: readonly string[],
+): Promise<Map<string, ProposedAction[]>> {
+  const uniek = [...new Set(reviewItemIds.filter(Boolean))];
+  if (uniek.length === 0) return new Map();
+
+  const url = client.tableUrl("aios_proposed_actions");
+  url.searchParams.set("review_item_id", `in.(${uniek.join(",")})`);
+  url.searchParams.set("select", SELECT);
+  url.searchParams.set("order", "created_at.asc");
+  const rows = await client.request<ProposedActionRow[]>(CTX, url, {
+    method: "GET",
+  });
+
+  const uit = new Map<string, ProposedAction[]>();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row.review_item_id) continue;
+    const lijst = uit.get(row.review_item_id) ?? [];
+    lijst.push(rowToAction(row));
+    uit.set(row.review_item_id, lijst);
+  }
+  return uit;
+}
+
 /** Wat het scherm van één voorstel toont. */
 export interface ActionViewModel {
   id: string;
