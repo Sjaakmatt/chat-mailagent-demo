@@ -101,6 +101,16 @@ Twee dingen die daarin bewust zijn geregeld:
   komen ná het antwoord. Het ReviewItem blijft ervóór, want
   `aios_tickets.review_item_id` heeft er een foreign key naar — bij uitkomst
   `taak` zou het ticket anders niet aangemaakt kunnen worden.
+- **Het ReviewItem wordt na afloop afgesloten.** Het item wordt vooraf als
+  `PENDING` weggeschreven omdat het ticket ernaar moet kunnen wijzen, maar zodra
+  `finishChatTurn` iets heeft afgeleverd gaat het naar `EXECUTED` met
+  `decided_by = 'agent'`. Zonder die stap blijft elke chatbeurt als concept in de
+  werkbak staan terwijl de bezoeker zijn antwoord al heeft: dan is de wachtrij
+  geen wachtrij meer maar een logboek dat zich als wachtrij voordoet, en keurt
+  een medewerker iets goed dat al verstuurd is. Als EXECUTED staat het item nog
+  wél op de audittijdlijn, wat de bedoeling is — het is een verslag, geen taak.
+  Levert de beurt niets af (lege body, of de bezorging faalt), dan blijft het
+  item juist `PENDING` staan als vangnet.
 
 Wat er **niet** gebeurt is het antwoord streamen. De grounding-check draait ná de
 generatie en haalt beweringen weg waar geen dekking voor is; wat je hebt

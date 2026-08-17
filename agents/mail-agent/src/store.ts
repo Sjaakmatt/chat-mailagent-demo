@@ -228,6 +228,27 @@ export function createPlatformStore(env: Env): PlatformStore {
       return rowToReviewItem(row);
     },
 
+    async markReviewItemHandled(reviewItemId: string, actor: string): Promise<void> {
+      const url = client.tableUrl('aios_review_items');
+      url.searchParams.set('id', `eq.${reviewItemId}`);
+      // Alleen als hij nog PENDING staat. Heeft een mens hem intussen
+      // beoordeeld, dan wint dat oordeel — de agent mag er niet overheen.
+      url.searchParams.set('status', 'eq.PENDING');
+      const nu = new Date().toISOString();
+      await client.request<unknown>(STORE_CTX, url, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'EXECUTED',
+          decided_at: nu,
+          executed_at: nu,
+          // Geen mailadres maar 'agent': in de auditlog moet zichtbaar zijn dat
+          // hier niemand op een knop heeft gedrukt.
+          decided_by: actor,
+        }),
+        prefer: 'return=minimal',
+      });
+    },
+
     async markSignal(signalId: string, status: SignalStatus): Promise<void> {
       const url = client.tableUrl('aios_signals');
       url.searchParams.set('id', `eq.${signalId}`);

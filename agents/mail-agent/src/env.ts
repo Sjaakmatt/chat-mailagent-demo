@@ -262,6 +262,16 @@ export interface PlatformStore {
   loadSignal(signalId: string): Promise<Signal>;
   saveReviewItem(item: ReviewItem): Promise<void>;
   loadReviewItem(reviewItemId: string): Promise<ReviewItem>;
+  /**
+   * Sluit een ReviewItem af dat de agent zélf heeft afgehandeld, zonder dat er
+   * een mens aan te pas kwam. Alleen voor kanalen waar dat mag — zie
+   * `mayRespondWithoutHuman`.
+   *
+   * Bewust een PATCH en geen upsert: op dit moment is het antwoord al de deur
+   * uit, en dan wil je niet het hele item herschrijven vanuit geheugen dat
+   * ondertussen verouderd kan zijn.
+   */
+  markReviewItemHandled(reviewItemId: string, actor: string): Promise<void>;
   markSignal(signalId: string, status: Signal['status']): Promise<void>;
   /**
    * Claimt een signaal om het te verwerken; `false` als een ander het al heeft.
