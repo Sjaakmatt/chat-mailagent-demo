@@ -1164,6 +1164,12 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
             'klaar te zetten. Er gebeurt niets tot een mens het goedkeurt, dus ' +
             'stel voor wat logisch volgt uit de vraag — maar verzin niets. ' +
             'Zet ze in `actions`; laat het veld weg als er niets te doen valt. ' +
+            'Je mag er MEER DAN EEN voorstellen als de mail daarom vraagt — een ' +
+            'klacht over een beschadigd artikel kan zowel een creditnota als een ' +
+            'werkticket opleveren. Kies steeds het meest SPECIFIEKE type dat de ' +
+            'opgehaalde feiten dragen: een creditnota als je de factuurregel ' +
+            'hebt, een nalevering als je de ontbrekende orderregel hebt. Val ' +
+            'alleen terug op een werkticket als geen specifieker type past. ' +
             'Vorm: [{"type": string, "payload": object, "evidence": ' +
             '[{"field": string, "toolCallId": string}], "precondition": object, ' +
             '"impact": string}]. ' +
