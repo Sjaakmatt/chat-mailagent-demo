@@ -159,6 +159,38 @@ export async function runSignalTurn(
         if (turn) {
           reply = turn.reply;
           log.steps.push({ step: 'chat-turn', outcome: turn.reason });
+
+          // En hiermee is dit item klaar.
+          //
+          // Zonder deze regel blijft elke chatbeurt als PENDING-concept in de
+          // werkbak staan, terwijl het antwoord al bij de bezoeker is. Dat is
+          // geen wachtrij meer maar een logboek dat zich als wachtrij voordoet:
+          // een medewerker die zo'n item goedkeurt, keurt iets goed dat al
+          // verstuurd is, en de teller "concepten wachten op review" loopt op
+          // met elke vraag die de agent juist zelf heeft afgehandeld.
+          //
+          // Dat geldt voor álle vier de uitkomsten, want `finishChatTurn` geeft
+          // alleen een resultaat terug als er daadwerkelijk iets naar de
+          // bezoeker is gegaan:
+          //
+          //   kennis/systeem  het antwoord zelf is verstuurd
+          //   taak            bevestiging verstuurd; het werk leeft verder in
+          //                   het ticket, dat via `review_item_id` naar dit
+          //                   item terugwijst — geen tweede wachtrij ernaast
+          //   onbekend        de wedervraag is verstuurd
+          //
+          // Het item verdwijnt niet: als EXECUTED staat het op de audittijdlijn,
+          // met `decided_by = 'agent'` zodat zichtbaar is dat hier geen mens aan
+          // te pas kwam.
+          //
+          // Fail-soft: mislukt dit, dan staat het item er nog als concept. Dat
+          // is vervelend maar onschadelijk — en zeker geen reden om een beurt te
+          // laten klappen waarvan de bezoeker het antwoord al heeft.
+          try {
+            await store.markReviewItemHandled(result.reviewItem.id, 'agent');
+          } catch (err) {
+            console.error('[chat] item afsluiten mislukt (blijft als concept staan):', err);
+          }
         }
       } catch (err) {
         // De bezoeker krijgt dan niets terug, maar het ReviewItem staat in de
