@@ -31,6 +31,7 @@
 import { SupabaseClient, ServiceRoleCredentialStore } from '@factumai/agent-core';
 import type { TenantContext } from '@factumai/agent-core';
 import type { Env } from '../env.js';
+import { createTicket } from '../chat/tickets.js';
 import type { ActionExecutionContext, ActionExecutor, PreconditionReader } from './execute.js';
 
 const CTX: TenantContext = {
@@ -49,6 +50,32 @@ function client(env: Env): SupabaseClient {
     new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
     { projectUrl: env.AIOS_SUPABASE_URL },
   );
+}
+
+/**
+ * Het afzenderadres van de mail waar deze actie uit voortkwam.
+ *
+ * Uit het signaal en niet uit de payload: het kanaal leverde dit aan, dus het
+ * is een feit van de run. Een model dat het moet overtypen kan het verkeerd
+ * overtypen, en dan gaat een ticket naar een adres dat nooit heeft gemaild.
+ */
+async function afzenderVanRun(ctx: ActionExecutionContext): Promise<string | null> {
+  const db = client(ctx.env);
+  const url = db.tableUrl('aios_signals');
+  url.searchParams.set('id', `eq.${ctx.action.runId}`);
+  url.searchParams.set('select', 'payload');
+  url.searchParams.set('limit', '1');
+  const rijen = await db.request<Array<{ payload: { from?: unknown } }>>(CTX, url, {
+    method: 'GET',
+  });
+  const from = Array.isArray(rijen) ? rijen[0]?.payload?.from : undefined;
+  return typeof from === 'string' && from.trim().length > 0 ? from.trim() : null;
+}
+
+/** Leest een optionele string uit de payload; null als hij ontbreekt. */
+function leesString(ctx: ActionExecutionContext, veld: string): string | null {
+  const waarde = ctx.action.payload[veld];
+  return typeof waarde === 'string' && waarde.trim().length > 0 ? waarde.trim() : null;
 }
 
 /** Leest één waarde uit de payload; gooit als hij ontbreekt of leeg is. */
@@ -87,6 +114,41 @@ async function schrijf(
 }
 
 export const DEMO_EXECUTORS: ActionExecutor[] = [
+  {
+    // Dit type is anders dan de rest: een werkticket landt niet in het systeem
+    // van een klant maar in onze eigen werkbak. De registratie wijst naar de
+    // tickets-MCP, en die route blijft gelden voor een klant die daarop draait;
+    // zonder zo'n koppeling is `aios_tickets` het juiste doel, want dát is het
+    // scherm waar de medewerker het ticket komt afhandelen.
+    type: 'werkticket_aanmaken',
+    async run(ctx) {
+      const ticket = await createTicket(ctx.env, {
+        organizationId: ctx.action.organizationId,
+        // Geen chatgesprek: dit komt uit een mailrun. Het ReviewItem is de
+        // koppeling terug naar het concept-antwoord en de onderbouwing.
+        conversationId: null,
+        reviewItemId: ctx.action.reviewItemId ?? null,
+        category: null,
+        summary: tekst(ctx, 'subject'),
+        // Het afzenderadres komt uit het signaal en niet uit de payload. Dat
+        // is bewust: het is een feit van de run dat het kanaal aanleverde, geen
+        // waarde die een model moet overtypen — en `ticketReadiness` weigert
+        // zonder terugkoppelkanaal.
+        identity: {
+          contactEmail: await afzenderVanRun(ctx),
+          orderReference: leesString(ctx, 'orderNumber'),
+        },
+        handoverReason: leesString(ctx, 'description'),
+      });
+      if (!ticket) {
+        // `ticketReadiness` eist een mailadres; zonder terugkoppelkanaal heeft
+        // een ticket geen zin. Gooien in plaats van stil niets doen, anders
+        // staat het voorstel op uitgevoerd zonder dat er iets bestaat.
+        throw new Error('te weinig identificatie voor een ticket (mailadres ontbreekt)');
+      }
+      return { ref: ticket.number };
+    },
+  },
   {
     type: 'creditnota_voorstellen',
     async run(ctx) {
