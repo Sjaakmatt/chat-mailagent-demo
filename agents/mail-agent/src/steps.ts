@@ -1169,14 +1169,14 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
             '"impact": string}]. ' +
             'REGELS. `type` moet exact een van de types hieronder zijn. Voor ELK ' +
             'veld in `payload` hoort een regel in `evidence` met dezelfde ' +
-            'puntnotatie; een veld zonder onderbouwing laat het hele voorstel ' +
-            'afketsen. Er zijn twee soorten velden, en het verschil is hard:\n' +
-            '  [bron]    de waarde staat in een opgehaald systeem. Zet de ' +
-            'fact-id in `toolCallId`. Neem de waarde letterlijk over; verzin ' +
-            'nooit een bedrag of een nummer.\n' +
+            'puntnotatie. Er zijn twee soorten velden, en het verschil is hard:\n' +
+            '  [bron]    de waarde staat in een opgehaald systeem. VERPLICHT een ' +
+            'regel in `evidence` met de fact-id in `toolCallId`. Neem de waarde ' +
+            'letterlijk over; verzin nooit een bedrag of een nummer. Zonder die ' +
+            'regel ketst het hele voorstel af.\n' +
             '  [bericht] de klant levert de waarde zelf aan (een nieuw adres, ' +
-            'de reden van een klacht). Die staat in geen enkel systeem. Zet ' +
-            '`messageId` op de messageId van de mail; `toolCallId` mag weg.\n' +
+            'de reden van een klacht). Die staat in geen enkel systeem, dus ' +
+            'daar hoeft geen `evidence`-regel bij.\n' +
             '`precondition` is ' +
             'de systeemstaat waarop je je baseert (bv. {"status": "open"}) — die ' +
             'wordt bij goedkeuring opnieuw opgehaald en vergeleken. `impact` is ' +
