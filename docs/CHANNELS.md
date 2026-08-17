@@ -104,13 +104,38 @@ Twee dingen die daarin bewust zijn geregeld:
 - **Het ReviewItem wordt na afloop afgesloten.** Het item wordt vooraf als
   `PENDING` weggeschreven omdat het ticket ernaar moet kunnen wijzen, maar zodra
   `finishChatTurn` iets heeft afgeleverd gaat het naar `EXECUTED` met
-  `decided_by = 'agent'`. Zonder die stap blijft elke chatbeurt als concept in de
-  werkbak staan terwijl de bezoeker zijn antwoord al heeft: dan is de wachtrij
-  geen wachtrij meer maar een logboek dat zich als wachtrij voordoet, en keurt
-  een medewerker iets goed dat al verstuurd is. Als EXECUTED staat het item nog
-  wél op de audittijdlijn, wat de bedoeling is — het is een verslag, geen taak.
+  `decided_by = 'agent'` — zichtbaar dat hier niemand op een knop heeft gedrukt.
   Levert de beurt niets af (lege body, of de bezorging faalt), dan blijft het
   item juist `PENDING` staan als vangnet.
+
+## Waar het werk van een chatbeurt landt
+
+Drie schermen, drie verschillende dingen. Ze uit elkaar houden is geen
+cosmetica: zodra hetzelfde gesprek op drie plekken staat, weet niemand meer
+welke de waarheid is.
+
+| Scherm      | Wat er staat                       | Waar het vandaan komt        |
+| ----------- | ---------------------------------- | ---------------------------- |
+| Gesprekken  | het gesprek zelf, beurt voor beurt | `aios_conversations`/`aios_messages` |
+| Tickets     | het uitzoekwerk, bij uitkomst `taak` | `aios_tickets`             |
+| Auditlog    | wat de agent besloot en waarom     | ReviewItem + beslislog       |
+
+Wat er **niet** bij staat is de werkbak. Die is de plek waar een mens een
+concept goedkeurt vóór het de deur uitgaat, en bij chat is dat moment allang
+voorbij tegen de tijd dat iemand kijkt. Een chat-item daar tonen levert een
+wachtrij op die zichzelf vult met werk dat al gedaan is.
+
+Dat staat vast in de kanaal-registry, niet in de cockpit: `queuesForReview` op
+de `ChannelDef`, en `kindsHandledOutsideWorkbench()` vertaalt dat naar de
+soorten die de werkbak-query wegfiltert. Het is bewust een **uitsluit**lijst —
+een module die z'n eigen soort produceert hoort gewoon in de werkbak zonder zich
+ergens aan te melden. Zou het een toelatingslijst zijn, dan begint elke nieuwe
+automatisering onzichtbaar tot iemand ontdekt dat die lijst bestaat.
+
+`queuesForReview` staat los van `realtime`, ook al vallen ze vandaag samen.
+`realtime` zegt hoe snel er een antwoord moet komen; `queuesForReview` zegt wie
+beslist. Telefonie met een meeluisterende medewerker zou snel zijn én review
+nodig hebben.
 
 Wat er **niet** gebeurt is het antwoord streamen. De grounding-check draait ná de
 generatie en haalt beweringen weg waar geen dekking voor is; wat je hebt
