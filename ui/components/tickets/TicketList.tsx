@@ -180,6 +180,7 @@ export function TicketList({
                   <div className="mt-2">
                     <ActionReview
                       actions={actionsByReviewItem?.[t.reviewItemId ?? ""] ?? []}
+                      autoOpen={t.id === focus}
                     />
                   </div>
                 )}
