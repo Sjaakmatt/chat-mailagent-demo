@@ -5,6 +5,9 @@ import { accessFor } from "@/lib/auth/access";
 import { MODULES } from "@/lib/modules";
 import { cockpitEnv } from "@/lib/db";
 import { isDemoEnabled } from "@/lib/demo/enabled";
+import { AssistantSubjectProvider } from "@/components/assistant/AssistantContext";
+import { AssistantDock } from "@/components/assistant/AssistantDock";
+import { assistantEnabled } from "@/lib/assistant/run";
 
 // De middleware bewaakt al de toegang; deze layout draait per request.
 export const dynamic = "force-dynamic";
@@ -40,16 +43,24 @@ export default async function DashboardLayout({
   // geen module-schermen. Dat is vervelend maar veilig, en de pagina's zelf
   // weigeren alsnog via `requireModulePage`.
   let moduleNav: { href: string; label: string; icon: React.ReactNode }[] = [];
+  // De module waarin de assistent praat als er geen voorstel openstaat: de
+  // eerste waar deze gebruiker in mag. De route toetst het nog een keer — dit
+  // bepaalt alleen of het venster er staat.
+  let assistantModule: string | null = null;
   if (user) {
     try {
       const { access } = await accessFor(user);
-      moduleNav = MODULES.filter((m) => access.mayEnter(m.id)).flatMap((m) =>
+      const mijn = MODULES.filter((m) => access.mayEnter(m.id));
+      moduleNav = mijn.flatMap((m) =>
         (m.navItems ?? []).map((item) => ({
           href: item.href,
           label: item.label,
           icon: <item.icon className="w-4 h-4" aria-hidden="true" />,
         })),
       );
+      // Geen generieke bronnen = geen gesprek buiten een voorstel om. Dan geen
+      // venster tonen dat op elke vraag nee zegt.
+      assistantModule = mijn.find((m) => m.collectGeneralSources)?.id ?? null;
     } catch (err) {
       console.warn(
         "[dashboard-layout] modulenavigatie overgeslagen:",
@@ -63,11 +74,13 @@ export default async function DashboardLayout({
   let isStaging = false;
   let stagingOrgId: string | undefined;
   let demoEnabled = false;
+  let assistantAan = false;
   try {
     const env = cockpitEnv();
     isStaging = env.COCKPIT_MODE === "staging";
     stagingOrgId = env.AIOS_ORG_ID;
     demoEnabled = isDemoEnabled(env);
+    assistantAan = assistantEnabled(env);
   } catch {
     // env-lookup faalt bij lokale dev zonder wrangler — silently niet-staging
   }
@@ -76,17 +89,24 @@ export default async function DashboardLayout({
     // items-start zodat de sticky sidebar zijn eigen scroll-context houdt en
     // niet meebeweegt met de main-content. min-h-screen + min-w-0 op main
     // voorkomt dat lange werktickets de pagina-layout breken.
-    <div className="flex items-start min-h-screen bg-surface-muted">
-      <Sidebar
-        userEmail={user?.email ?? null}
-        role={user?.role ?? null}
-        demoEnabled={demoEnabled}
-        moduleNav={moduleNav}
-      />
-      <main className="flex-1 flex flex-col min-h-screen min-w-0 pt-16 lg:pt-0">
-        {isStaging && <StagingBanner organizationId={stagingOrgId} />}
-        {children}
-      </main>
-    </div>
+    <AssistantSubjectProvider>
+      <div className="flex items-start min-h-screen bg-surface-muted">
+        <Sidebar
+          userEmail={user?.email ?? null}
+          role={user?.role ?? null}
+          demoEnabled={demoEnabled}
+          moduleNav={moduleNav}
+        />
+        <main className="flex-1 flex flex-col min-h-screen min-w-0 pt-16 lg:pt-0">
+          {isStaging && <StagingBanner organizationId={stagingOrgId} />}
+          {children}
+        </main>
+        {/* In de schil en niet op een scherm: de assistent hoort overal
+            bereikbaar te zijn, en het schuivende onderwerp regelt de rest. */}
+        {assistantAan && assistantModule && (
+          <AssistantDock moduleId={assistantModule} />
+        )}
+      </div>
+    </AssistantSubjectProvider>
   );
 }

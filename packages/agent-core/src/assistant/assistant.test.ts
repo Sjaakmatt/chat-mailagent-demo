@@ -3,7 +3,9 @@ import {
   buildAssistantPrompt,
   finalizeAssistantAnswer,
   makeSource,
+  normalizeHistory,
   normalizeQuestion,
+  MAX_HISTORY_TURNS,
   parseAssistantAnswer,
   renderSources,
   truncateSource,
@@ -235,5 +237,92 @@ describe('prompt', () => {
     expect(normalizeQuestion('   ')).toBeNull();
     expect(normalizeQuestion(42)).toBeNull();
     expect(normalizeQuestion('x'.repeat(5000))?.length).toBe(1000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Het gesprek: vervolgvragen begrijpen zonder dat geschiedenis dekking wordt
+// ---------------------------------------------------------------------------
+
+describe('gespreksgeschiedenis', () => {
+  const bron = makeSource({
+    id: 'beleid:1',
+    kind: 'beleid',
+    label: 'Beleidsregel "Klacht"',
+    text: 'Bij een klacht binnen 24 uur reageren.',
+  });
+
+  it('zet eerdere beurten in de prompt, gemarkeerd als geen bron', () => {
+    const messages = buildAssistantPrompt({
+      question: 'en hoe lang mag dat duren?',
+      contextLabel: 'Klantenservice — geen voorstel geopend',
+      sources: [bron],
+      clientName: 'Testklant',
+      history: [{ question: 'welk beleid geldt bij klachten?', answer: 'Binnen 24 uur reageren.' }],
+    });
+
+    const user = messages[1]!.content;
+    expect(user).toContain('welk beleid geldt bij klachten?');
+    expect(user).toContain('geen bron');
+    // De bronnen staan ná het gesprek en vlak vóór de vraag: "de bronnen
+    // hieronder" uit de systeemprompt moet letterlijk kloppen.
+    expect(user.indexOf('EERDERE BEURTEN')).toBeLessThan(user.indexOf('BRONNEN:'));
+    expect(user.indexOf('BRONNEN:')).toBeLessThan(user.indexOf('VRAAG VAN DE MEDEWERKER'));
+  });
+
+  it('laat de prompt ongemoeid als er geen geschiedenis is', () => {
+    const messages = buildAssistantPrompt({
+      question: 'wat staat er open?',
+      contextLabel: 'Klantenservice — geen voorstel geopend',
+      sources: [bron],
+      clientName: 'Testklant',
+    });
+    expect(messages[1]!.content).not.toContain('EERDERE BEURTEN');
+  });
+
+  it('dekt niets: een getal uit een eerdere beurt zakt alsnog', () => {
+    // Dit is de reden dat geschiedenis geen bron is. Zou een eerder antwoord
+    // meetellen als dekking, dan kan een verzonnen getal zichzelf legitimeren
+    // door één beurt te overleven.
+    const antwoord = parseAssistantAnswer(
+      JSON.stringify({
+        answer: 'Er staan 47 klachten open.',
+        claims: [{ statement: 'Er staan 47 klachten open.', sourceId: 'beleid:1' }],
+        cannotAnswer: null,
+      }),
+    );
+    const uit = finalizeAssistantAnswer(antwoord, [bron]);
+    expect(uit.ok).toBe(false);
+  });
+});
+
+describe('normalizeHistory', () => {
+  it('houdt alleen volledige paren over', () => {
+    expect(
+      normalizeHistory([
+        { question: 'a', answer: 'b' },
+        { question: '  ', answer: 'b' },
+        { question: 'c' },
+        null,
+        'nee',
+      ]),
+    ).toEqual([{ question: 'a', answer: 'b' }]);
+  });
+
+  it('begrenst de lengte van de draad', () => {
+    const veel = Array.from({ length: 20 }, (_, i) => ({
+      question: `v${i}`,
+      answer: `a${i}`,
+    }));
+    const uit = normalizeHistory(veel);
+    expect(uit).toHaveLength(MAX_HISTORY_TURNS);
+    // De laatste beurten, niet de eerste: een vervolgvraag slaat terug op wat
+    // er net is gezegd.
+    expect(uit[uit.length - 1]!.question).toBe('v19');
+  });
+
+  it('geeft een lege draad terug bij onzin', () => {
+    expect(normalizeHistory(undefined)).toEqual([]);
+    expect(normalizeHistory('draad')).toEqual([]);
   });
 });

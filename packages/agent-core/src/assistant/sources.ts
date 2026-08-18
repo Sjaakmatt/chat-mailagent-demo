@@ -20,6 +20,8 @@ export type AssistantSourceKind =
   | 'beleid'
   /** Een eerder afgehandelde zaak die op deze lijkt. */
   | 'eerdere_zaak'
+  /** De stand van het werk zelf: wat staat er open, per status en categorie. */
+  | 'werkvoorraad'
   /** Een uitgevoerde aggregatie, met zijn volledige verantwoording (laag 2). */
   | 'aggregatie';
 

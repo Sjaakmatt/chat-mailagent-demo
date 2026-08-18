@@ -19,7 +19,10 @@ import {
   type ReviewItemRow,
 } from "@/lib/review";
 import type { WorkbenchModule } from "./contract";
-import { collectKlantenserviceSources } from "./klantenservice-sources";
+import {
+  collectKlantenserviceGeneralSources,
+  collectKlantenserviceSources,
+} from "./klantenservice-sources";
 import { klantenserviceAuditSource } from "./klantenservice-audit";
 
 /**
@@ -182,6 +185,7 @@ export const klantenserviceModule: WorkbenchModule = {
   categories: KLANTENSERVICE_MODULE.categories,
   detailHref,
   collectSources: collectKlantenserviceSources,
+  collectGeneralSources: collectKlantenserviceGeneralSources,
   toCard(row: ReviewItemRow): ReviewCardViewModel {
     const proposed = mailProposed(row);
     const triage = triageOf(row);

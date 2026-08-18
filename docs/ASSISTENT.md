@@ -1,8 +1,43 @@
 # De werkbak-assistent — laag 1, het dossier
 
-Een raadpleegvenster naast het werk. Een medewerker die een voorstel beoordeelt,
-kan vragen stellen over dat voorstel, de klant, het beleid en eerder afgehandelde
-zaken. Eén invoerveld, geen tweede.
+Een gespreksvenster in de werkbak zelf, rechtsonder, op elk scherm bereikbaar.
+Eén invoerveld, geen tweede.
+
+## Waar hij zit, en waarom dat uitmaakt
+
+Hij hing eerst op het detailscherm van een werkitem. Dat was de verkeerde plek:
+zo is hij er alleen als je al weet welk item je nodig hebt, en juist de vragen
+dáárvoor — "welk beleid geldt bij een creditnota", "wat staat er nog open" — kon
+je nergens kwijt.
+
+Nu hangt hij aan de schil en schuift het **onderwerp** mee:
+
+| Waar je staat | Waar het gesprek over gaat | Bronnen |
+| --- | --- | --- |
+| Een voorstel open | dat voorstel, die klant | `collectSources(client, row)` |
+| Ergens anders in de werkbak | het proces zelf | `collectGeneralSources(client)` |
+
+Dat onderwerp komt niet uit de URL maar van het scherm: een pagina met een
+onderwerp rendert `<AssistantSubject reviewItemId label>`, en dat vervalt zodra
+je wegnavigeert. Zou de schil de routes van een module moeten kennen om te weten
+waar je naar kijkt, dan zat er mailkennis in een kernbestand van de cockpit — de
+regressie die [`MODULES.md`](./MODULES.md) verbiedt.
+
+Een nieuw onderwerp is een nieuw gesprek: de draad wordt leeggemaakt. Doorpraten
+over voorstel B met de beurten van voorstel A erboven levert antwoorden op die
+kloppen bij de verkeerde zaak, en dat is het soort fout dat niemand opmerkt.
+
+## Het gesprek is context, geen bron
+
+Eerdere beurten gaan mee zodat "en die klant?" te begrijpen is. Ze tellen
+**niet** mee als dekking: `finalizeAssistantAnswer` kijkt uitsluitend naar de
+bronnen van déze beurt. Zou het anders zijn, dan kan een verzonnen getal
+zichzelf legitimeren door één beurt te overleven — het staat immers in het
+gesprek. Er is een test die precies dat afdwingt.
+
+Wat de browser meestuurt is dus onbetrouwbaar én onschadelijk; `normalizeHistory`
+begrenst het tot zes beurten zodat niemand er een prompt van willekeurige lengte
+doorheen schuift.
 
 **Hij voert niets uit en verstuurt niets.** Dat is niet alleen een promptregel:
 er zit in de hele assistent-laag geen enkele schrijfroute. Alles wat naar buiten
@@ -10,12 +45,32 @@ gaat, gaat via de bestaande knoppen.
 
 ## Wat hij kan
 
+Bij een geopend voorstel:
+
 | Vraag | Bron |
 | --- | --- |
 | Waarom stelt hij dit voor? | Het beslislog van die run: poort, categorie, specialist, stappen, geraadpleegde bronnen, afgekeurde claims |
 | Wat is de geschiedenis van deze klant? | Eerdere tickets van hetzelfde e-mailadres |
 | Welk beleid geldt hier? | De beleidsregels die op de categorie matchen, met de vindplaats |
 | Is dit eerder voorgekomen? | Eerder besliste voorstellen in dezelfde categorie, met wat er toen is besloten |
+
+En zonder:
+
+| Vraag | Bron |
+| --- | --- |
+| Wat staat er nu open? | De werkvoorraad, uitgeschreven per status en per categorie |
+| Welke tickets liggen er nog? | De openstaande tickets, met wie ze heeft opgepakt |
+| Welk beleid geldt bij X? | Alle actieve beleidsregels van deze module |
+| Wat is er recent afgehandeld? | De laatste besliste voorstellen, met wie en wanneer |
+
+De werkvoorraad staat er bewust **uitgeschreven** in en niet als losse getallen
+in de prompt: de assistent mag geen getal noemen dat niet letterlijk in een bron
+staat, en hij mag niet rekenen. Wil je dat hij "er staan er zeven open" kan
+zeggen, dan moet die zeven in de brontekst staan.
+
+Wat er zonder voorstel **niet** in zit is een klantdossier. Zonder voorstel is er
+geen klant om over te praten; vraagt iemand er toch naar, dan is "dat staat er
+niet" het juiste antwoord — hij opent het item en de assistent kijkt mee.
 
 Alles komt uit de klant-database. Er gaat geen MCP-call uit en er wordt niets
 geaggregeerd — dat is laag 2 en dat is een ander product.
@@ -70,10 +125,16 @@ Drie poorten, in oplopende kosten, voordat er een model aan te pas komt:
    toewijzing en rol; zie [`RECHTEN.md`](./RECHTEN.md).
 
 En één die geen poort is maar een eigenschap: **de bronnen komen van de module**,
-via `WorkbenchModule.collectSources`. Er is geen gedeelde functie met een
-module-parameter, dus de klantenservice-assistent kán geen sales-bron krijgen —
-ook niet als er ergens een verkeerde id wordt doorgegeven. Een module zonder
-`collectSources` heeft geen assistent; ook dat is fail-closed.
+via `WorkbenchModule.collectSources` en `collectGeneralSources`. Er is geen
+gedeelde functie met een module-parameter, dus de klantenservice-assistent kán
+geen sales-bron krijgen — ook niet als er ergens een verkeerde id wordt
+doorgegeven. Een module zonder `collectSources` heeft geen assistent op een
+voorstel; een module zonder `collectGeneralSources` heeft er geen buiten een
+voorstel om, en dan staat het venster er ook niet. Beide fail-closed.
+
+Bij een geopend voorstel hangt de modulegrant aan de módule van dat item; zonder
+voorstel aan de module die de medewerker zelf open heeft. Vandaag is dat er één,
+en dan hoeft het scherm er niets over te weten.
 
 Datacategorieën spelen in laag 1 nog geen rol: de cockpit leest zijn eigen
 database, en daar staan geen inkoopprijzen of marges — die zitten in de
