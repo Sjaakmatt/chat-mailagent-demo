@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  applyActionEdits,
   getActionType,
   isExpired,
   isOpenAction,
@@ -174,4 +175,101 @@ async function patchAction(
     url,
     { method: "PATCH", body: JSON.stringify(velden), prefer: "return=minimal" },
   );
+}
+
+
+/**
+ * De actuele stand van één voorstel.
+ *
+ * Bestaat omdat goedkeuren asynchroon is: de route zet een Workflow in gang en
+ * die hervalideert en schrijft daarna pas. Het scherm moet dus kúnnen wachten
+ * op de uitkomst in plaats van meteen iets te beweren — zonder dit endpoint zag
+ * een medewerker "wacht op controle" staan tot hij zelf verversde.
+ */
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const guard = await requireRole("viewer");
+  if (guard instanceof NextResponse) return guard;
+
+  const { id } = await params;
+  const action = await getProposedAction(makeClient(cockpitEnv()), id);
+  if (!action) return NextResponse.json({ error: "Niet gevonden" }, { status: 404 });
+
+  return NextResponse.json({
+    status: action.status,
+    reason: action.reason,
+    decidedBy: action.decidedBy ?? null,
+  });
+}
+
+/**
+ * Een correctie op het voorstel, vóór goedkeuring.
+ *
+ * Alleen velden die de registratie als `editable` markeert. De grens loopt daar
+ * langs: een grootheid of een tekst mag je corrigeren, de actie op een ander
+ * record richten niet — dat is geen correctie maar een andere actie, en die
+ * hoort een eigen voorstel met een eigen onderbouwing te krijgen.
+ *
+ * Wat de agent voorstelde blijft bewaard in `original_payload`. Daarmee is een
+ * bijgesteld veld beter gedocumenteerd dan een onaangeroerd veld, niet slechter:
+ * je ziet wat de agent zei, wat de mens ervan maakte, en wie dat was.
+ */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const guard = await requireRole("reviewer");
+  if (guard instanceof NextResponse) return guard;
+
+  const { id } = await params;
+
+  let body: { edits?: Record<string, unknown> };
+  try {
+    body = (await request.json()) as { edits?: Record<string, unknown> };
+  } catch {
+    return NextResponse.json({ error: "Ongeldige body" }, { status: 400 });
+  }
+  const edits = body.edits ?? {};
+  if (Object.keys(edits).length === 0) {
+    return NextResponse.json({ error: "Niets aangepast" }, { status: 400 });
+  }
+
+  const client = makeClient(cockpitEnv());
+  const action = await getProposedAction(client, id);
+  if (!action) return NextResponse.json({ error: "Niet gevonden" }, { status: 404 });
+  if (!isOpenAction(action.status)) {
+    return NextResponse.json(
+      { error: "Dit voorstel is al afgehandeld", status: action.status },
+      { status: 409 },
+    );
+  }
+
+  const def = getActionType(action.type);
+  if (!def) {
+    return NextResponse.json({ error: "Dit actietype bestaat niet meer" }, { status: 409 });
+  }
+
+  const uitkomst = applyActionEdits(def, action.payload, edits);
+  if (!uitkomst.ok) {
+    return NextResponse.json({ error: uitkomst.reason }, { status: 400 });
+  }
+
+  await patchAction(client, id, {
+    payload: uitkomst.payload,
+    // Alleen de eerste keer: het origineel is wat de AGENT voorstelde, niet wat
+    // er stond vóór de laatste correctie. Overschrijven zou dat kwijtmaken.
+    ...(action.originalPayload ? {} : { original_payload: action.payload }),
+    edited_by: guard.email,
+    edited_at: new Date().toISOString(),
+  });
+
+  // De vereiste rang kan door de correctie zijn verschoven — een bedrag boven
+  // de drempel vraagt om een beheerder. Teruggeven zodat het scherm dat toont
+  // vóór iemand op goedkeuren drukt; de POST toetst het opnieuw.
+  return NextResponse.json({
+    ok: true,
+    approverRole: requiredApproverRole(def, uitkomst.payload),
+  });
 }

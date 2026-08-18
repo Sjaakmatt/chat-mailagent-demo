@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ACTION_STATUSES,
   ACTION_TYPES,
+  applyActionEdits,
   canTransitionAction,
   checkFieldBacking,
   evaluateApproval,
@@ -732,5 +733,79 @@ describe('geen defect goedkeuren zonder foto', () => {
       identification: 'zwak',
     });
     expect(actions).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('een voorstel corrigeren', () => {
+  const creditnota = getActionType('creditnota_voorstellen')!;
+
+  it('past een bedrag aan en houdt het een getal', () => {
+    // Uit een formulierveld komt tekst binnen. Zou dat een string blijven, dan
+    // schrijft de uitvoerder straks "45" in een numerieke kolom.
+    const uit = applyActionEdits(creditnota, { invoiceNumber: 'F-1', amount: 89 }, {
+      amount: '45',
+    });
+    expect(uit.ok).toBe(true);
+    if (uit.ok) expect(uit.payload.amount).toBe(45);
+  });
+
+  it('accepteert een komma als decimaalteken', () => {
+    const uit = applyActionEdits(creditnota, { amount: 89 }, { amount: '44,50' });
+    expect(uit.ok).toBe(true);
+    if (uit.ok) expect(uit.payload.amount).toBe(44.5);
+  });
+
+  it('weigert het factuurnummer, want dat is een andere actie', () => {
+    const uit = applyActionEdits(creditnota, { invoiceNumber: 'F-1', amount: 89 }, {
+      invoiceNumber: 'F-999',
+    });
+    expect(uit.ok).toBe(false);
+    if (!uit.ok) expect(uit.reason).toContain('niet te wijzigen');
+  });
+
+  it('weigert een onbekend veld in plaats van het te negeren', () => {
+    // Stilzwijgend laten vallen zou betekenen dat iemand "opgeslagen" ziet en er
+    // iets anders wordt uitgevoerd dan hij dacht.
+    const uit = applyActionEdits(creditnota, { amount: 89 }, { stiekem: 'x' });
+    expect(uit.ok).toBe(false);
+  });
+
+  it('weigert nul en negatief', () => {
+    expect(applyActionEdits(creditnota, { amount: 89 }, { amount: '0' }).ok).toBe(false);
+    expect(applyActionEdits(creditnota, { amount: 89 }, { amount: '-10' }).ok).toBe(false);
+  });
+
+  it('weigert een leeg tekstveld', () => {
+    expect(applyActionEdits(creditnota, { reason: 'schade' }, { reason: '  ' }).ok).toBe(false);
+  });
+
+  it('kan een genest adresveld bijstellen', () => {
+    const adres = getActionType('adres_wijzigen')!;
+    const uit = applyActionEdits(
+      adres,
+      { orderNumber: 'DEMO-1', address: { street: 'Oud 1', city: 'Amsterdam' } },
+      { 'address.street': 'Nieuw 44' },
+    );
+    expect(uit.ok).toBe(true);
+    if (uit.ok) {
+      expect((uit.payload.address as Record<string, unknown>).street).toBe('Nieuw 44');
+      // De rest van het adres blijft staan; een correctie is geen vervanging.
+      expect((uit.payload.address as Record<string, unknown>).city).toBe('Amsterdam');
+    }
+  });
+
+  it('raakt het origineel niet aan', () => {
+    const origineel = { amount: 89 };
+    applyActionEdits(creditnota, origineel, { amount: '45' });
+    expect(origineel.amount).toBe(89);
+  });
+
+  it('tilt een correctie boven de drempel naar de beheerder', () => {
+    // Wie 89 naar 400 bijstelt, mag het niet ineens zelf mogen aftekenen.
+    const uit = applyActionEdits(creditnota, { amount: 89 }, { amount: '400' });
+    expect(uit.ok).toBe(true);
+    if (uit.ok) expect(requiredApproverRole(creditnota, uit.payload)).toBe('admin');
   });
 });

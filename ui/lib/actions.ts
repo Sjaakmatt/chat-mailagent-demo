@@ -22,6 +22,23 @@ import {
 } from "@factumai/agent-core";
 import type { CockpitDbClient } from "./tenant-query";
 
+/**
+ * Een voorstel plus wat de cockpit erbij bewaart.
+ *
+ * `ProposedAction` uit agent-core kent geen correcties — dat is bewust: de kern
+ * beschrijft wat de agent voorstelde, en wie het daarna bijstelde is iets van
+ * de werkbak. Hier komt dat bij elkaar.
+ */
+export interface CockpitAction extends ProposedAction {
+  /** Wat de agent voorstelde, zodra een mens iets heeft aangepast. */
+  originalPayload: Record<string, unknown> | null;
+  editedBy: string | null;
+  editedAt: string | null;
+  /** Wie het besluit nam. Staat in de database, niet in het kerncontract. */
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+
 const CTX = {
   organizationId: "_aios",
   agentId: "aios-cockpit",
@@ -45,14 +62,17 @@ interface ProposedActionRow {
   decided_at: string | null;
   created_at: string;
   expires_at: string;
+  original_payload: Record<string, unknown> | null;
+  edited_by: string | null;
+  edited_at: string | null;
 }
 
 const SELECT =
   "id,organization_id,type,payload,evidence,precondition,impact,status," +
   "signal_id,review_item_id,idempotency_key,reason,decided_by,decided_at," +
-  "created_at,expires_at";
+  "created_at,expires_at,original_payload,edited_by,edited_at";
 
-function rowToAction(r: ProposedActionRow): ProposedAction {
+function rowToAction(r: ProposedActionRow): CockpitAction {
   return {
     id: r.id,
     organizationId: r.organization_id,
@@ -68,6 +88,11 @@ function rowToAction(r: ProposedActionRow): ProposedAction {
     reason: r.reason,
     createdAt: r.created_at,
     expiresAt: r.expires_at,
+    originalPayload: r.original_payload,
+    editedBy: r.edited_by,
+    editedAt: r.edited_at,
+    decidedBy: r.decided_by,
+    decidedAt: r.decided_at,
   };
 }
 
@@ -75,7 +100,7 @@ function rowToAction(r: ProposedActionRow): ProposedAction {
 export async function getProposedAction(
   client: CockpitDbClient,
   id: string,
-): Promise<ProposedAction | null> {
+): Promise<CockpitAction | null> {
   const url = client.tableUrl("aios_proposed_actions");
   url.searchParams.set("id", `eq.${id}`);
   url.searchParams.set("select", SELECT);
@@ -97,7 +122,7 @@ export async function getProposedAction(
 export async function listActionsForRun(
   client: CockpitDbClient,
   signalId: string,
-): Promise<ProposedAction[]> {
+): Promise<CockpitAction[]> {
   const url = client.tableUrl("aios_proposed_actions");
   url.searchParams.set("signal_id", `eq.${signalId}`);
   url.searchParams.set("select", SELECT);
@@ -121,7 +146,7 @@ export async function listActionsForRun(
 export async function listActionsByReviewItem(
   client: CockpitDbClient,
   reviewItemIds: readonly string[],
-): Promise<Map<string, ProposedAction[]>> {
+): Promise<Map<string, CockpitAction[]>> {
   const uniek = [...new Set(reviewItemIds.filter(Boolean))];
   if (uniek.length === 0) return new Map();
 
@@ -133,7 +158,7 @@ export async function listActionsByReviewItem(
     method: "GET",
   });
 
-  const uit = new Map<string, ProposedAction[]>();
+  const uit = new Map<string, CockpitAction[]>();
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!row.review_item_id) continue;
     const lijst = uit.get(row.review_item_id) ?? [];
@@ -156,6 +181,8 @@ export interface ActionViewModel {
   expired: boolean;
   expiresAt: string;
   reason: string | null;
+  /** Wie het voorstel heeft bijgesteld, als dat is gebeurd. */
+  editedBy: string | null;
   /** Welke rol dit mag goedkeuren, inclusief de bedragsgrens. */
   approverRole: "reviewer" | "admin";
   /** Per payload-veld: label, waarde en waar het vandaan komt. */
@@ -170,6 +197,16 @@ export interface ActionFieldViewModel {
   /** Kop uit de registratie; valt terug op de ruwe naam. */
   label: string;
   value: string;
+  /** Mag een medewerker dit corrigeren? Uit de registratie. */
+  editable: boolean;
+  /** Is dit een getal? Bepaalt het invoerveld en de omzetting. */
+  numeriek: boolean;
+  /**
+   * Wat de agent hier oorspronkelijk neerzette, als een mens het heeft
+   * aangepast. Null betekent onveranderd — en dan is de dekking hieronder nog
+   * die van de agent.
+   */
+  origineel: string | null;
   /**
    * De tool-call die deze waarde dekt. Null betekent ongedekt — dat hoort niet
    * te kunnen, want zo'n voorstel komt niet door `buildProposedActions`. Staat
@@ -211,7 +248,7 @@ function bladeren(
  * server-render en een test hetzelfde antwoord geven.
  */
 export function toActionViewModel(
-  action: ProposedAction,
+  action: CockpitAction,
   now: Date,
 ): ActionViewModel {
   const def = getActionType(action.type);
@@ -227,17 +264,31 @@ export function toActionViewModel(
     expired: new Date(action.expiresAt).getTime() <= now.getTime(),
     expiresAt: action.expiresAt,
     reason: action.reason ?? null,
+    editedBy: action.editedBy ?? null,
     // Uit de registratie én de payload: een creditnota boven de drempel vraagt
     // om een beheerder, en dat moet in het scherm staan vóórdat iemand klikt.
     approverRole: def
       ? requiredApproverRole(def, action.payload)
       : "admin",
-    fields: bladeren(action.payload).map(({ name, value }) => ({
-      name,
-      label: labels.get(name) ?? name,
-      value: toonWaarde(value),
-      toolCallId: dekking.get(name) ?? null,
-    })),
+    fields: bladeren(action.payload).map(({ name, value }) => {
+      const veld = (def?.payloadFields ?? []).find((v) => v.name === name);
+      // Alleen tonen als het écht anders is. Een origineel dat gelijk is aan de
+      // huidige waarde zou "aangepast" suggereren waar niets is gebeurd.
+      const oud = action.originalPayload
+        ? bladeren(action.originalPayload).find((b) => b.name === name)?.value
+        : undefined;
+      const veranderd =
+        oud !== undefined && JSON.stringify(oud) !== JSON.stringify(value);
+      return {
+        name,
+        label: veld?.label ?? name,
+        value: toonWaarde(value),
+        editable: veld?.editable === true,
+        numeriek: typeof value === "number",
+        origineel: veranderd ? toonWaarde(oud) : null,
+        toolCallId: dekking.get(name) ?? null,
+      };
+    }),
     precondition: Object.entries(action.precondition).map(([field, value]) => ({
       field,
       value: toonWaarde(value),
