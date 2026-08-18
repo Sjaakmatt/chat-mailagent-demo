@@ -114,3 +114,24 @@ export async function updateTicketStatus(
   });
   return { ok: true };
 }
+
+
+/**
+ * Het ticket dat bij dit concept hoort, als het er is.
+ *
+ * Voor de verwijzing op het werkitem. Het werkitem gaat over het antwoord; het
+ * uitzoekwerk en de schrijfoperaties leven in het ticket. Een link ertussen is
+ * wat die twee schermen verbindt zonder ze door elkaar te halen.
+ */
+export async function getTicketForReviewItem(
+  client: CockpitDbClient,
+  reviewItemId: string,
+): Promise<Ticket | undefined> {
+  const url = client.tableUrl("aios_tickets");
+  url.searchParams.set("review_item_id", `eq.${reviewItemId}`);
+  url.searchParams.set("order", "created_at.desc");
+  url.searchParams.set("limit", "1");
+  const rows = await client.request<TicketRow[]>(CTX, url, { method: "GET" });
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  return row ? rowToTicket(row) : undefined;
+}

@@ -23,12 +23,8 @@ import { signAttachmentUrl } from "@/lib/storage";
 import { ReviewForm } from "@/components/mail-detail/ReviewForm";
 import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
 import { DecisionPanel } from "@/components/mail-detail/DecisionPanel";
-import { ActionReview } from "@/components/actions/ActionReview";
-import {
-  listActionsForRun,
-  toActionViewModel,
-  type ActionViewModel,
-} from "@/lib/actions";
+import { getTicketForReviewItem } from "@/lib/tickets";
+import { listActionsForRun } from "@/lib/actions";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { assistantEnabled } from "@/lib/assistant/run";
 import { CompoundBreakdown } from "@/components/mail-detail/CompoundBreakdown";
@@ -168,24 +164,27 @@ export default async function ReviewDetailPage({
   // Klaargezette schrijfoperaties uit dezelfde run. Op `signal_id` en niet op
   // dit ReviewItem: een actie kan bestaan zonder concept-antwoord, en zoeken op
   // het item zou juist die gevallen missen.
-  let actions: ActionViewModel[] = [];
+  let actions: Awaited<ReturnType<typeof listActionsForRun>> = [];
+  let ticket: Awaited<ReturnType<typeof getTicketForReviewItem>>;
   try {
     if (env) {
       const client = makeClient(env);
-      const nu = new Date();
-      const [e, log, acties] = await Promise.all([
+      const [e, log, acties, t] = await Promise.all([
         listReviewEdits(client, row.id),
         getDecisionLog(client, row.id),
         row.signal_id ? listActionsForRun(client, row.signal_id) : Promise.resolve([]),
+        getTicketForReviewItem(client, row.id),
       ]);
       edits = e;
       decisionLog = log;
-      actions = acties.map((a) => toActionViewModel(a, nu));
+      actions = acties;
+      ticket = t;
     }
   } catch {
     edits = [];
     decisionLog = null;
     actions = [];
+    ticket = undefined;
   }
 
   return (
@@ -274,9 +273,31 @@ export default async function ReviewDetailPage({
               {/* Boven de beslissing: wat er nog moet gebeuren gaat vóór wat er
                   al is gebeurd. Een openstaand voorstel is werk, het beslislog
                   is verantwoording. */}
-              {actions.length > 0 && (
-                <Panel title="Voorgestelde acties">
-                  <ActionReview actions={actions} />
+              {/* Het ticket, niet de acties zelf. Dit scherm gaat over het
+                  concept-antwoord; het uitzoekwerk en de schrijfoperaties horen
+                  in de ticketbak, en die twee door elkaar zetten was precies de
+                  verwarring die we wilden weghalen. */}
+              {ticket && (
+                <Panel title="Uitzoekwerk">
+                  <Link
+                    href="/tickets"
+                    className="block rounded-lg border border-border px-3 py-2.5 hover:bg-brand-50/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs font-medium text-brand-700">
+                        {ticket.number}
+                      </code>
+                      <span className="text-xs text-ink-subtle">{ticket.status}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-ink">{ticket.summary}</p>
+                    {actions.length > 0 && (
+                      <p className="mt-1 text-xs text-ink-muted">
+                        {actions.length === 1
+                          ? "1 voorgestelde actie wacht daar op controle."
+                          : `${actions.length} voorgestelde acties wachten daar op controle.`}
+                      </p>
+                    )}
+                  </Link>
                 </Panel>
               )}
 
