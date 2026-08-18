@@ -64,8 +64,28 @@ async function wachtOpUitkomst(
  * juist aan dat veld. Klopt er meer niet, dan wijs je af met een reden — dat is
  * meteen het beste leersignaal dat we hebben.
  */
-export function ActionReview({ actions }: { actions: ActionViewModel[] }) {
-  const [open, setOpen] = useState<string | null>(null);
+export function ActionReview({
+  actions,
+  autoOpen = false,
+}: {
+  actions: ActionViewModel[];
+  /**
+   * Meteen openklappen bij binnenkomst. Aan als de bezoeker hierheen is
+   * gestuurd vanaf het werkitem: dan komt hij voor dit voorstel, en één klik
+   * minder scheelt.
+   */
+  autoOpen?: boolean;
+}) {
+  // Lui geïnitialiseerd, dus dit draait één keer bij het monteren. Sluit de
+  // medewerker de modal, dan blijft hij dicht — ook als het scherm daarna
+  // ververst na een goedkeuring.
+  //
+  // Alleen een voorstel dat nog iets van iemand verwacht. Een reeks
+  // uitgevoerde acties openklappen is geen service maar een venster dat je
+  // moet wegklikken.
+  const [open, setOpen] = useState<string | null>(() =>
+    autoOpen ? (actions.find((a) => a.open && !a.expired)?.id ?? null) : null,
+  );
   if (actions.length === 0) return null;
 
   const actief = actions.find((a) => a.id === open) ?? null;
