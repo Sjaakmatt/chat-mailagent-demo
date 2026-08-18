@@ -1,5 +1,6 @@
 import {
   orchestrate,
+  routingFor,
   type DecisionLog,
   type ProgressPhase,
   type Signal,
@@ -9,6 +10,7 @@ import type { Env } from './env.js';
 import { createPlatformStore } from './store.js';
 import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from './steps.js';
 import { finishChatTurn } from './chat/turn.js';
+import { createTicket } from './chat/tickets.js';
 
 /**
  * Eén beurt: van signaal tot ReviewItem, en bij chat tot een antwoord op de
@@ -169,6 +171,48 @@ export async function runSignalTurn(
         `identificatie: ${result.identification ?? 'onbekend'}`,
       ].join(' | '),
     });
+  }
+
+  // Bij mail hoort het uitzoekwerk ook in de ticketbak.
+  //
+  // Chat deed dit al (`finishChatTurn` bij uitkomst `taak`); mail niet, en dat
+  // was een gat. De werkbak gaat over het goedkeuren van een concept-antwoord;
+  // het uitzoeken — en de schrijfoperaties die daarbij horen — leeft in het
+  // ticket. Zonder ticket had een klaargezette creditnota geen plek om aan te
+  // hangen en stond hij op het werkitem, naast een concept waar hij niets mee
+  // te maken heeft.
+  //
+  // Fail-soft: er staat nog niets in enig bronsysteem, dus een mislukt ticket
+  // betekent handwerk. Dat is vervelend; de hele beurt laten klappen erger.
+  const uitkomst = result.outcome?.outcome;
+  if (signal.domain !== 'chat' && uitkomst && routingFor(uitkomst).createsTicket) {
+    try {
+      const origineel = (signal.payload ?? {}) as { from?: unknown };
+      const ticket = await createTicket(env, {
+        organizationId: signal.organizationId,
+        conversationId: null,
+        reviewItemId: result.reviewItem.id,
+        category: result.classification.category,
+        summary: result.reviewItem.summary,
+        identity: {
+          contactEmail: typeof origineel.from === 'string' ? origineel.from : null,
+          orderReference:
+            typeof result.classification.extracted.orderNumber === 'string'
+              ? result.classification.extracted.orderNumber
+              : null,
+        },
+        handoverReason:
+          ((result.reviewItem.proposed as { policy?: { handoverReason?: string } }).policy
+            ?.handoverReason) ?? null,
+      });
+      log.steps.push({
+        step: 'ticket',
+        outcome: ticket ? `ticket ${ticket.number}` : 'te weinig identificatie voor een ticket',
+      });
+    } catch (err) {
+      console.error('[ticket] aanmaken mislukt:', err);
+      log.steps.push({ step: 'ticket', outcome: 'aanmaken mislukt' });
+    }
   }
 
   let reply: string | undefined;

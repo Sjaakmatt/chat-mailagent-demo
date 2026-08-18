@@ -54,10 +54,15 @@ async function wachtOpUitkomst(
  * € 89,95 goedkeuren zonder te kunnen zien waar de 89,95 vandaan komt, is
  * precies het aftekenen dat de goedkeuringslaag zinloos maakt.
  *
- * Wat hier bewust **niet** kan: de payload aanpassen. Een voorstel is een
- * voorstel van de agent, met onderbouwing per veld; een veld met de hand
- * overschrijven maakt die onderbouwing een leugen. Klopt het niet, dan wijs je
- * af met een reden — dat is meteen het beste leersignaal dat we hebben.
+ * Bijstellen mag, maar niet alles. Een grootheid of een tekst corrigeren is
+ * precies waar een menselijke controle voor is — wie op de foto ziet dat één van
+ * twee artikelen kapot is, hoort het bedrag te kunnen halveren. Wat de agent
+ * voorstelde blijft daarbij staan, zichtbaar naast de gecorrigeerde waarde.
+ *
+ * Wat níét mag is de actie op een ander record richten: een factuurnummer of
+ * SKU wijzigen is geen correctie maar een andere actie, en de preconditie hangt
+ * juist aan dat veld. Klopt er meer niet, dan wijs je af met een reden — dat is
+ * meteen het beste leersignaal dat we hebben.
  */
 export function ActionReview({ actions }: { actions: ActionViewModel[] }) {
   const [open, setOpen] = useState<string | null>(null);
