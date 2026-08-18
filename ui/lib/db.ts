@@ -96,6 +96,8 @@ export interface ReviewMetricRow {
   executed_at: string | null;
   decided_by: string | null;
   category: string | null;
+  /** Welke automatisering dit item maakte. Null bij items van vóór 0030. */
+  module: string | null;
 }
 
 /**
@@ -110,7 +112,7 @@ export async function listReviewRows(
   const url = client.tableUrl("aios_review_items");
   url.searchParams.set(
     "select",
-    "id,status,kind,summary,confidence,created_at,decided_at,executed_at,decided_by,category:proposed->classification->>category",
+    "id,status,kind,summary,confidence,created_at,decided_at,executed_at,decided_by,module,category:proposed->classification->>category",
   );
   url.searchParams.set("order", "created_at.desc");
   url.searchParams.set("limit", String(limit));

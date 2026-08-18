@@ -308,7 +308,14 @@ function werkvoorraadSource(rows: ReviewMetricRow[]): AssistantSource {
   });
 }
 
-/** De openstaande tickets — waar wordt nu aan gewerkt. */
+/**
+ * De openstaande tickets — waar wordt nu aan gewerkt.
+ *
+ * `aios_tickets` is vandaag een tabel van deze module: tickets ontstaan uit een
+ * klantenservice-run en er is geen tweede automatisering die erin schrijft.
+ * Komt die er wel, dan hoort hier een modulekolom bij en een filter erop — net
+ * als bij de review-items hierboven.
+ */
 function openTicketsSource(tickets: Ticket[]): AssistantSource | null {
   const open = tickets
     .filter((t) => t.status !== "DONE" && t.status !== "CANCELLED")
@@ -375,6 +382,19 @@ function categorieSource(): AssistantSource {
 }
 
 /**
+ * Hoort deze rij bij klantenservice?
+ *
+ * Eerst op `module`, want dat is wat de schrijver bedoelde; terugval op `kind`
+ * voor items van vóór migratie 0030. Dit is dezelfde afweging als
+ * `moduleForRow` in de registry, maar dan hier — de módule beslist wat van haar
+ * is, want anders zou de schil per module moeten weten wat bij wie hoort.
+ */
+function vanDezeModule(r: ReviewMetricRow): boolean {
+  if (r.module) return r.module === KLANTENSERVICE_MODULE.id;
+  return (KLANTENSERVICE_MODULE.kinds as readonly string[]).includes(r.kind);
+}
+
+/**
  * De bronnen voor een gesprek zonder geopend voorstel.
  *
  * Dit is de assistent in de werkbak zelf: beleid, werkvoorraad, open tickets en
@@ -395,15 +415,31 @@ export async function collectKlantenserviceGeneralSources(
     listReviewRows(client, 200).catch((): ReviewMetricRow[] => []),
   ]);
 
+  // Alles wat hier binnenkomt gaat door de modulezeef. Bij een voorstel is de
+  // grens vanzelf goed — dat item hoort bij één module — maar een generieke
+  // vraag leest lijsten, en een lijst kent de grens niet. Zonder deze filters
+  // ziet een klantenservicemedewerker straks de sales-werkvoorraad in zijn
+  // antwoord staan, zonder dat er ergens een rechtencheck is overgeslagen: de
+  // bron was gewoon te breed.
+  const mijn = rows.filter(vanDezeModule);
+  const eigenCategorieen = new Set(
+    KLANTENSERVICE_MODULE.categories.map((c) => c.slug),
+  );
+  const mijnRegels = rules.filter(
+    (r) => r.applies_to.length === 0 || r.applies_to.some((c) => eigenCategorieen.has(c)),
+  );
+
   const open = openTicketsSource(tickets);
-  const recent = recentBeslistSource(rows);
+  const recent = recentBeslistSource(mijn);
 
   return [
-    werkvoorraadSource(rows),
+    werkvoorraadSource(mijn),
     ...(open ? [open] : []),
-    // Alle regels: zonder categorie om op te matchen is er niets te filteren,
-    // en "welk beleid geldt hier" is juist de vraag die generiek wordt gesteld.
-    ...beleidSources(rules, null),
+    // Alle regels van déze module: zonder voorstel is er geen categorie om op
+    // te matchen, en "welk beleid geldt bij X" is juist de vraag die generiek
+    // wordt gesteld. Regels zonder `applies_to` gelden overal en horen er dus
+    // bij; regels die alleen op andermans categorieën slaan niet.
+    ...beleidSources(mijnRegels, null),
     categorieSource(),
     ...(recent ? [recent] : []),
   ];

@@ -581,10 +581,15 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
   },
   {
     slug: 'adres_wijzigen',
-    label: 'Verzendadres wijzigen',
+    // Bewust niet 'Verzendadres wijzigen'. Bij een klant die dozen verstuurt is
+    // dit het afleveradres; bij een dienstverlener het adres op het contract.
+    // Dezelfde actie, dezelfde fraudewaarde, dus één type — een label dat maar
+    // op de helft van de klanten slaat, is een label dat je per klant moet
+    // patchen.
+    label: 'Adres wijzigen',
     target: { mcp: 'erp', tool: 'update_order_address' },
     preconditionKind: 'orderstatus',
-    // De grootste fraudewaarde van de hele set: een pakket omleiden is schade,
+    // De grootste fraudewaarde van de hele set: een adres omleggen is schade,
     // geen ongemak. Daarom mail-only, en bij mail nog steeds gematcht.
     channels: ['mail'],
     requiredIdentification: 'gematcht',
