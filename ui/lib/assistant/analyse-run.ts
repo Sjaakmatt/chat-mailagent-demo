@@ -53,7 +53,12 @@ export const AGGREGATION_CATALOG: readonly AggregationCatalogEntry[] = [
 
 export type AnalyseOutcome =
   | { ok: true; source: AssistantSource; aggregatie: AggregationSummary; tool: string }
-  | { ok: false; reden: string };
+  | {
+      ok: false;
+      reden: string;
+      /** Er werd geen cijfer gevraagd; de vraag hoort in het dossierpad. */
+      geenAggregatievraag?: boolean;
+    };
 
 interface AggregationEnvelope {
   data?: AggregationSummary;

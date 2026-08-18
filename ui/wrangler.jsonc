@@ -48,7 +48,7 @@
     // "*" alleen op onze eigen tenants en demo's.
     "LICENSED_MODULES": "klantenservice",
     // Model voor de assistent. Uit config, nooit hardcoded (harde regel 7).
-    "MODEL_ASSISTANT": "claude-sonnet-4-6"
+    "MODEL_ASSISTANT": "claude-sonnet-5"
     // "ASSISTANT_ANALYSE": "true"  ← laag 2 (analyse). Gaat alleen echt aan als
     // de drie voorwaarden zijn gehaald; de Toegang-pagina toont per voorwaarde
     // waarom hij aan of uit staat. Vereist ook MCP_BASE_URL.

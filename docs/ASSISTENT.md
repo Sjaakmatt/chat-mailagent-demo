@@ -83,6 +83,26 @@ medewerker. Hier is hij zo mogelijk belangrijker: een klant leest een concept da
 een mens nog nakijkt, maar een medewerker die de assistent iets vraagt, handelt
 ernaar.
 
+### Laag 2 is een aanvulling, geen poort
+
+Staat de analyse-vlag aan, dan kijkt de assistent eerst of er een aggregatie bij
+de vraag past. Past er geen, dan gaat de vraag gewoon door het dossierpad. Dat
+klinkt vanzelfsprekend, maar de code deed een tijd het omgekeerde: elke uitkomst
+die geen aggregatie was, werd een weigering van de héle vraag. Met de vlag aan
+en een rol die commercieel of financieel mag zien, kreeg je op "welk beleid
+geldt hier" te horen dat de aggregatie niet bestond — op elke vraag die niet
+toevallig een telling was.
+
+Het onderscheid dat telt zit in `resolveAnalysePlan`:
+
+| Uitkomst | Wat er gebeurt |
+| --- | --- |
+| Er werd niets geteld (`geenAggregatievraag`) | Doorlopen naar het dossierpad |
+| Wél een cijfervraag, maar de aggregatie lukt niet | Weigeren mét de reden |
+
+Dat tweede blijft een weigering, want anders vroeg de gebruiker om een cijfer en
+krijgt hij een verhaal — en dan vult hij het getal zelf in.
+
 Twee controles in `finalizeAssistantAnswer`, met een verschillende betekenis:
 
 | Controle | Wanneer hij afgaat |
@@ -115,9 +135,12 @@ en kan hij zelf kijken.
 
 Drie poorten, in oplopende kosten, voordat er een model aan te pas komt:
 
-1. **De vlag** — `ASSISTANT_DOSSIER=true` én een `ANTHROPIC_API_KEY`. Zonder
-   allebei blijft hij uit; een halve configuratie hoort een uitgeschakelde
-   assistent op te leveren en geen fout bij de eerste vraag.
+1. **De vlag** — `ASSISTANT_DOSSIER=true`, een `ANTHROPIC_API_KEY` én een
+   `MODEL_ASSISTANT`. Zonder alle drie blijft hij uit; een halve configuratie
+   hoort een uitgeschakelde assistent op te leveren en geen fout bij de eerste
+   vraag. Het model-id staat er bewust bij en heeft géén terugval in code: een
+   hardcoded id overtreedt harde regel 7 en verbergt bovendien een ontbrekende
+   var tot de eerste vraag.
 2. **De rol** — minimaal `viewer`. Wie mag meekijken, mag vragen stellen over
    wat hij ziet.
 3. **De modulegrant** — dezelfde grens als bij goedkeuren: over een proces waar

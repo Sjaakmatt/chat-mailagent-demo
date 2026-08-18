@@ -173,3 +173,51 @@ describe('aggregationSource', () => {
     expect(source.text).toContain('niets uitgesloten');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Laag 2 is een aanvulling, geen poort
+// ---------------------------------------------------------------------------
+
+describe('geen aggregatievraag versus mislukte aggregatie', () => {
+  const catalog = [
+    {
+      tool: 'aggregate_complaint_rate',
+      mcp: 'factumai-mcp-tickets',
+      omschrijving: 'Aandeel klachten',
+    },
+  ];
+
+  it('markeert "hier valt niets te tellen" als geen aggregatievraag', () => {
+    // Dit is het geval dat de assistent onbruikbaar maakte: met laag 2 aan
+    // kreeg élke gewone vraag de melding dat de aggregatie niet bestond.
+    const plan = resolveAnalysePlan(
+      { tool: null, args: {}, cannotAnswer: 'Hier wordt niet geteld.' },
+      catalog,
+    );
+    expect(plan.ok).toBe(false);
+    expect(plan.ok === false && plan.geenAggregatievraag).toBe(true);
+  });
+
+  it('markeert een onleesbaar plan ook zo', () => {
+    const plan = resolveAnalysePlan(null, catalog);
+    expect(plan.ok === false && plan.geenAggregatievraag).toBe(true);
+  });
+
+  it('markeert een verzonnen tool NIET zo — daar werd wél om een cijfer gevraagd', () => {
+    const plan = resolveAnalysePlan(
+      { tool: 'aggregate_omzet', args: { van: '2026-01-01', tot: '2026-01-31' }, cannotAnswer: null },
+      catalog,
+    );
+    expect(plan.ok).toBe(false);
+    expect(plan.ok === false && plan.geenAggregatievraag).toBeFalsy();
+  });
+
+  it('markeert een ontbrekende periode NIET zo', () => {
+    const plan = resolveAnalysePlan(
+      { tool: 'aggregate_complaint_rate', args: {}, cannotAnswer: null },
+      catalog,
+    );
+    expect(plan.ok).toBe(false);
+    expect(plan.ok === false && plan.geenAggregatievraag).toBeFalsy();
+  });
+});
