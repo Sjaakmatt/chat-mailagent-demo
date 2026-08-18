@@ -63,7 +63,25 @@ export interface ParsedAnalysePlan {
 
 export type AnalysePlan =
   | { ok: true; tool: string; mcp: string; args: Record<string, unknown> }
-  | { ok: false; reden: string };
+  | {
+      ok: false;
+      reden: string;
+      /**
+       * Dit was helemaal geen aggregatievraag.
+       *
+       * Het verschil met een gewone weigering is het verschil tussen "ik kan
+       * dit cijfer niet geven" en "hier werd geen cijfer gevraagd". Dat eerste
+       * moet de gebruiker horen — anders vult hij de leegte met een getal dat
+       * hij ergens anders vandaan haalt. Dat tweede is geen uitkomst maar een
+       * routeringsbesluit: de vraag hoort in het dossierpad thuis.
+       *
+       * Zonder dit onderscheid weigert een assistent met laag 2 aan élke vraag
+       * die niet toevallig een aggregatie is, en dat is precies wat er gebeurde:
+       * "welk beleid geldt hier" kreeg als antwoord dat de aggregatie niet
+       * bestond.
+       */
+      geenAggregatievraag?: boolean;
+    };
 
 const PLAN_SYSTEM = `Je kiest welke aggregatie een vraag van een medewerker beantwoordt.
 
@@ -162,16 +180,25 @@ export function resolveAnalysePlan(
   parsed: ParsedAnalysePlan | null,
   catalog: readonly AggregationCatalogEntry[],
 ): AnalysePlan {
+  // Deze drie zijn geen mislukking maar een routering: er werd niets geteld.
+  // Onleesbaar antwoord valt er ook onder — we weten dan niet dát het een
+  // aggregatievraag was, en doorlaten naar het dossier is veilig omdat dáár
+  // dezelfde grounding-controle staat.
   if (!parsed) {
-    return { ok: false, reden: 'Ik kon de vraag niet omzetten naar een aggregatie.' };
+    return {
+      ok: false,
+      reden: 'Ik kon de vraag niet omzetten naar een aggregatie.',
+      geenAggregatievraag: true,
+    };
   }
   if (parsed.cannotAnswer) {
-    return { ok: false, reden: parsed.cannotAnswer };
+    return { ok: false, reden: parsed.cannotAnswer, geenAggregatievraag: true };
   }
   if (!parsed.tool) {
     return {
       ok: false,
       reden: 'Ik heb geen aggregatie kunnen kiezen die deze vraag beantwoordt.',
+      geenAggregatievraag: true,
     };
   }
 

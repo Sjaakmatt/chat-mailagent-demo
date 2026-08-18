@@ -28,16 +28,22 @@ export interface DemoScenario {
   /**
    * Bijlagen bij deze mail.
    *
-   * Bestaat om één reden: `creditnota_voorstellen` eist beeldmateriaal, en
-   * zonder bijlage is die poort in een demo niet te tonen — dan lijkt het of de
-   * agent nooit een creditnota voorstelt. Met dit veld staan beide kanten in de
-   * demo: dezelfde klacht mét bewijs levert een voorstel op, zonder bewijs
-   * alleen een werkticket.
+   * Staat hier en niet alleen bij een klant, want elke demo heeft 'm nodig:
+   * `creditnota_voorstellen` eist beeldmateriaal, en zonder een mail die een
+   * bijlage kán dragen is die poort niet te tonen. Dan lijkt het of de agent
+   * nooit een creditnota voorstelt, en zie je alleen de helft waar niets
+   * gebeurt.
    *
    * Er wordt geen bestand geüpload. De poort kijkt naar naam en content-type,
    * en dat is precies wat een echte mail ook meelevert.
    */
-  attachments?: readonly { name: string; contentType: string }[];
+  attachments?: readonly DemoAttachment[];
+}
+
+/** Naam en type — meer heeft de fotopoort niet nodig. */
+export interface DemoAttachment {
+  name: string;
+  contentType: string;
 }
 
 export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
@@ -279,8 +285,8 @@ export function demoSignalPayload(s: DemoScenario): Record<string, unknown> {
     bodyText: s.body,
     receivedDateTime: new Date().toISOString(),
     // Alleen als er bijlagen zijn: een leeg array zou "we hebben gekeken en er
-    // zit niets bij" betekenen, en dat is toevallig hetzelfde antwoord maar
-    // niet dezelfde uitspraak.
+    // zit niets bij" betekenen. Dat is hier toevallig hetzelfde antwoord, maar
+    // niet dezelfde uitspraak — en `hasPhoto` mag het verschil kunnen zien.
     ...(s.attachments ? { attachments: s.attachments.map((a) => ({ ...a })) } : {}),
     // Markeert de herkomst zodat de reset-actie precies deze items opruimt.
     demo: true,

@@ -36,10 +36,16 @@ import { planAndRunAggregation } from "./analyse-run";
 
 /** Is de assistent aan voor deze cockpit? */
 export function assistantEnabled(env: CockpitEnv): boolean {
-  // Alleen de letterlijke "true", en alleen mét sleutel: een halve configuratie
-  // hoort een uitgeschakelde assistent op te leveren en geen 500 bij de eerste
-  // vraag.
-  return env.ASSISTANT_DOSSIER === "true" && Boolean(env.ANTHROPIC_API_KEY);
+  // Alleen de letterlijke "true", en alleen mét sleutel én model-id: een halve
+  // configuratie hoort een uitgeschakelde assistent op te leveren en geen 500
+  // bij de eerste vraag. Het model-id staat erbij omdat het alternatief een
+  // hardcoded terugval was, en die overtreedt harde regel 7 én verbergt een
+  // ontbrekende var tot de eerste vraag.
+  return (
+    env.ASSISTANT_DOSSIER === "true" &&
+    Boolean(env.ANTHROPIC_API_KEY) &&
+    Boolean(env.MODEL_ASSISTANT?.trim())
+  );
 }
 
 export interface AssistantRunResult {
@@ -97,17 +103,33 @@ export async function askAssistant(
       ? await mod.collectGeneralSources(client)
       : [];
 
+  // Het model-id komt uit config en staat hier niet als terugval. Een terugval
+  // is precies hoe een verkeerd id maandenlang blijft staan: hij werkt in de
+  // omgeving waar de var wél gezet is, en faalt stil in de omgeving waar dat
+  // niet zo is. `assistantEnabled` eist 'm, dus hier is hij er.
+  const model = env.MODEL_ASSISTANT ?? "";
   const llm = createAnthropicLlmClient({
     apiKey: env.ANTHROPIC_API_KEY ?? "",
-    models: {
-      classify: env.MODEL_ASSISTANT ?? "claude-sonnet-4-6",
-      plan: env.MODEL_ASSISTANT ?? "claude-sonnet-4-6",
-    },
+    models: { classify: model, plan: model },
   });
 
   // Laag 2: het model kiest een aggregatie, de MCP rekent, en het resultaat
-  // wordt een gewone bron. Mislukt dat, dan gaat de vraag alsnog door het
-  // dossier-pad — een analysevraag die niet lukt, is nog steeds een vraag.
+  // wordt een gewone bron.
+  //
+  // Laag 2 is een **aanvulling**, geen poort. Dat klonk hier eerder ook zo,
+  // maar de code deed het omgekeerde: elke uitkomst die geen aggregatie was,
+  // werd een weigering van de hele vraag. Met de vlag aan en een rol die
+  // commercieel of financieel mag zien, kwam daardoor op "welk beleid geldt
+  // hier" het antwoord dat de aggregatie niet bestond — op élke vraag die niet
+  // toevallig een telling was.
+  //
+  // Het onderscheid dat wél telt:
+  //
+  //   geen aggregatievraag  → doorlopen naar het dossierpad, niets aan de hand
+  //   wél, maar hij lukt niet → weigeren mét reden
+  //
+  // Dat tweede blijft een weigering omdat de gebruiker anders om een cijfer
+  // vroeg en een verhaal terugkrijgt — en dan vult hij het getal zelf in.
   let aggregatie: AssistantRunResult["aggregatie"];
   if (options.analyse) {
     const outcome = await planAndRunAggregation(
@@ -120,10 +142,7 @@ export async function askAssistant(
     if (outcome.ok) {
       sources.push(outcome.source);
       aggregatie = { tool: outcome.tool, resultaat: outcome.aggregatie };
-    } else {
-      // De weigering is zelf een bruikbaar antwoord: "die aggregatie bestaat
-      // hier niet" is precies wat de briefing wil horen in plaats van een
-      // benadering.
+    } else if (!outcome.geenAggregatievraag) {
       return {
         sources,
         aggregatie: undefined,
