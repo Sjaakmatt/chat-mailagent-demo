@@ -5,6 +5,8 @@ import {
   canTransitionAction,
   checkFieldBacking,
   evaluateApproval,
+  filterPrecondition,
+  PRECONDITION_FIELDS,
   getActionType,
   identificationLevel,
   identificationSuffices,
@@ -602,5 +604,49 @@ describe('dekking per veldherkomst', () => {
     });
     expect(rejected).toEqual([]);
     expect(actions).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('preconditie beperken tot wat toetsbaar is', () => {
+  it('gooit een sleutel weg die geen enkele lookup teruggeeft', () => {
+    // Dit ging fout op de demo: het model bedacht `phase`. Bij goedkeuring
+    // vergelijkt preconditionDrift dat met undefined, ziet een verschil, en zet
+    // het voorstel op verlopen — elke keer, zonder dat er iets veranderd is.
+    expect(
+      filterPrecondition('orderstatus', { status: 'pending', phase: 'Wacht op aftrap' }),
+    ).toEqual({ status: 'pending' });
+  });
+
+  it('laat een lege preconditie leeg bij soort geen', () => {
+    expect(filterPrecondition('geen', { status: 'x' })).toEqual({});
+  });
+
+  it('filtert het voorstel al bij het bouwen, niet pas bij goedkeuren', () => {
+    const { actions } = buildProposedActions({
+      planned: [
+        {
+          type: 'adres_wijzigen',
+          payload: { orderNumber: 'DEMO-1003' },
+          evidence: [{ field: 'orderNumber', toolCallId: 'db.order' }],
+          precondition: { status: 'pending', phase: 'verzonnen' },
+          impact: 'Adres wijzigen.',
+        },
+      ],
+      channel: 'mail',
+      identification: 'gematcht',
+      organizationId: 'org-demo',
+      runId: 'sig_1',
+      now: nu,
+    });
+    expect(actions[0].precondition).toEqual({ status: 'pending' });
+  });
+
+  it('houdt de lijst gelijk met wat de lookups teruggeven', () => {
+    // Loopt deze lijst achter, dan verdwijnt een controle stilzwijgend; loopt
+    // hij voor, dan ketst elk voorstel af. Beide zijn stil, dus vastleggen.
+    expect(PRECONDITION_FIELDS.orderstatus).toEqual(['orderNumber', 'status', 'trackingCode']);
+    expect(PRECONDITION_FIELDS.factuurstatus).toEqual(['invoiceNumber', 'status', 'totalValue']);
   });
 });

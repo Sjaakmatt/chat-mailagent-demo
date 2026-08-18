@@ -333,6 +333,47 @@ export const PRECONDITION_KINDS = ['orderstatus', 'factuurstatus', 'geen'] as co
 export type PreconditionKind = (typeof PRECONDITION_KINDS)[number];
 
 /**
+ * Welke velden een preconditie van dit soort mag bevatten.
+ *
+ * Dit is geen documentatie maar een filter, en het bestaat om een concrete
+ * fout. Het model mag `precondition` zelf vullen, en het vulde er een veld in
+ * dat geen enkele lookup teruggeeft (`phase`). Bij goedkeuring vergelijkt
+ * `preconditionDrift` dat veld met `undefined`, ziet een verschil, en zet het
+ * voorstel op `verlopen` — elke keer, zonder dat er iets veranderd is.
+ *
+ * Een preconditie die niet toetsbaar is, is erger dan geen preconditie: hij
+ * ziet eruit als een controle en werkt als een blokkade. Wat de lookup niet kan
+ * teruggeven, hoort er dus niet in te staan.
+ *
+ * Deze lijst moet gelijk lopen met wat de `PreconditionReader` van dit soort
+ * teruggeeft. Loopt hij achter, dan verdwijnt een controle stilzwijgend; loopt
+ * hij voor, dan ketst elk voorstel af.
+ */
+export const PRECONDITION_FIELDS: Readonly<Record<PreconditionKind, readonly string[]>> =
+  Object.freeze({
+    orderstatus: ['orderNumber', 'status', 'trackingCode'],
+    factuurstatus: ['invoiceNumber', 'status', 'totalValue'],
+    geen: [],
+  });
+
+/**
+ * Houdt alleen de velden over die bij dit soort preconditie toetsbaar zijn.
+ *
+ * Wegfilteren en niet weigeren: een verzonnen veld zegt niets over de rest van
+ * het voorstel, en een verder correcte adreswijziging laten sneuvelen op een
+ * sleutel die het model erbij bedacht, is een strengheid die niemand helpt.
+ */
+export function filterPrecondition(
+  kind: PreconditionKind,
+  precondition: Record<string, unknown>,
+): Record<string, unknown> {
+  const toegestaan = new Set(PRECONDITION_FIELDS[kind]);
+  return Object.fromEntries(
+    Object.entries(precondition).filter(([veld]) => toegestaan.has(veld)),
+  );
+}
+
+/**
  * Eén geregistreerd actietype. De agent kiest hieruit; hij bedenkt geen nieuwe
  * operaties.
  *
@@ -706,7 +747,10 @@ export function buildProposedActions(input: ActionProposalInput): ActionProposal
       type: poort.def.slug,
       payload: voorstel.payload,
       evidence: voorstel.evidence,
-      precondition: voorstel.precondition,
+      // Alleen wat de hervalidatie straks daadwerkelijk kan ophalen. Zie
+      // `filterPrecondition`: een niet-toetsbare sleutel laat het voorstel bij
+      // goedkeuring gegarandeerd verlopen.
+      precondition: filterPrecondition(poort.def.preconditionKind, voorstel.precondition),
       impact,
       status: 'voorgesteld',
       runId: input.runId,

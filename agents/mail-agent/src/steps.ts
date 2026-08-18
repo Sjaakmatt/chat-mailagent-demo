@@ -35,6 +35,7 @@ import {
   channelForDomain,
   identificationLevel,
   proposableActionTypes,
+  PRECONDITION_FIELDS,
   type PlannedAction,
 } from '@factumai/agent-core';
 import type { Env } from './env.js';
@@ -1184,8 +1185,10 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
             'de reden van een klacht). Die staat in geen enkel systeem, dus ' +
             'daar hoeft geen `evidence`-regel bij.\n' +
             '`precondition` is ' +
-            'de systeemstaat waarop je je baseert (bv. {"status": "open"}) — die ' +
-            'wordt bij goedkeuring opnieuw opgehaald en vergeleken. `impact` is ' +
+            'de systeemstaat waarop je je baseert — die wordt bij goedkeuring ' +
+            'opnieuw opgehaald en vergeleken. Gebruik UITSLUITEND de sleutels ' +
+            'die bij het type staan; een sleutel die wij niet kunnen ophalen ' +
+            'laat het voorstel later gegarandeerd verlopen. `impact` is ' +
             'één zin in mensentaal over wat er verandert; die zin is wat de ' +
             'medewerker leest voordat hij ja zegt.\n\n' +
             'BESCHIKBARE TYPES:\n' +
@@ -1193,6 +1196,9 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               .map(
                 (t) =>
                   `- ${t.slug} (${t.label})\n` +
+                  (PRECONDITION_FIELDS[t.preconditionKind].length > 0
+                    ? `    precondition-sleutels: ${PRECONDITION_FIELDS[t.preconditionKind].join(', ')}\n`
+                    : '    precondition: laat leeg ({})\n') +
                   t.payloadFields
                     .map(
                       (v) =>
