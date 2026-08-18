@@ -15,6 +15,37 @@ import type { ActionViewModel } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 
 /**
+ * Wacht tot de Workflow het voorstel heeft afgerond.
+ *
+ * Pollen en geen websocket: dit duurt seconden, gebeurt één keer per
+ * goedkeuring, en een verbinding openhouden voor iets wat zo kort duurt is meer
+ * bewegende delen dan het waard is.
+ *
+ * Loopt de tijd af zonder uitkomst, dan geven we dat eerlijk terug in plaats van
+ * te blijven draaien. De rij is en blijft de waarheid; het scherm ververst
+ * daarna alsnog.
+ */
+async function wachtOpUitkomst(
+  id: string,
+  pogingen = 20,
+): Promise<{ status: string; reason: string | null }> {
+  for (let i = 0; i < pogingen; i++) {
+    await new Promise((r) => setTimeout(r, i < 5 ? 500 : 1500));
+    try {
+      const res = await fetch(`/api/actions/${id}`, { cache: "no-store" });
+      if (!res.ok) continue;
+      const data = (await res.json()) as { status: string; reason: string | null };
+      // `goedgekeurd` is een tussenstand: de Workflow heeft de poort gehaald en
+      // is aan het schrijven. Doorwachten tot er een eindstand staat.
+      if (data.status !== "voorgesteld" && data.status !== "goedgekeurd") return data;
+    } catch {
+      // Netwerkhik: gewoon opnieuw proberen. De uitvoering loopt door.
+    }
+  }
+  return { status: "bezig", reason: null };
+}
+
+/**
  * De controle vóór er iets in een bronsysteem wordt geschreven.
  *
  * Dit scherm bestaat om één vraag beantwoordbaar te maken: *waar zegt deze
@@ -100,6 +131,15 @@ function ActionDialog({
   const [bezig, setBezig] = useState<"approve" | "reject" | null>(null);
   const [fout, setFout] = useState<string | null>(null);
   const [reden, setReden] = useState("");
+  // Correcties die nog niet zijn opgeslagen, per veldnaam.
+  const [correcties, setCorrecties] = useState<Record<string, string>>({});
+  // De uitkomst nadat er is goedgekeurd. Null zolang er niets loopt.
+  const [uitvoering, setUitvoering] = useState<{
+    status: string;
+    reason: string | null;
+  } | null>(null);
+
+  const heeftCorrecties = Object.keys(correcties).length > 0;
 
   // Verlopen telt als niet-beslisbaar, ook als de status nog 'voorgesteld' is.
   // De knop grijs maken is eerlijker dan een klik die achteraf afketst.
@@ -109,6 +149,21 @@ function ActionDialog({
     setBezig(actie);
     setFout(null);
     try {
+      // Correcties eerst wegschrijven. Anders keurt de medewerker het bedrag
+      // goed dat hij ziet, terwijl de Workflow het oude uitvoert.
+      if (actie === "approve" && heeftCorrecties) {
+        const bewaard = await fetch(`/api/actions/${vm.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ edits: correcties }),
+        });
+        const data = (await bewaard.json()) as { error?: string };
+        if (!bewaard.ok) {
+          setFout(data.error ?? "De correctie kon niet worden opgeslagen.");
+          return;
+        }
+      }
+
       const res = await fetch(`/api/actions/${vm.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,9 +174,21 @@ function ActionDialog({
         setFout(data.error ?? "Er ging iets mis.");
         return;
       }
-      // De waarheid staat in de rij, niet in dit venster. Verversen en sluiten.
+
+      if (actie === "reject") {
+        router.refresh();
+        onClose();
+        return;
+      }
+
+      // Goedkeuren is asynchroon: de Workflow hervalideert eerst en schrijft
+      // daarna pas. Meteen sluiten liet de medewerker met "wacht op controle"
+      // achter tot hij zelf verversde. Hier wachten we op de echte uitkomst —
+      // dat is ook precies het moment waarop de hervalidatie zichtbaar wordt.
+      setUitvoering({ status: "bezig", reason: null });
+      const eind = await wachtOpUitkomst(vm.id);
+      setUitvoering(eind);
       router.refresh();
-      onClose();
     } catch (err) {
       setFout(err instanceof Error ? err.message : String(err));
     } finally {
@@ -200,17 +267,44 @@ function ActionDialog({
                     {f.label}
                   </dt>
                   <dd className="text-sm text-ink flex-1 min-w-0 break-words">
-                    {f.value}
-                    {/* De dekking per veld. Ontbreekt hij, dan hoort dat op te
-                        vallen — zo'n voorstel komt normaal niet eens tot hier. */}
-                    <span
-                      className={cn(
-                        "ml-2 text-xs",
-                        f.toolCallId ? "text-ink-subtle" : "text-alert-600",
-                      )}
-                    >
-                      {f.toolCallId ? `← ${f.toolCallId}` : "← geen dekking"}
-                    </span>
+                    {f.editable && beslisbaar ? (
+                      <input
+                        type={f.numeriek ? "number" : "text"}
+                        step={f.numeriek ? "0.01" : undefined}
+                        defaultValue={f.value}
+                        aria-label={f.label}
+                        onChange={(e) =>
+                          setCorrecties((c) =>
+                            e.target.value === f.value
+                              ? Object.fromEntries(
+                                  Object.entries(c).filter(([k]) => k !== f.name),
+                                )
+                              : { ...c, [f.name]: e.target.value },
+                          )
+                        }
+                        className="w-full rounded border border-border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
+                      />
+                    ) : (
+                      f.value
+                    )}
+                    {/* Waar de waarde vandaan komt. Is hij door een mens
+                        bijgesteld, dan is dát de herkomst — de tool-call dekt
+                        dan nog wel het voorstel, maar niet meer deze waarde. */}
+                    {f.origineel ? (
+                      <span className="ml-2 text-xs text-bucket-review">
+                        ← aangepast{vm.editedBy ? ` door ${vm.editedBy}` : ""}, agent
+                        stelde {f.origineel} voor
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "ml-2 text-xs",
+                          f.toolCallId ? "text-ink-subtle" : "text-alert-600",
+                        )}
+                      >
+                        {f.toolCallId ? `← ${f.toolCallId}` : "← geen dekking"}
+                      </span>
+                    )}
                   </dd>
                 </div>
               ))}
@@ -258,6 +352,8 @@ function ActionDialog({
             </section>
           )}
 
+          {uitvoering && <Uitkomst uitvoering={uitvoering} />}
+
           {fout && (
             <Melding
               icon={<AlertTriangle className="w-4 h-4" aria-hidden="true" />}
@@ -268,7 +364,7 @@ function ActionDialog({
           )}
         </div>
 
-        {beslisbaar && (
+        {beslisbaar && !uitvoering && (
           <footer className="flex gap-2 p-5 border-t border-border sticky bottom-0 bg-surface">
             <button
               type="button"
@@ -277,7 +373,11 @@ function ActionDialog({
               className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
             >
               <Check className="w-4 h-4" aria-hidden="true" />
-              {bezig === "approve" ? "Bezig…" : "Goedkeuren en wegschrijven"}
+              {bezig === "approve"
+                ? "Bezig…"
+                : heeftCorrecties
+                  ? "Aanpassing opslaan en wegschrijven"
+                  : "Goedkeuren en wegschrijven"}
             </button>
             <button
               type="button"
@@ -315,5 +415,46 @@ function Melding({
       <span className="mt-0.5 flex-shrink-0">{icon}</span>
       <span className="min-w-0">{children}</span>
     </div>
+  );
+}
+
+/**
+ * Wat er is gebeurd nadat er is goedgekeurd.
+ *
+ * Bewust drie uitkomsten met een eigen toon. `verlopen` is geen fout maar de
+ * hervalidatie die zijn werk deed — die tekst moet uitleggen wát er is
+ * veranderd, want dat is wat een medewerker nodig heeft om te beslissen of er
+ * een nieuw voorstel moet komen.
+ */
+function Uitkomst({
+  uitvoering,
+}: {
+  uitvoering: { status: string; reason: string | null };
+}) {
+  if (uitvoering.status === "bezig") {
+    return (
+      <Melding icon={<Clock className="w-4 h-4 animate-pulse" aria-hidden="true" />} toon="neutraal">
+        Bezig met controleren en wegschrijven…
+      </Melding>
+    );
+  }
+  if (uitvoering.status === "uitgevoerd") {
+    return (
+      <Melding icon={<Check className="w-4 h-4" aria-hidden="true" />} toon="neutraal">
+        Weggeschreven in het bronsysteem.
+      </Melding>
+    );
+  }
+  if (uitvoering.status === "verlopen") {
+    return (
+      <Melding icon={<Clock className="w-4 h-4" aria-hidden="true" />} toon="waarschuwing">
+        Niet uitgevoerd: {uitvoering.reason ?? "de situatie is veranderd sinds het voorstel."}
+      </Melding>
+    );
+  }
+  return (
+    <Melding icon={<AlertTriangle className="w-4 h-4" aria-hidden="true" />} toon="fout">
+      {uitvoering.reason ?? "Het uitvoeren is niet gelukt."}
+    </Melding>
   );
 }

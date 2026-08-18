@@ -253,6 +253,76 @@ export function ungroundedFields(
   return leafPaths(payload).filter((pad) => !gedekt.has(pad));
 }
 
+/**
+ * Zet een correctie van een medewerker op de payload.
+ *
+ * Alleen velden die in de registratie als `editable` staan. Alles daarbuiten
+ * wordt geweigerd en niet genegeerd: stilzwijgend laten vallen zou betekenen
+ * dat iemand een factuurnummer aanpast, "opgeslagen" ziet, en er iets anders
+ * wordt uitgevoerd dan hij dacht.
+ *
+ * Een lege of onleesbare waarde is ook een weigering. Een creditnota met een
+ * leeg bedrag is geen correctie maar een kapot voorstel.
+ */
+export function applyActionEdits(
+  def: ActionTypeDef,
+  payload: Record<string, unknown>,
+  edits: Record<string, unknown>,
+): { ok: true; payload: Record<string, unknown> } | { ok: false; reason: string } {
+  const velden = new Map(def.payloadFields.map((v) => [v.name, v]));
+  const uit: Record<string, unknown> = JSON.parse(JSON.stringify(payload));
+
+  for (const [naam, rauw] of Object.entries(edits)) {
+    const veld = velden.get(naam);
+    if (!veld) return { ok: false, reason: `onbekend veld: ${naam}` };
+    if (!veld.editable) {
+      return {
+        ok: false,
+        reason:
+          `${veld.label} is niet te wijzigen. Een ander record aanwijzen is geen ` +
+          `correctie maar een andere actie — die hoort een eigen voorstel te krijgen`,
+      };
+    }
+
+    // Het type volgt de bestaande waarde. Een bedrag dat als tekst binnenkomt
+    // uit een formulierveld hoort een getal te blijven; anders schrijft de
+    // uitvoerder een string in een numerieke kolom.
+    const huidig = leesPad(uit, naam);
+    let waarde: unknown = rauw;
+    if (typeof huidig === 'number') {
+      const n = typeof rauw === 'number' ? rauw : Number(String(rauw).replace(',', '.'));
+      if (!Number.isFinite(n)) return { ok: false, reason: `${veld.label} is geen geldig getal` };
+      if (n <= 0) return { ok: false, reason: `${veld.label} moet groter dan nul zijn` };
+      waarde = n;
+    } else {
+      const t = String(rauw ?? '').trim();
+      if (t.length === 0) return { ok: false, reason: `${veld.label} mag niet leeg zijn` };
+      waarde = t;
+    }
+    schrijfPad(uit, naam, waarde);
+  }
+  return { ok: true, payload: uit };
+}
+
+/** Leest een waarde op puntnotatie. */
+function leesPad(obj: Record<string, unknown>, pad: string): unknown {
+  return pad.split('.').reduce<unknown>((acc, deel) => {
+    if (acc === null || typeof acc !== 'object') return undefined;
+    return (acc as Record<string, unknown>)[deel];
+  }, obj);
+}
+
+/** Schrijft een waarde op puntnotatie; maakt tussenliggende objecten aan. */
+function schrijfPad(obj: Record<string, unknown>, pad: string, waarde: unknown): void {
+  const delen = pad.split('.');
+  let cursor: Record<string, unknown> = obj;
+  for (const deel of delen.slice(0, -1)) {
+    if (cursor[deel] === null || typeof cursor[deel] !== 'object') cursor[deel] = {};
+    cursor = cursor[deel] as Record<string, unknown>;
+  }
+  cursor[delen[delen.length - 1]] = waarde;
+}
+
 export interface FieldBackingProblem {
   field: string;
   reason: string;
@@ -442,6 +512,28 @@ export interface ActionPayloadField {
    * eis niet stilzwijgend te versoepelen.
    */
   source?: PayloadFieldSource;
+  /**
+   * Mag een medewerker deze waarde corrigeren vóór goedkeuring?
+   *
+   * De grens loopt niet langs "bron of bericht" maar langs iets anders: je mag
+   * een **grootheid of een tekst** corrigeren, je mag de actie niet op een
+   * **ander record** richten.
+   *
+   * Een reviewer die op de foto ziet dat één van twee artikelen kapot is, hoort
+   * € 89 naar € 45 te kunnen bijstellen. Dat is precies waar een menselijke
+   * controle voor is; hem dwingen af te wijzen en te wachten tot de agent het
+   * opnieuw probeert, maakt van de goedkeuringslaag een obstakel.
+   *
+   * Een factuurnummer of een SKU aanpassen is iets anders. Dat is geen correctie
+   * maar een andere actie, en dan hoort er een nieuw voorstel te komen met een
+   * eigen onderbouwing en een eigen preconditie. Bovendien is de preconditie op
+   * dat identificerende veld gebaseerd; hem wijzigen zou de hervalidatie op de
+   * verkeerde rij laten kijken.
+   *
+   * Ontbreekt hij, dan is het veld NIET bewerkbaar. Een vergeten declaratie
+   * hoort niets open te zetten.
+   */
+  editable?: boolean;
 }
 
 /**
@@ -468,8 +560,8 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     approverRole: 'reviewer',
     expiresAfterMinutes: 7 * 24 * 60,
     payloadFields: [
-      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' , source: 'bericht' },
-      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' , source: 'bericht' },
+      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' , source: 'bericht', editable: true },
+      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' , source: 'bericht', editable: true },
     ],
   },
   {
@@ -484,7 +576,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     expiresAfterMinutes: 24 * 60,
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' , source: 'bericht' },
+      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' , source: 'bericht', editable: true },
     ],
   },
   {
@@ -500,9 +592,9 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     expiresAfterMinutes: 12 * 60,
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' , source: 'bericht' },
-      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' , source: 'bericht' },
-      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' , source: 'bericht' },
+      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' , source: 'bericht', editable: true },
+      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' , source: 'bericht', editable: true },
+      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' , source: 'bericht', editable: true },
     ],
   },
   {
@@ -518,7 +610,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
       { name: 'sku', label: 'Artikel', hint: 'het artikelnummer uit de opgehaalde orderregels' },
-      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' , source: 'bericht' },
+      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' , source: 'bericht', editable: true },
     ],
   },
   {
@@ -535,7 +627,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     payloadFields: [
       { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
       { name: 'sku', label: 'Artikel', hint: 'het artikelnummer dat ontbrak, uit de orderregels' },
-      { name: 'quantity', label: 'Aantal', hint: 'hoeveel er nageleverd moet worden' },
+      { name: 'quantity', label: 'Aantal', hint: 'hoeveel er nageleverd moet worden', editable: true },
     ],
   },
   {
@@ -554,7 +646,7 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     payloadFields: [
       { name: 'trackingCode', label: 'Trackingcode', hint: 'de trackingcode uit de opgehaalde zending' },
       { name: 'carrier', label: 'Vervoerder', hint: 'de vervoerder uit de opgehaalde zending' },
-      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' , source: 'bericht' },
+      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' , source: 'bericht', editable: true },
     ],
   },
   {
@@ -573,8 +665,8 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     expiresAfterMinutes: 24 * 60,
     payloadFields: [
       { name: 'invoiceNumber', label: 'Factuurnummer', hint: 'het factuurnummer uit de opgehaalde factuur' },
-      { name: 'amount', label: 'Bedrag', hint: 'bedrag in euro, uitsluitend uit de opgehaalde factuurregels' },
-      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' , source: 'bericht' },
+      { name: 'amount', label: 'Bedrag', hint: 'bedrag in euro, uitsluitend uit de opgehaalde factuurregels', editable: true },
+      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' , source: 'bericht', editable: true },
     ],
   },
 ]);
