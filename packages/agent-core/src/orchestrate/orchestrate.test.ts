@@ -17,6 +17,19 @@ const signal: Signal = {
   receivedAt: '2026-06-23T10:00:00.000Z',
 };
 
+/**
+ * Dezelfde mail met een foto erbij. Een creditnota eist beeldmateriaal, dus de
+ * scenario's die over de andere poorten gaan hebben er een nodig om daar
+ * überhaupt aan toe te komen.
+ */
+const signalMetFoto: Signal = {
+  ...signal,
+  payload: {
+    ...signal.payload,
+    attachments: [{ name: 'schade.jpg', contentType: 'image/jpeg' }],
+  },
+};
+
 function steps(overrides: Partial<OrchestrationSteps> = {}): OrchestrationSteps {
   return {
     classify: async () => ({
@@ -467,7 +480,7 @@ describe('orchestrate — schrijfoperaties klaarzetten', () => {
   }
 
   it('zet de actie klaar als het bronsysteem adres en order aan elkaar knoopt', async () => {
-    const res = await orchestrate(signal, { steps: planMetActie() });
+    const res = await orchestrate(signalMetFoto, { steps: planMetActie() });
 
     expect(res.identification).toBe('gematcht');
     expect(res.actions).toHaveLength(1);
@@ -494,7 +507,7 @@ describe('orchestrate — schrijfoperaties klaarzetten', () => {
   });
 
   it('houdt de actie tegen als een payload-veld geen dekking heeft', async () => {
-    const res = await orchestrate(signal, {
+    const res = await orchestrate(signalMetFoto, {
       steps: steps({
         plan: async ({ recorder }) => {
           recorder.record({ toolCallId: 'tc-inv', tool: 'erp.get_invoice' });

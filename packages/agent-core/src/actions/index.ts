@@ -396,6 +396,20 @@ export interface ActionTypeDef {
   /** Minimale rol die dit mag goedkeuren. */
   approverRole: 'reviewer' | 'admin';
   /**
+   * Vereist dit type dat de klant zelf beeldmateriaal heeft meegestuurd?
+   *
+   * Een harde poort en geen beleidsregel, en dat onderscheid is hier het punt.
+   * Een beleidsregel is adviserend: hij gaat de prompt in, en een model kan
+   * eromheen redeneren of hem simpelweg missen. Bij "crediteer 340 euro omdat
+   * de klant zegt dat het kapot is" mag dat niet kunnen.
+   *
+   * Zonder foto is de schade een bewering van de klant en verder niets. Dat is
+   * een prima reden om te antwoorden en om erom te vragen — maar geen reden om
+   * geld terug te boeken. De agent stelt dan geen actie voor, en de reden komt
+   * in het beslislog te staan zodat zichtbaar is dát hij het overwoog.
+   */
+  requiresPhoto?: boolean;
+  /**
    * Boven dit bedrag (in euro) is `admin` vereist, ongeacht `approverRole`.
    * Weglaten = geen bedragsgrens. De drempel zelf is een tenant-instelling; dit
    * is de standaard.
@@ -551,6 +565,9 @@ export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
     channels: ['mail'],
     requiredIdentification: 'gematcht',
     approverRole: 'reviewer',
+    // Schade zonder beeld is een bewering. Vragen om een foto kost de klant een
+    // minuut; een onterechte creditnota kost geld en is niet terug te draaien.
+    requiresPhoto: true,
     // Geld. Boven dit bedrag moet een admin het doen.
     amountThreshold: 250,
     expiresAfterMinutes: 24 * 60,
@@ -585,11 +602,18 @@ export function getActionType(slug: string): ActionTypeDef | undefined {
 export function proposableActionTypes(input: {
   channel: ChannelId;
   identification: IdentificationLevel;
+  /**
+   * De bijlagen bij dit bericht. Laat 'm weg als het kanaal geen bijlagen kent;
+   * typen die beeldmateriaal eisen vallen dan af, en dat is de veilige kant.
+   */
+  attachments?: readonly ActionAttachment[];
 }): ActionTypeDef[] {
+  const foto = hasPhoto(input.attachments);
   return ACTION_TYPES.filter(
     (t) =>
       t.channels.includes(input.channel) &&
-      identificationSuffices(input.identification, t.requiredIdentification),
+      identificationSuffices(input.identification, t.requiredIdentification) &&
+      (!t.requiresPhoto || foto),
   );
 }
 
@@ -655,6 +679,39 @@ export interface ActionProposalInput {
   runId: string;
   reviewItemId?: string | null;
   now: Date;
+  /**
+   * De bijlagen die bij dit bericht binnenkwamen. Nodig voor typen die
+   * beeldmateriaal eisen; laat 'm weg als het kanaal geen bijlagen kent.
+   */
+  attachments?: readonly ActionAttachment[];
+}
+
+/** Wat we van een bijlage moeten weten om 'm te kunnen beoordelen. */
+export interface ActionAttachment {
+  name?: string;
+  contentType?: string;
+}
+
+/** Beeldextensies, voor mailclients die alles als octet-stream versturen. */
+const BEELD_EXTENSIES = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp', '.gif'];
+
+/**
+ * Zit er beeldmateriaal bij?
+ *
+ * Kijkt naar het content-type én naar de bestandsnaam. Dat tweede is geen
+ * overdaad: genoeg mailclients versturen een foto als `application/octet-stream`,
+ * en dan zou een terechte claim afketsen op een header die de klant niet in de
+ * hand heeft.
+ *
+ * Een PDF telt niet mee. Dat is meestal een factuur of een pakbon — nuttig, maar
+ * geen bewijs van schade.
+ */
+export function hasPhoto(attachments: readonly ActionAttachment[] = []): boolean {
+  return attachments.some((a) => {
+    if ((a.contentType ?? '').toLowerCase().startsWith('image/')) return true;
+    const naam = (a.name ?? '').toLowerCase();
+    return BEELD_EXTENSIES.some((ext) => naam.endsWith(ext));
+  });
 }
 
 /** Een voorstel dat niet is doorgegaan, met de reden. Gaat het beslislog in. */
@@ -710,6 +767,16 @@ export function buildProposedActions(input: ActionProposalInput): ActionProposal
     });
     if (!poort.ok) {
       rejected.push({ type: voorstel.type, reason: poort.reason });
+      return;
+    }
+
+    if (poort.def.requiresPhoto && !hasPhoto(input.attachments)) {
+      rejected.push({
+        type: voorstel.type,
+        reason:
+          'geen foto van de klant meegestuurd; schade zonder beeld is een bewering ' +
+          'en geen grond om geld terug te boeken',
+      });
       return;
     }
 
