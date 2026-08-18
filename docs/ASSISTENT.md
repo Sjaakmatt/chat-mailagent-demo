@@ -136,6 +136,20 @@ Bij een geopend voorstel hangt de modulegrant aan de módule van dat item; zonde
 voorstel aan de module die de medewerker zelf open heeft. Vandaag is dat er één,
 en dan hoeft het scherm er niets over te weten.
 
+**De bronnen zijn óók begrensd, niet alleen de toegang.** Dat is een apart
+punt en het is de plek waar het bij een tweede module misgaat als je er niet op
+let. Een gesprek over één voorstel is vanzelf goed — dat item hoort bij één
+module. Een generieke vraag leest lijsten, en een lijst kent de grens niet:
+`listReviewRows` geeft álles terug. Daarom zeeft `collectGeneralSources` op de
+eigen module (op `module`, met `kind` als terugval) en op de eigen categorieën
+voor het beleid. Zonder die zeef ziet een klantenservicemedewerker straks de
+sales-werkvoorraad in zijn antwoord staan — zonder dat er ergens een
+rechtencheck is overgeslagen. De bron was gewoon te breed.
+
+De vragensteller ziet dus uitsluitend zijn eigen afdeling, en binnen die
+afdeling niet dieper dan zijn rang: `me.categories` bepaalt of laag 2 überhaupt
+mag rekenen, en de MCP snijdt daar elk zwaarder veld weg.
+
 Datacategorieën spelen in laag 1 nog geen rol: de cockpit leest zijn eigen
 database, en daar staan geen inkoopprijzen of marges — die zitten in de
 bronsystemen achter de MCP's, waar de veldclassificatie ze wegsnijdt. Bij laag 2
