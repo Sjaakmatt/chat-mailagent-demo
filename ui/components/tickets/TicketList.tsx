@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Hand, Check, X, RotateCcw } from "lucide-react";
 import type { Ticket, TicketStatus } from "@factumai/agent-core";
@@ -45,6 +45,7 @@ export function TicketList({
   role,
   compact = false,
   actionsByReviewItem,
+  focus,
 }: {
   title: string;
   description: string;
@@ -58,8 +59,23 @@ export function TicketList({
    * actie wil aftekenen — zonder eerst naar het conceptscherm te hoeven.
    */
   actionsByReviewItem?: Record<string, ActionViewModel[]>;
+  /**
+   * Het ticket waar de bezoeker naartoe is gestuurd (`/tickets?focus=<id>`).
+   *
+   * Alleen markeren en in beeld brengen — niet filteren. Wie vanaf een werkitem
+   * komt wil dát ticket zien, maar hij wil ook kunnen zien wat er verder ligt;
+   * een lijst die opeens één regel toont is desoriënterend.
+   */
+  focus?: string | null;
 }) {
   const router = useRouter();
+  // Het gezochte ticket in beeld brengen. Zonder dit staat de markering er wel,
+  // maar drie schermen naar beneden.
+  const gezocht = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    gezocht.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focus]);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -114,7 +130,18 @@ export function TicketList({
         ) : (
           <ul className="divide-y divide-brand-50">
             {tickets.map((t) => (
-              <li key={t.id} className="px-4 py-3">
+              <li
+                key={t.id}
+                id={`ticket-${t.id}`}
+                ref={t.id === focus ? gezocht : undefined}
+                className={cn(
+                  "px-4 py-3",
+                  // Een rand en geen achtergrondkleur: de statuskleuren van de
+                  // kaart blijven zo leesbaar, en de markering valt op zonder
+                  // de rest te overstemmen.
+                  t.id === focus && "ring-2 ring-brand-400 ring-inset rounded-lg",
+                )}
+              >
                 <div className="flex items-baseline gap-2">
                   <code className="text-xs font-medium text-brand-700">{t.number}</code>
                   <span className="text-[11px] text-ink-subtle">{timeAgoNL(t.createdAt)}</span>

@@ -20,12 +20,21 @@ export const dynamic = "force-dynamic";
  * gedachte, andere handeling — vandaar een eigen scherm en niet een filter op
  * de bestaande werkbak.
  */
-export default async function TicketsPage() {
+export default async function TicketsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ focus?: string }>;
+}) {
   // Tickets zijn klantenservice. De guard dekt allebei de gevallen die hier
   // fout kunnen gaan: geen sessie (→ aanmelden) en wél een sessie maar niet
   // deze afdeling (→ terug naar de werkbak). Het losse "log in"-scherm dat
   // hier stond, dekte alleen het eerste.
   const user = await requireModulePage(KLANTENSERVICE_MODULE.id);
+
+  // Welk ticket de bezoeker komt halen. Het werkitem linkt hierheen met het id
+  // erbij; zonder dat moet iemand met dertig open tickets zelf gaan zoeken naar
+  // het ticket waar hij net vandaan kwam.
+  const focus = (await searchParams).focus ?? null;
 
   let tickets: Ticket[] = [];
   let loadError: string | null = null;
@@ -74,6 +83,7 @@ export default async function TicketsPage() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-3">
             <TicketList
+              focus={focus}
               actionsByReviewItem={actionsByReviewItem}
               title="Open"
               description="Nog niemand mee bezig"
@@ -82,6 +92,7 @@ export default async function TicketsPage() {
               role={user.role}
             />
             <TicketList
+              focus={focus}
               actionsByReviewItem={actionsByReviewItem}
               title="Opgepakt"
               description="Iemand is ermee bezig"
@@ -90,6 +101,7 @@ export default async function TicketsPage() {
               role={user.role}
             />
             <TicketList
+              focus={focus}
               actionsByReviewItem={actionsByReviewItem}
               title="Afgerond"
               description="Laatste 7 dagen"

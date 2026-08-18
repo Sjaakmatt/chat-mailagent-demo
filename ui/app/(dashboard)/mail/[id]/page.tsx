@@ -280,7 +280,7 @@ export default async function ReviewDetailPage({
               {ticket && (
                 <Panel title="Uitzoekwerk">
                   <Link
-                    href="/tickets"
+                    href={`/tickets?focus=${encodeURIComponent(ticket.id)}`}
                     className="block rounded-lg border border-border px-3 py-2.5 hover:bg-brand-50/40 transition-colors"
                   >
                     <div className="flex items-center gap-2">
