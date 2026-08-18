@@ -11,7 +11,7 @@
  * inbox (geanonimiseerd). Een demo werkt pas als de prospect z'n eigen
  * werkelijkheid herkent — kies de mails die intern het meeste tijd kosten.
  *
- * De ordernummers matchen de trajecten uit `migrations/0024_demo_catalogus.sql`,
+ * De trajectnummers matchen de rijen uit `migrations/0035_demo_klantwereld.sql`,
  * zodat de agent echte lookups doet en de grounding-check iets te
  * verifiëren heeft.
  */
@@ -25,6 +25,19 @@ export interface DemoScenario {
   fromName: string;
   subject: string;
   body: string;
+  /**
+   * Bijlagen bij deze mail.
+   *
+   * Bestaat om één reden: `creditnota_voorstellen` eist beeldmateriaal, en
+   * zonder bijlage is die poort in een demo niet te tonen — dan lijkt het of de
+   * agent nooit een creditnota voorstelt. Met dit veld staan beide kanten in de
+   * demo: dezelfde klacht mét bewijs levert een voorstel op, zonder bewijs
+   * alleen een werkticket.
+   *
+   * Er wordt geen bestand geüpload. De poort kijkt naar naam en content-type,
+   * en dat is precies wat een echte mail ook meelevert.
+   */
+  attachments?: readonly { name: string; contentType: string }[];
 }
 
 export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
@@ -83,8 +96,8 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
     key: "storing",
     purpose:
       "Storingsmelding bij een bestaande klant — routeert naar de technische specialist en moet de SLA-reactietermijn noemen.",
-    from: "s.bakker@example.com",
-    fromName: "Sanne Bakker",
+    from: "m.vandenberg@example.com",
+    fromName: "Marieke van den Berg",
     subject: "Chatbot geeft sinds vanochtend geen antwoord",
     body: [
       "Goedemorgen,",
@@ -94,7 +107,7 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
       "Wanneer kunnen jullie hiernaar kijken?",
       "",
       "Vriendelijke groet,",
-      "Sanne Bakker",
+      "Marieke van den Berg",
     ].join("\n"),
   },
   {
@@ -160,34 +173,59 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
   {
     key: "creditnota",
     purpose:
-      "Beschadigd geleverd — de agent zet een creditnota klaar op de factuur, met het bedrag herleidbaar naar de factuurregel. Onder de bedragsgrens, dus een medewerker mag 'm aftekenen.",
-    from: "m.vandenberg@example.com",
-    fromName: "Marieke van den Berg",
-    subject: "Artikel beschadigd aangekomen — order DEMO-1002",
+      "Storing met bewijs — de agent zet een creditnota klaar op de maandregel van de module die eruit lag, met het bedrag herleidbaar naar de factuurregel. € 200 blijft onder de grens, dus een medewerker mag 'm aftekenen.",
+    from: "r.smit@example.com",
+    fromName: "Rob Smit",
+    subject: "Ticketing lag er drie dagen uit — traject DEMO-1005",
     body: [
       "Hallo,",
       "",
-      "Het artikel uit order DEMO-1002 kwam gisteren beschadigd aan. De doos was",
-      "ingedrukt en het product zelf heeft een barst. Ik heb er niks aan.",
-      "Ik wil graag mijn geld terug voor dit artikel.",
+      "De ticketingmodule op traject DEMO-1005 was van 14 tot en met 16 augustus",
+      "onbereikbaar. Mijn team heeft die dagen alles op papier moeten bijhouden.",
+      "Ik heb er schermafbeeldingen van; die stuur ik mee.",
+      "",
+      "Ik wil de maand augustus voor die module gecrediteerd zien.",
       "",
       "Met vriendelijke groet,",
-      "Marieke van den Berg",
+      "Rob Smit",
+    ].join("\n"),
+    attachments: [
+      { name: "storing-15-augustus.png", contentType: "image/png" },
+      { name: "foutmelding.png", contentType: "image/png" },
+    ],
+  },
+  {
+    key: "creditnota-zonder-bewijs",
+    purpose:
+      "Dezelfde soort claim, zonder bijlage. Laat de fotopoort zien: de agent kán hier geen creditnota voorstellen en maakt er een werkticket van. Zet deze naast de vorige om te tonen dat de regel in de architectuur zit en niet in de prompt.",
+    from: "m.vandenberg@example.com",
+    fromName: "Marieke van den Berg",
+    subject: "Chatbot deed het vorige week niet — DEMO-1002",
+    body: [
+      "Hallo,",
+      "",
+      "De chatbot op onze site (traject DEMO-1002) heeft vorige week een aantal",
+      "dagen niet gewerkt. Ik vind het niet redelijk dat we daar de volle maand",
+      "voor betalen.",
+      "",
+      "Graag de maand augustus crediteren.",
+      "",
+      "Groet, Marieke",
     ].join("\n"),
   },
   {
     key: "adreswijziging",
     purpose:
-      "Adreswijziging op een order die nog niet verzonden is. Toont de hervalidatie: wordt de order intussen verzonden, dan ketst het voorstel bij goedkeuren alsnog af.",
+      "Adreswijziging op een traject dat nog niet is afgetrapt. Toont de hervalidatie: verschuift de fase intussen, dan ketst het voorstel bij goedkeuren alsnog af — probeer het door de status van DEMO-1003 te wijzigen vóór je goedkeurt.",
     from: "p.jansen@example.com",
     fromName: "Peter Jansen",
-    subject: "Ander afleveradres voor DEMO-1003",
+    subject: "Nieuw vestigingsadres voor DEMO-1003",
     body: [
       "Beste,",
       "",
-      "Ik ben verhuisd en order DEMO-1003 moet naar mijn nieuwe adres:",
-      "Nieuwstraat 44, 5611 EE Eindhoven.",
-      "Kan dat nog worden aangepast?",
+      "Wij zijn verhuisd. Kunnen jullie het adres op traject DEMO-1003 aanpassen",
+      "naar Nieuwstraat 44, 5611 EE Eindhoven? Dat is ook het adres waar de",
+      "facturen naartoe moeten.",
       "",
       "Peter Jansen",
     ].join("\n"),
@@ -195,36 +233,36 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = Object.freeze([
   {
     key: "onvolledige-levering",
     purpose:
-      "Eén van twee artikelen ontbreekt — de agent zet een nalevering klaar voor precies het artikel dat mist, uit de orderregels.",
+      "Eén van twee onderdelen uit het traject is nog niet opgeleverd — de agent zet een nalevering klaar voor precies dat onderdeel, uit de trajectregels.",
     from: "s.bakker@example.com",
     fromName: "Sanne Bakker",
-    subject: "Pakket incompleet — order DEMO-1004",
+    subject: "Kennisbank nog niet geleverd — traject DEMO-1004",
     body: [
       "Goedemiddag,",
       "",
-      "Ik heb order DEMO-1004 ontvangen, maar er zat maar één artikel in.",
-      "Demoproduct B ontbreekt. Demoproduct A zat er wel bij.",
-      "Kunnen jullie het ontbrekende artikel alsnog sturen?",
+      "In traject DEMO-1004 zit naast de documentagent ook de kennisbank. De",
+      "documentagent draait sinds eind juli, maar van de kennisbank hebben we",
+      "nog niets gezien terwijl hij wel op de factuur staat.",
+      "Kunnen jullie dat alsnog inplannen?",
       "",
       "Groet, Sanne Bakker",
     ].join("\n"),
   },
   {
-    key: "pakket-kwijt",
+    key: "opzegging",
     purpose:
-      "Pakket staat als onderweg maar komt niet aan — de agent zet een onderzoek bij de vervoerder klaar met de trackingcode uit de zending.",
-    from: "j.dekker@example.com",
-    fromName: "Jeroen Dekker",
-    subject: "Pakket lijkt kwijt — order DEMO-1001",
+      "Opzegging van een traject dat nog niet is afgetrapt — onomkeerbaar aan klantzijde, dus mail-only en alleen bij een afzender die het bronsysteem aan het traject knoopt.",
+    from: "p.jansen@example.com",
+    fromName: "Peter Jansen",
+    subject: "Traject DEMO-1003 stopzetten",
     body: [
-      "Goedemiddag,",
+      "Beste,",
       "",
-      "Order DEMO-1001 staat al ruim een week op 'in bezorging' en er beweegt",
-      "niets meer in de track & trace. Ik vermoed dat het pakket kwijt is.",
-      "Kunnen jullie dit navragen bij de vervoerder?",
+      "We hebben intern besloten het niet door te zetten. Traject DEMO-1003 is",
+      "nog niet afgetrapt, dus ik ga ervan uit dat we er nog vanaf kunnen.",
+      "Graag stopzetten en bevestigen.",
       "",
-      "Met vriendelijke groet,",
-      "Jeroen Dekker",
+      "Peter Jansen",
     ].join("\n"),
   },
 ]);
@@ -240,6 +278,10 @@ export function demoSignalPayload(s: DemoScenario): Record<string, unknown> {
     subject: s.subject,
     bodyText: s.body,
     receivedDateTime: new Date().toISOString(),
+    // Alleen als er bijlagen zijn: een leeg array zou "we hebben gekeken en er
+    // zit niets bij" betekenen, en dat is toevallig hetzelfde antwoord maar
+    // niet dezelfde uitspraak.
+    ...(s.attachments ? { attachments: s.attachments.map((a) => ({ ...a })) } : {}),
     // Markeert de herkomst zodat de reset-actie precies deze items opruimt.
     demo: true,
   };
