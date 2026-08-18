@@ -8,6 +8,7 @@ import {
   filterPrecondition,
   PRECONDITION_FIELDS,
   getActionType,
+  hasPhoto,
   identificationLevel,
   identificationSuffices,
   isExpired,
@@ -388,6 +389,10 @@ describe('buildProposedActions', () => {
     runId: 'sig_1',
     reviewItemId: 'ri_1',
     now: nu,
+    // Deze suite gaat over de andere poorten. De foto-eis heeft z'n eigen
+    // beschrijving verderop; hier zou hij elke test laten afketsen op iets
+    // wat de test niet onderzoekt.
+    attachments: [{ name: 'schade.jpg', contentType: 'image/jpeg' }],
   };
 
   const creditnota = {
@@ -494,10 +499,11 @@ describe('payloadvelden', () => {
 });
 
 describe('proposableActionTypes', () => {
-  it('laat bij mail met gematcht de creditnota zien maar niet de retour', () => {
+  it('laat bij mail met gematcht en een foto de creditnota zien maar niet de retour', () => {
     const slugs = proposableActionTypes({
       channel: 'mail',
       identification: 'gematcht',
+      attachments: [{ name: 'schade.jpg', contentType: 'image/jpeg' }],
     }).map((t) => t.slug);
     expect(slugs).toContain('creditnota_voorstellen');
     // Retour vraagt om bevestigd; die noemen zou het model een belofte aan de
@@ -511,6 +517,16 @@ describe('proposableActionTypes', () => {
       identification: 'zwak',
     }).map((t) => t.slug);
     expect(slugs).toEqual(['werkticket_aanmaken']);
+  });
+
+  it('noemt de creditnota niet zonder foto, zodat het model die niet belooft', () => {
+    // Een type noemen dat daarna wordt geweigerd is niet neutraal: het model
+    // schrijft er meestal een antwoord bij waarin het de klant dat bedrag
+    // toezegt. Dan staat er een belofte die niemand nakomt.
+    const slugs = proposableActionTypes({ channel: 'mail', identification: 'gematcht' }).map(
+      (t) => t.slug,
+    );
+    expect(slugs).not.toContain('creditnota_voorstellen');
   });
 
   it('is een hulpmiddel voor de prompt, geen vervanging van de poort', () => {
@@ -648,5 +664,73 @@ describe('preconditie beperken tot wat toetsbaar is', () => {
     // hij voor, dan ketst elk voorstel af. Beide zijn stil, dus vastleggen.
     expect(PRECONDITION_FIELDS.orderstatus).toEqual(['orderNumber', 'status', 'trackingCode']);
     expect(PRECONDITION_FIELDS.factuurstatus).toEqual(['invoiceNumber', 'status', 'totalValue']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('geen defect goedkeuren zonder foto', () => {
+  const creditnota = {
+    type: 'creditnota_voorstellen',
+    payload: { invoiceNumber: 'F-42', amount: 89.95 },
+    evidence: [
+      { field: 'invoiceNumber', toolCallId: 'db.invoice' },
+      { field: 'amount', toolCallId: 'db.invoice' },
+    ],
+    precondition: { status: 'open' },
+    impact: 'Creditnota van € 89,95.',
+  };
+  const basis = {
+    planned: [creditnota],
+    channel: 'mail' as const,
+    identification: 'gematcht' as const,
+    organizationId: 'org-demo',
+    runId: 'sig_1',
+    now: nu,
+  };
+
+  it('weigert een creditnota als de klant niets heeft meegestuurd', () => {
+    const { actions, rejected } = buildProposedActions(basis);
+    expect(actions).toEqual([]);
+    expect(rejected[0].reason).toContain('foto');
+  });
+
+  it('laat het voorstel door met een foto erbij', () => {
+    const { actions, rejected } = buildProposedActions({
+      ...basis,
+      attachments: [{ name: 'schade.jpg', contentType: 'image/jpeg' }],
+    });
+    expect(rejected).toEqual([]);
+    expect(actions).toHaveLength(1);
+  });
+
+  it('accepteert een foto die als octet-stream binnenkomt', () => {
+    // Genoeg mailclients doen dit. Een terechte claim mag niet afketsen op een
+    // header die de klant niet in de hand heeft.
+    expect(hasPhoto([{ name: 'IMG_4821.HEIC', contentType: 'application/octet-stream' }])).toBe(
+      true,
+    );
+  });
+
+  it('telt een pdf niet mee', () => {
+    // Meestal een factuur of pakbon: nuttig, maar geen bewijs van schade.
+    expect(hasPhoto([{ name: 'factuur.pdf', contentType: 'application/pdf' }])).toBe(false);
+  });
+
+  it('raakt typen zonder foto-eis niet', () => {
+    const { actions } = buildProposedActions({
+      ...basis,
+      planned: [
+        {
+          type: 'werkticket_aanmaken',
+          payload: { subject: 'Klacht' },
+          evidence: [],
+          precondition: {},
+          impact: 'Werkticket.',
+        },
+      ],
+      identification: 'zwak',
+    });
+    expect(actions).toHaveLength(1);
   });
 });

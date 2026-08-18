@@ -52,15 +52,58 @@ function client(env: Env): SupabaseClient {
   );
 }
 
+/** Wat de run zelf al wist over de klant. Niet uit de payload van het model. */
+interface RunFeiten {
+  contactEmail: string | null;
+  orderReference: string | null;
+}
+
+function schoon(waarde: unknown): string | null {
+  return typeof waarde === 'string' && waarde.trim().length > 0 ? waarde.trim() : null;
+}
+
 /**
- * Het afzenderadres van de mail waar deze actie uit voortkwam.
+ * Het afzenderadres en het ordernummer van de run waar deze actie uit voortkwam.
  *
- * Uit het signaal en niet uit de payload: het kanaal leverde dit aan, dus het
- * is een feit van de run. Een model dat het moet overtypen kan het verkeerd
+ * Allebei uit de run en niet uit de payload, en dat is geen detail. Het kanaal
+ * leverde het adres aan en de classifier haalde het ordernummer uit het bericht;
+ * dat zijn vastgestelde feiten. Een model dat ze moet overtypen kan ze verkeerd
  * overtypen, en dan gaat een ticket naar een adres dat nooit heeft gemaild.
+ *
+ * Bij een werkticket staan ze bovendien helemaal niet in de payload — dat type
+ * kent alleen `subject` en `description`. Ze daar toch uitlezen leverde een
+ * ticket op met "Geen ordernummer — navragen" terwijl het nummer gewoon in de
+ * mail stond.
+ *
+ * Het ReviewItem is de bron: `proposed.original` is een kopie van de
+ * signal-payload en `proposed.classification.extracted` bevat wat de classifier
+ * eruit haalde. Eén read voor beide. Zonder ReviewItem valt hij terug op het
+ * signaal, dat alleen het adres kent.
  */
-async function afzenderVanRun(ctx: ActionExecutionContext): Promise<string | null> {
+async function runFeiten(ctx: ActionExecutionContext): Promise<RunFeiten> {
   const db = client(ctx.env);
+
+  if (ctx.action.reviewItemId) {
+    const url = db.tableUrl('aios_review_items');
+    url.searchParams.set('id', `eq.${ctx.action.reviewItemId}`);
+    url.searchParams.set('select', 'proposed');
+    url.searchParams.set('limit', '1');
+    const rijen = await db.request<Array<{ proposed: Record<string, unknown> }>>(CTX, url, {
+      method: 'GET',
+    });
+    const proposed = Array.isArray(rijen) ? rijen[0]?.proposed : undefined;
+    if (proposed) {
+      const origineel = (proposed.original ?? {}) as { from?: unknown };
+      const classificatie = (proposed.classification ?? {}) as {
+        extracted?: { orderNumber?: unknown };
+      };
+      return {
+        contactEmail: schoon(origineel.from),
+        orderReference: schoon(classificatie.extracted?.orderNumber),
+      };
+    }
+  }
+
   const url = db.tableUrl('aios_signals');
   url.searchParams.set('id', `eq.${ctx.action.runId}`);
   url.searchParams.set('select', 'payload');
@@ -68,8 +111,10 @@ async function afzenderVanRun(ctx: ActionExecutionContext): Promise<string | nul
   const rijen = await db.request<Array<{ payload: { from?: unknown } }>>(CTX, url, {
     method: 'GET',
   });
-  const from = Array.isArray(rijen) ? rijen[0]?.payload?.from : undefined;
-  return typeof from === 'string' && from.trim().length > 0 ? from.trim() : null;
+  return {
+    contactEmail: schoon(Array.isArray(rijen) ? rijen[0]?.payload?.from : undefined),
+    orderReference: null,
+  };
 }
 
 /** Leest een optionele string uit de payload; null als hij ontbreekt. */
@@ -122,6 +167,7 @@ export const DEMO_EXECUTORS: ActionExecutor[] = [
     // scherm waar de medewerker het ticket komt afhandelen.
     type: 'werkticket_aanmaken',
     async run(ctx) {
+      const feiten = await runFeiten(ctx);
       const ticket = await createTicket(ctx.env, {
         organizationId: ctx.action.organizationId,
         // Geen chatgesprek: dit komt uit een mailrun. Het ReviewItem is de
@@ -130,14 +176,9 @@ export const DEMO_EXECUTORS: ActionExecutor[] = [
         reviewItemId: ctx.action.reviewItemId ?? null,
         category: null,
         summary: tekst(ctx, 'subject'),
-        // Het afzenderadres komt uit het signaal en niet uit de payload. Dat
-        // is bewust: het is een feit van de run dat het kanaal aanleverde, geen
-        // waarde die een model moet overtypen — en `ticketReadiness` weigert
-        // zonder terugkoppelkanaal.
-        identity: {
-          contactEmail: await afzenderVanRun(ctx),
-          orderReference: leesString(ctx, 'orderNumber'),
-        },
+        // Adres én ordernummer uit de run, niet uit de payload — zie
+        // `runFeiten`. Een werkticket kent die velden niet eens in z'n payload.
+        identity: feiten,
         handoverReason: leesString(ctx, 'description'),
       });
       if (!ticket) {

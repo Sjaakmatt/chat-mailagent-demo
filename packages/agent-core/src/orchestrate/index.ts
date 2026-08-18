@@ -39,6 +39,7 @@ import { channelForDomain } from '../channels/index.js';
 import {
   buildProposedActions,
   identificationLevel,
+  type ActionAttachment,
   type IdentificationLevel,
   type PlannedAction,
   type ProposedAction,
@@ -626,6 +627,11 @@ export async function runSpecialize(
     runId: signal.id,
     reviewItemId: reviewItem.id,
     now: new Date(reviewItem.createdAt),
+    // De bijlagen zoals het kanaal ze aanleverde. Typen die beeldmateriaal
+    // eisen leunen hierop; het model komt er niet aan te pas.
+    attachments: Array.isArray(payload.attachments)
+      ? (payload.attachments as ActionAttachment[])
+      : [],
   });
 
   return {

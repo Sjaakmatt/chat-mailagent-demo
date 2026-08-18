@@ -1147,6 +1147,13 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
       // ook neerzet, `buildProposedActions` toetst het opnieuw — kanaal,
       // identificatie, dekking per veld. De prompt kan de rem niet loszetten.
       const kanaal = channelForDomain(signal.domain)?.id ?? signal.domain;
+      // Bijlagen zoals het kanaal ze aanleverde. Bepaalt of een type dat
+      // beeldmateriaal eist überhaupt genoemd hoeft te worden.
+      const bijlagen = Array.isArray((signal.payload as { attachments?: unknown }).attachments)
+        ? ((signal.payload as { attachments: Array<{ name?: string; contentType?: string }> })
+            .attachments)
+        : [];
+
       const mogelijk = isCompoundTask
         ? []
         : proposableActionTypes({
@@ -1156,6 +1163,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               orderReference: orderNumber ?? null,
               sourceEmail,
             }),
+            attachments: bijlagen,
           });
 
       const actieContract =
@@ -1195,7 +1203,13 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
             mogelijk
               .map(
                 (t) =>
-                  `- ${t.slug} (${t.label})\n` +
+                  `- ${t.slug} (${t.label})` +
+                  (t.requiresPhoto
+                    ? ' — VEREIST dat de klant beeldmateriaal heeft meegestuurd. ' +
+                      'Zit dat er niet bij, stel dit type dan NIET voor en vraag ' +
+                      'in je antwoord om een foto. Beloof geen terugbetaling.'
+                    : '') +
+                  `\n` +
                   (PRECONDITION_FIELDS[t.preconditionKind].length > 0
                     ? `    precondition-sleutels: ${PRECONDITION_FIELDS[t.preconditionKind].join(', ')}\n`
                     : '    precondition: laat leeg ({})\n') +
