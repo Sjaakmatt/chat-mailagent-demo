@@ -94,6 +94,24 @@ export interface WorkbenchModule {
     client: CockpitDbClient,
     row: ReviewItemRow,
   ): Promise<AssistantSource[]>;
+  /**
+   * De bronnen die de assistent mag lezen zónder geopend voorstel.
+   *
+   * De assistent zit in de schil en niet op een detailscherm: een medewerker
+   * kan hem aanspreken terwijl hij door de werkbak loopt, en dan is er geen rij
+   * om context uit te halen. Wat hij dan mag inzien is nog steeds een keuze van
+   * de módule — beleid en werkvoorraad van dit proces, niet van het proces
+   * ernaast.
+   *
+   * Bewust een aparte functie en niet `collectSources` met een optionele rij.
+   * De twee gesprekken zijn verschillend: bij een voorstel hoort een dossier
+   * (deze klant, dit beslislog), zonder voorstel hoort de stand van het werk.
+   * Eén functie met een `null` erin zou binnen twee takken uit elkaar vallen.
+   *
+   * Geen implementatie = geen assistent buiten een voorstel om. Fail-closed,
+   * net als hierboven.
+   */
+  collectGeneralSources?(client: CockpitDbClient): Promise<AssistantSource[]>;
   /** Extra schermen van deze module in de zijbalk. */
   navItems?: readonly NavItem[];
   /** Eigen events op de auditlog-tijdlijn. */

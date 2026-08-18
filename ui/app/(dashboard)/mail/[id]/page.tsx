@@ -25,8 +25,7 @@ import { CaseTimeline } from "@/components/mail-detail/CaseTimeline";
 import { DecisionPanel } from "@/components/mail-detail/DecisionPanel";
 import { getTicketForReviewItem } from "@/lib/tickets";
 import { listActionsForRun } from "@/lib/actions";
-import { AssistantPanel } from "@/components/assistant/AssistantPanel";
-import { assistantEnabled } from "@/lib/assistant/run";
+import { AssistantSubject } from "@/components/assistant/AssistantContext";
 import { CompoundBreakdown } from "@/components/mail-detail/CompoundBreakdown";
 import { cn, timeAgoNL } from "@/lib/utils";
 import { mailProposed } from "@/lib/modules/klantenservice";
@@ -189,6 +188,13 @@ export default async function ReviewDetailPage({
 
   return (
     <>
+      {/* Meldt dit voorstel aan bij de assistent in de schil: zolang dit scherm
+          openstaat, gaat het gesprek hierover. Rendert niets. */}
+      <AssistantSubject
+        reviewItemId={row.id}
+        label={`dit voorstel — ${subject}`}
+      />
+
       {/* Header */}
       <div className="bg-white border-b border-brand-100 px-4 sm:px-8 py-5">
         <BackLink />
@@ -262,10 +268,6 @@ export default async function ReviewDetailPage({
 
             {/* RECHTS — assistent, tijdlijn, analyse, samenvatting, grounding, guardrail, confidence */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Bovenaan: de vraag die een medewerker als eerste heeft is
-                  "waarom stelt hij dit voor", en die stel je hier. */}
-              {env && assistantEnabled(env) && <AssistantPanel reviewItemId={row.id} />}
-
               <Panel title="Tijdlijn">
                 <CaseTimeline item={row} edits={edits} />
               </Panel>

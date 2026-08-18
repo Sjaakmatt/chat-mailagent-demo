@@ -18,8 +18,10 @@
  */
 
 import {
+  KLANTENSERVICE_MODULE,
   makeSource,
   type AssistantSource,
+  type Ticket,
 } from "@factumai/agent-core";
 import type { CockpitDbClient } from "@/lib/tenant-query";
 import {
@@ -27,6 +29,7 @@ import {
   listPolicyRules,
   listReviewRows,
   type PolicyRuleRow,
+  type ReviewMetricRow,
 } from "@/lib/db";
 import { listTickets } from "@/lib/tickets";
 import { mailProposed } from "./klantenservice";
@@ -249,5 +252,159 @@ export async function collectKlantenserviceSources(
     ...beleidSources(rules, category),
     ...historie,
     ...eerder,
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Generieke bronnen — het gesprek zonder geopend voorstel
+// ---------------------------------------------------------------------------
+
+/** Hoeveel open tickets er meegaan bij een generieke vraag. */
+const MAX_OPEN_TICKETS = 15;
+/** Hoeveel recent afgehandelde zaken er meegaan. */
+const MAX_RECENT = 10;
+
+/**
+ * De werkvoorraad in cijfers.
+ *
+ * Bewust uitgeschreven per status en per categorie in plaats van als losse
+ * getallen in de prompt: de assistent mag geen getal noemen dat niet letterlijk
+ * in een bron staat, en hij mag niet rekenen. Wil je dat hij "er staan er zeven
+ * open" kan zeggen, dan moet die zeven hier staan.
+ */
+function werkvoorraadSource(rows: ReviewMetricRow[]): AssistantSource {
+  const perStatus = new Map<string, number>();
+  const perCategorie = new Map<string, number>();
+  for (const r of rows) {
+    perStatus.set(r.status, (perStatus.get(r.status) ?? 0) + 1);
+    if (r.status === "PENDING") {
+      const c = r.category ?? "geen categorie";
+      perCategorie.set(c, (perCategorie.get(c) ?? 0) + 1);
+    }
+  }
+
+  const regels = [
+    `Totaal aantal items in de werkbak: ${rows.length}`,
+    "",
+    "Per status:",
+    ...[...perStatus.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `- ${s}: ${n}`),
+    "",
+    "Openstaand (PENDING) per categorie:",
+    ...(perCategorie.size > 0
+      ? [...perCategorie.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([c, n]) => `- ${c}: ${n}`)
+      : ["- niets openstaand"]),
+  ];
+
+  return makeSource({
+    id: "werkvoorraad:klantenservice",
+    kind: "werkvoorraad",
+    label: "Werkvoorraad klantenservice",
+    href: "/",
+    text: regels.join("\n"),
+  });
+}
+
+/** De openstaande tickets — waar wordt nu aan gewerkt. */
+function openTicketsSource(tickets: Ticket[]): AssistantSource | null {
+  const open = tickets
+    .filter((t) => t.status !== "DONE" && t.status !== "CANCELLED")
+    .slice(0, MAX_OPEN_TICKETS);
+  if (open.length === 0) return null;
+
+  return makeSource({
+    id: "tickets:open",
+    kind: "werkvoorraad",
+    label: `Openstaande tickets (${open.length})`,
+    href: "/tickets",
+    text: open
+      .map((t) =>
+        [
+          `Ticket ${t.number} — ${t.status}`,
+          t.category ? `  categorie: ${t.category}` : null,
+          `  ${t.summary}`,
+          t.orderReference ? `  order: ${t.orderReference}` : null,
+          t.claimedBy ? `  opgepakt door: ${t.claimedBy}` : "  nog niet opgepakt",
+          `  aangemaakt: ${t.createdAt}`,
+        ]
+          .filter((x): x is string => x !== null)
+          .join("\n"),
+      )
+      .join("\n\n"),
+  });
+}
+
+/** Wat er recent is besloten — voor "hoe doen we dit meestal". */
+function recentBeslistSource(rows: ReviewMetricRow[]): AssistantSource | null {
+  const beslist = rows.filter((r) => r.status !== "PENDING").slice(0, MAX_RECENT);
+  if (beslist.length === 0) return null;
+
+  return makeSource({
+    id: "recent:beslist",
+    kind: "eerdere_zaak",
+    label: `Recent afgehandeld (${beslist.length})`,
+    href: "/",
+    text: beslist
+      .map((r) =>
+        [
+          `${r.summary}`,
+          `  besluit: ${r.status}${r.decided_by ? ` door ${r.decided_by}` : ""}`,
+          r.category ? `  categorie: ${r.category}` : null,
+          r.decided_at ? `  op: ${r.decided_at}` : null,
+        ]
+          .filter((x): x is string => x !== null)
+          .join("\n"),
+      )
+      .join("\n\n"),
+  });
+}
+
+/** De woordenlijst waarin deze module classificeert. */
+function categorieSource(): AssistantSource {
+  return makeSource({
+    id: "taxonomie:klantenservice",
+    kind: "beleid",
+    label: "Categorieën van klantenservice",
+    text: KLANTENSERVICE_MODULE.categories
+      .map((c) => `- ${c.slug}: ${c.label}`)
+      .join("\n"),
+  });
+}
+
+/**
+ * De bronnen voor een gesprek zonder geopend voorstel.
+ *
+ * Dit is de assistent in de werkbak zelf: beleid, werkvoorraad, open tickets en
+ * wat er recent is besloten. Geen klantdossier — dat hangt aan een voorstel, en
+ * zonder voorstel is er geen klant om over te praten. Vraagt iemand er tóch
+ * naar, dan is "dat staat er niet" het juiste antwoord: hij opent het item en
+ * de assistent kijkt mee.
+ *
+ * Dezelfde fail-soft als hierboven: valt één query om, dan valt die bron weg en
+ * gaat de rest door. Wat er ontbreekt is zichtbaar in de bronnenlijst.
+ */
+export async function collectKlantenserviceGeneralSources(
+  client: CockpitDbClient,
+): Promise<AssistantSource[]> {
+  const [rules, tickets, rows] = await Promise.all([
+    listPolicyRules(client).catch((): PolicyRuleRow[] => []),
+    listTickets(client, { limit: 200 }).catch((): Ticket[] => []),
+    listReviewRows(client, 200).catch((): ReviewMetricRow[] => []),
+  ]);
+
+  const open = openTicketsSource(tickets);
+  const recent = recentBeslistSource(rows);
+
+  return [
+    werkvoorraadSource(rows),
+    ...(open ? [open] : []),
+    // Alle regels: zonder categorie om op te matchen is er niets te filteren,
+    // en "welk beleid geldt hier" is juist de vraag die generiek wordt gesteld.
+    ...beleidSources(rules, null),
+    categorieSource(),
+    ...(recent ? [recent] : []),
   ];
 }

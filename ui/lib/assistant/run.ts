@@ -23,6 +23,7 @@ import {
   type AggregationSummary,
   type AssistantResult,
   type AssistantSource,
+  type AssistantTurn,
   type DataCategory,
 } from "@factumai/agent-core";
 import { createAnthropicLlmClient } from "@factumai/agent-core/llm-anthropic";
@@ -56,24 +57,45 @@ export interface AssistantRunResult {
 export interface AskOptions {
   /** Laag 2 aan? Alleen dan mag de assistent een aggregatie uitvoeren. */
   analyse?: boolean;
+  /**
+   * De eerdere beurten uit dit gesprek. Context om een vervolgvraag te
+   * begrijpen — géén bron: de controle onderaan kijkt alleen naar de bronnen
+   * van déze beurt.
+   */
+  history?: readonly AssistantTurn[];
   /** De categorieën van de vragensteller; gaan mee op de MCP-call. */
   categories?: readonly DataCategory[];
   /** Vandaag, als ISO-datum — zodat "vorige maand" te vertalen is. */
   vandaag?: string;
 }
 
+/**
+ * Eén vraag aan de assistent.
+ *
+ * `row` mag null zijn: de assistent zit in de schil en niet op een
+ * detailscherm, dus een medewerker kan hem aanspreken zonder dat er een
+ * voorstel openstaat. Dat is een ander gesprek en dus een andere bronnenset —
+ * beleid en werkvoorraad in plaats van een klantdossier — maar dezelfde regel:
+ * elke bewering herleidbaar naar een bron uit deze beurt.
+ */
 export async function askAssistant(
   env: CockpitEnv,
   client: CockpitDbClient,
   mod: WorkbenchModule,
-  row: ReviewItemRow,
+  row: ReviewItemRow | null,
   question: string,
   options: AskOptions = {},
 ): Promise<AssistantRunResult> {
   // De bronnen komen van de módule, niet van een gedeelde functie met een
   // module-parameter. Zo kan de klantenservice-assistent geen sales-bron
   // krijgen, ook niet als er ergens een verkeerde id wordt doorgegeven.
-  const sources = mod.collectSources ? await mod.collectSources(client, row) : [];
+  const sources = row
+    ? mod.collectSources
+      ? await mod.collectSources(client, row)
+      : []
+    : mod.collectGeneralSources
+      ? await mod.collectGeneralSources(client)
+      : [];
 
   const llm = createAnthropicLlmClient({
     apiKey: env.ANTHROPIC_API_KEY ?? "",
@@ -117,9 +139,12 @@ export async function askAssistant(
 
   const messages = buildAssistantPrompt({
     question,
-    contextLabel: `voorstel ${row.id} — ${row.summary}`,
+    contextLabel: row
+      ? `voorstel ${row.id} — ${row.summary}`
+      : `${mod.label} — geen voorstel geopend; vragen gaan over het proces zelf`,
     sources,
     clientName: env.CLIENT_NAME?.trim() || BRAND.name,
+    history: options.history,
   });
 
   let raw: string;
