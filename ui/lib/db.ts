@@ -98,6 +98,16 @@ export interface ReviewMetricRow {
   category: string | null;
   /** Welke automatisering dit item maakte. Null bij items van vóór 0030. */
   module: string | null;
+  /**
+   * Afzender en onderwerp uit het oorspronkelijke bericht.
+   *
+   * Erbij voor de inzichtbronnen van de assistent: zonder afzender is "hoeveel
+   * klachten heeft deze klant gedaan" niet te tellen, en zonder onderwerp niet
+   * "hoe vaak komt dit terug". Twee jsonb-paden in dezelfde select is goedkoper
+   * dan de hele `proposed` ophalen.
+   */
+  from_address: string | null;
+  subject: string | null;
 }
 
 /**
@@ -112,7 +122,9 @@ export async function listReviewRows(
   const url = client.tableUrl("aios_review_items");
   url.searchParams.set(
     "select",
-    "id,status,kind,summary,confidence,created_at,decided_at,executed_at,decided_by,module,category:proposed->classification->>category",
+    "id,status,kind,summary,confidence,created_at,decided_at,executed_at,decided_by,module," +
+      "category:proposed->classification->>category," +
+      "from_address:proposed->original->>from,subject:proposed->>subject",
   );
   url.searchParams.set("order", "created_at.desc");
   url.searchParams.set("limit", String(limit));

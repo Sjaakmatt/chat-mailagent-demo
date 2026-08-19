@@ -45,6 +45,24 @@ gaat, gaat via de bestaande knoppen.
 
 ## Wat hij kan
 
+**Hij geeft inzicht, geen procedurele hulp.** De vragen die een medewerker
+werkelijk heeft gaan over aantallen en patronen: hoeveel klachten heeft deze
+klant gedaan, hoeveel kwam er vandaag binnen, hoe vaak komt dit verzoek terug,
+bij hoeveel klanten speelt het. Dat kon hij niet — hij kon uitleggen en
+verantwoorden, en dat is iets anders dan overzicht geven.
+
+De tellingen staan in `assistant/inzicht.ts` en worden **deterministisch**
+gedaan, niet door het model: harde regel is dat het model niet rekent. Het
+resultaat gaat uitgeschreven de bron in, het model leest en citeert, en daarmee
+dekt de bestaande grounding-controle de cijfers vanzelf. Daarom staat er ook een
+regel per dag in plaats van een reeks datums — een model dat zelf moet optellen,
+mag dat niet en doet het toch.
+
+Die module weet niets van mail. Hij krijgt rijen aangeleverd en telt; wélke
+rijen bepaalt de módule, en die geeft alleen zijn eigen werk mee. Een tweede
+automatisering krijgt hetzelfde inzicht over zijn eigen bak zonder dat er iets
+verandert.
+
 **Hij is er voor de medewerker, niet voor de klant.** Dat onderscheid stuurt wat
 hij mag lezen en welke voorbeeldvragen er staan. "Wat kost module X" is een
 klantvraag: die hoort de agent te beantwoorden in een concept dat langs een mens
@@ -57,6 +75,7 @@ Bij een geopend voorstel:
 
 | Vraag | Bron |
 | --- | --- |
+| Hoe vaak heeft deze klant gemaild, en waarover? | Zijn eigen berichten geteld en per categorie verdeeld |
 | Mag ik dit zelf goedkeuren? | De klaargezette acties, met de vereiste rang uit dezelfde registratie als de knop |
 | Waar komt dit bedrag vandaan? | De payloadvelden met hun dekking per veld, en de systeemstaat waarop het voorstel rust |
 | Waarom stelt hij dit voor? | Het beslislog van die run: poort, categorie, specialist, stappen, geraadpleegde bronnen, afgekeurde claims |
@@ -68,6 +87,10 @@ En zonder:
 
 | Vraag | Bron |
 | --- | --- |
+| Hoeveel kwam er vandaag binnen? | Volume per dag over veertien dagen, plus vandaag per categorie |
+| Hoeveel klachten heeft klant X? | Per klant: berichten, klachten, tickets, verdeling over categorieën |
+| Hoe vaak komt dit verzoek terug? | Per categorie hoe vaak én bij hoeveel verschillende klanten |
+| Hoe vaak vraagt iemand waar zijn bestelling blijft? | Idem — dat is één categorie, uitgeschreven |
 | Wat wacht er op mijn goedkeuring? | De openstaande schrijfoperaties, geteld per vereiste rang |
 | Wat staat er nu open? | De werkvoorraad, uitgeschreven per status en per categorie |
 | Welke tickets liggen er nog? | De openstaande tickets, met wie ze heeft opgepakt |
