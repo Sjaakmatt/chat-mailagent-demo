@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ChevronRight,
   ExternalLink,
   Loader2,
   MessageCircle,
@@ -30,6 +31,8 @@ import { useAssistantSubject } from "./AssistantContext";
  * vertrouwen is:
  *
  *   de bronnen  — onder elk antwoord staat wat hij heeft ingezien, met een link.
+ *                 Weggeklapt maar mét de telling in de kop, zodat het antwoord
+ *                 leesbaar blijft zonder de herkomst te verstoppen.
  *   de weigering — kan hij iets niet herleiden, dan komt er geen antwoord met
  *                 een randje eromheen maar de reden en de bronnenlijst.
  *   geen knoppen — hij voert niets uit. Er zit geen schrijfroute in deze laag.
@@ -307,27 +310,73 @@ function BeurtBlok({ beurt }: { beurt: Beurt }) {
           {beurt.antwoord.aggregatie && (
             <CijferKaart aggregatie={beurt.antwoord.aggregatie} />
           )}
-
-          {beurt.antwoord.grounding.length > 0 && (
-            <ul className="mt-2 space-y-1">
-              {beurt.antwoord.grounding.map((g, i) => (
-                <li key={`${g.sourceId}-${i}`} className="text-[11px] text-ink-muted">
-                  <span className="text-ink-subtle">↳</span> {g.statement} —{" "}
-                  <span className="text-brand-700">{g.sourceLabel}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 
+      {/* De verantwoording, weggeklapt. Zie `Balkje` voor waarom het toch
+          zichtbaar blijft dát er onderbouwing is. */}
+      {beurt.antwoord?.ok && beurt.antwoord.grounding.length > 0 && (
+        <Balkje titel="Onderbouwing" aantal={beurt.antwoord.grounding.length}>
+          <ul className="space-y-1.5">
+            {beurt.antwoord.grounding.map((g, i) => (
+              <li key={`${g.sourceId}-${i}`} className="text-[11px] text-ink-muted">
+                {g.statement}
+                <span className="block text-ink-subtle">{g.sourceLabel}</span>
+              </li>
+            ))}
+          </ul>
+        </Balkje>
+      )}
+
       {beurt.antwoord && beurt.antwoord.bronnen.length > 0 && (
-        <Bronnen
-          bronnen={beurt.antwoord.bronnen}
-          gebruikt={beurt.antwoord.ok ? beurt.antwoord.gebruikteBronnen : []}
-        />
+        <Balkje titel="Ingezien" aantal={beurt.antwoord.bronnen.length}>
+          <Bronnen
+            bronnen={beurt.antwoord.bronnen}
+            gebruikt={beurt.antwoord.ok ? beurt.antwoord.gebruikteBronnen : []}
+          />
+        </Balkje>
       )}
     </div>
+  );
+}
+
+/**
+ * Een inklapbaar balkje onder een antwoord.
+ *
+ * De citaten en de bronnenlijst stonden allebei open onder elk antwoord. Bij één
+ * bron valt dat mee; bij negen bronnen en zes citaten verdwijnt het antwoord
+ * boven een muur van herkomst, en dan leest niemand het meer — ook de herkomst
+ * niet.
+ *
+ * Dichtgeklapt, maar met het **aantal in de kop**. Dat is het verschil dat
+ * telt: je ziet zonder klikken dát er zes beweringen onderbouwd zijn en negen
+ * bronnen zijn ingezien, en je klikt alleen als je wilt weten wélke. Een balkje
+ * zonder telling zou hetzelfde verstoppen als helemaal weglaten.
+ *
+ * `<details>` en niet een eigen open/dicht-state: dan werkt toetsenbord,
+ * schermlezer en zoeken-op-de-pagina zonder dat wij daar iets voor doen.
+ */
+function Balkje({
+  titel,
+  aantal,
+  children,
+}: {
+  titel: string;
+  aantal: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group rounded border border-brand-100 bg-surface-muted">
+      <summary className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer list-none text-[11px] text-ink-muted hover:text-ink select-none">
+        <ChevronRight
+          className="w-3 h-3 flex-shrink-0 transition-transform group-open:rotate-90"
+          aria-hidden="true"
+        />
+        {titel}
+        <span className="text-ink-subtle">({aantal})</span>
+      </summary>
+      <div className="px-2.5 pb-2.5 pt-0.5">{children}</div>
+    </details>
   );
 }
 
@@ -338,11 +387,7 @@ function BeurtBlok({ beurt }: { beurt: Beurt }) {
  */
 function Bronnen({ bronnen, gebruikt }: { bronnen: Bron[]; gebruikt: string[] }) {
   return (
-    <div className="pt-2 border-t border-brand-50">
-      <p className="text-[10px] uppercase tracking-wide text-ink-subtle mb-1">
-        Ingezien ({bronnen.length})
-      </p>
-      <ul className="flex flex-wrap gap-1">
+    <ul className="flex flex-wrap gap-1">
         {bronnen.map((b) => {
           const used = gebruikt.includes(b.id);
           const inner = (
@@ -363,7 +408,6 @@ function Bronnen({ bronnen, gebruikt }: { bronnen: Bron[]; gebruikt: string[] })
             <li key={b.id}>{b.href ? <Link href={b.href}>{inner}</Link> : inner}</li>
           );
         })}
-      </ul>
-    </div>
+    </ul>
   );
 }
