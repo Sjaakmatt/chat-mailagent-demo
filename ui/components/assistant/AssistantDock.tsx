@@ -313,47 +313,56 @@ function BeurtBlok({ beurt }: { beurt: Beurt }) {
         </div>
       )}
 
-      {/* De verantwoording, weggeklapt. Zie `Balkje` voor waarom het toch
-          zichtbaar blijft dát er onderbouwing is. */}
-      {beurt.antwoord?.ok && beurt.antwoord.grounding.length > 0 && (
-        <Balkje titel="Onderbouwing" aantal={beurt.antwoord.grounding.length}>
-          <ul className="space-y-1.5">
-            {beurt.antwoord.grounding.map((g, i) => (
-              <li key={`${g.sourceId}-${i}`} className="text-[11px] text-ink-muted">
-                {g.statement}
-                <span className="block text-ink-subtle">{g.sourceLabel}</span>
-              </li>
-            ))}
-          </ul>
-        </Balkje>
-      )}
+      {/* De verantwoording. Twee dunne regels onder een streep, dicht — zie
+          `Balkje` voor waarom de telling er wél bij staat. */}
+      {beurt.antwoord &&
+        (beurt.antwoord.bronnen.length > 0 ||
+          (beurt.antwoord.ok && beurt.antwoord.grounding.length > 0)) && (
+          <div className="pt-1.5 border-t border-brand-50">
+            {beurt.antwoord.ok && beurt.antwoord.grounding.length > 0 && (
+              <Balkje titel="Onderbouwing" aantal={beurt.antwoord.grounding.length}>
+                <ul className="space-y-1.5">
+                  {beurt.antwoord.grounding.map((g, i) => (
+                    <li key={`${g.sourceId}-${i}`} className="text-[11px] leading-snug">
+                      <span className="text-ink-muted">{g.statement}</span>
+                      <span className="block text-ink-subtle">{g.sourceLabel}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Balkje>
+            )}
 
-      {beurt.antwoord && beurt.antwoord.bronnen.length > 0 && (
-        <Balkje titel="Ingezien" aantal={beurt.antwoord.bronnen.length}>
-          <Bronnen
-            bronnen={beurt.antwoord.bronnen}
-            gebruikt={beurt.antwoord.ok ? beurt.antwoord.gebruikteBronnen : []}
-          />
-        </Balkje>
-      )}
+            {beurt.antwoord.bronnen.length > 0 && (
+              <Balkje titel="Ingezien" aantal={beurt.antwoord.bronnen.length}>
+                <Bronnen
+                  bronnen={beurt.antwoord.bronnen}
+                  gebruikt={beurt.antwoord.ok ? beurt.antwoord.gebruikteBronnen : []}
+                />
+              </Balkje>
+            )}
+          </div>
+        )}
     </div>
   );
 }
 
 /**
- * Een inklapbaar balkje onder een antwoord.
+ * Een inklapbare regel onder een antwoord.
  *
- * De citaten en de bronnenlijst stonden allebei open onder elk antwoord. Bij één
- * bron valt dat mee; bij negen bronnen en zes citaten verdwijnt het antwoord
- * boven een muur van herkomst, en dan leest niemand het meer — ook de herkomst
- * niet.
+ * De citaten en de bronnenlijst stonden allebei open. Bij één bron valt dat mee;
+ * bij tien bronnen en zes citaten verdwijnt het antwoord boven een muur van
+ * herkomst, en dan leest niemand het meer — de herkomst ook niet.
  *
- * Dichtgeklapt, maar met het **aantal in de kop**. Dat is het verschil dat
- * telt: je ziet zonder klikken dát er zes beweringen onderbouwd zijn en negen
- * bronnen zijn ingezien, en je klikt alleen als je wilt weten wélke. Een balkje
- * zonder telling zou hetzelfde verstoppen als helemaal weglaten.
+ * Bewust een **dunne grijze regel** en geen omkaderd blok. Een kader trekt
+ * evenveel aandacht als de inhoud die het moest wegnemen; twee kaders onder elk
+ * antwoord maken de draad juist onrustiger dan hij was. De streep erboven doet
+ * het scheidingswerk, de rest mag wegvallen.
  *
- * `<details>` en niet een eigen open/dicht-state: dan werkt toetsenbord,
+ * Het **aantal blijft in de kop**. Dat is het verschil tussen inklappen en
+ * verstoppen: je ziet zonder klikken dát er zes beweringen onderbouwd zijn en
+ * tien bronnen zijn ingezien, en klikt alleen om te zien wélke.
+ *
+ * `<details>` en niet een eigen open/dicht-state: dan werken toetsenbord,
  * schermlezer en zoeken-op-de-pagina zonder dat wij daar iets voor doen.
  */
 function Balkje({
@@ -366,48 +375,60 @@ function Balkje({
   children: React.ReactNode;
 }) {
   return (
-    <details className="group rounded border border-brand-100 bg-surface-muted">
-      <summary className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer list-none text-[11px] text-ink-muted hover:text-ink select-none">
+    <details className="group">
+      <summary className="flex items-center gap-1 py-0.5 cursor-pointer list-none text-[11px] text-ink-subtle hover:text-ink-muted select-none">
         <ChevronRight
           className="w-3 h-3 flex-shrink-0 transition-transform group-open:rotate-90"
           aria-hidden="true"
         />
         {titel}
-        <span className="text-ink-subtle">({aantal})</span>
+        <span className="tabular-nums">{aantal}</span>
       </summary>
-      <div className="px-2.5 pb-2.5 pt-0.5">{children}</div>
+      <div className="pl-4 pb-2 pt-1">{children}</div>
     </details>
   );
 }
 
 /**
- * Wat de assistent heeft ingezien. Standaard zichtbaar, niet uitklapbaar —
- * een medewerker die een getal doorgeeft aan een klant moet kunnen zien waar
- * het vandaan komt zonder ergens op te moeten klikken.
+ * Wat de assistent heeft ingezien, als doorlopende regel.
+ *
+ * Eerst waren dit omkaderde chips. Tien daarvan vullen het halve venster en
+ * lezen als een menu waar je iets uit moet kiezen — terwijl het een voetnoot is.
+ * Als tekst met puntjes ertussen loopt het gewoon door en kost het drie regels.
+ *
+ * Het onderscheid dat overblijft is het enige dat ertoe doet: wat hij heeft
+ * **geciteerd** staat donker, wat hij alleen heeft ingezien staat grijs. Dat is
+ * waar iemand naar zoekt als hij een getal narekent.
  */
 function Bronnen({ bronnen, gebruikt }: { bronnen: Bron[]; gebruikt: string[] }) {
   return (
-    <ul className="flex flex-wrap gap-1">
-        {bronnen.map((b) => {
-          const used = gebruikt.includes(b.id);
-          const inner = (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border",
-                used
-                  ? "text-brand-800 border-brand-300 bg-brand-50"
-                  : "text-ink-subtle border-brand-100 bg-white",
-              )}
-              title={used ? "Gebruikt in dit antwoord" : "Ingezien, niet geciteerd"}
-            >
-              {b.label}
-              {b.href && <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />}
-            </span>
-          );
-          return (
-            <li key={b.id}>{b.href ? <Link href={b.href}>{inner}</Link> : inner}</li>
-          );
-        })}
-    </ul>
+    <p className="text-[11px] leading-relaxed">
+      {bronnen.map((b, i) => {
+        const used = gebruikt.includes(b.id);
+        const inner = (
+          <span
+            className={cn(
+              used ? "text-brand-700 font-medium" : "text-ink-subtle",
+              b.href && "hover:underline",
+            )}
+            title={used ? "Gebruikt in dit antwoord" : "Ingezien, niet geciteerd"}
+          >
+            {b.label}
+            {b.href && (
+              <ExternalLink
+                className="inline w-2.5 h-2.5 ml-0.5 -translate-y-px"
+                aria-hidden="true"
+              />
+            )}
+          </span>
+        );
+        return (
+          <span key={b.id}>
+            {i > 0 && <span className="text-brand-200"> · </span>}
+            {b.href ? <Link href={b.href}>{inner}</Link> : inner}
+          </span>
+        );
+      })}
+    </p>
   );
 }

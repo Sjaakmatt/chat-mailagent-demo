@@ -187,9 +187,16 @@ Onder elk antwoord staan twee inklapbare balkjes: **Onderbouwing** (welke
 bewering door welke bron gedekt wordt) en **Ingezien** (alles wat de assistent
 kreeg, met een link erheen en gemarkeerd wat hij heeft geciteerd).
 
-Ze stonden eerst allebei open. Bij één bron valt dat mee; bij negen bronnen en
+Ze stonden eerst allebei open. Bij één bron valt dat mee; bij tien bronnen en
 zes citaten verdwijnt het antwoord boven een muur van herkomst en leest niemand
 het meer — de herkomst ook niet. Dichtklappen maakt het antwoord weer leesbaar.
+
+Het zijn **dunne grijze regels** en geen omkaderde blokken, en de bronnen erin
+zijn doorlopende tekst en geen chips. Een kader trekt evenveel aandacht als de
+inhoud die het moest wegnemen, en tien chips vullen het halve venster en lezen
+als een menu waar je iets uit moet kiezen — terwijl het een voetnoot is. Wat
+overblijft is het enige onderscheid dat telt: geciteerd staat donker, alleen
+ingezien staat grijs.
 
 De **telling staat in de kop** en dat is het hele punt van de constructie. Je
 ziet zonder klikken dát er zes beweringen onderbouwd zijn en negen bronnen zijn
