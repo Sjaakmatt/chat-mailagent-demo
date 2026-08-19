@@ -181,15 +181,28 @@ maakt de helft die niet klopt geloofwaardig.
 **"Ik weet het niet" is een goede uitkomst.** Het model heeft een expliciet veld
 om te zeggen dat het er niet staat. Modellen zonder dat veld vullen de leegte.
 
-## Bronnen zijn zichtbaar
+## Bronnen zijn zichtbaar, in twee balkjes
 
-Onder elk antwoord staat wat de assistent heeft ingezien, met een link erheen, en
-welke daarvan hij heeft geciteerd. Standaard zichtbaar, niet uitklapbaar. Een
-medewerker die een getal doorgeeft aan een klant moet kunnen zien waar het
-vandaan komt zonder ergens op te moeten klikken.
+Onder elk antwoord staan twee inklapbare balkjes: **Onderbouwing** (welke
+bewering door welke bron gedekt wordt) en **Ingezien** (alles wat de assistent
+kreeg, met een link erheen en gemarkeerd wat hij heeft geciteerd).
 
-Bij een weigering gaat die lijst ook mee: dan ziet hij wat de assistent wél had
-en kan hij zelf kijken.
+Ze stonden eerst allebei open. Bij één bron valt dat mee; bij negen bronnen en
+zes citaten verdwijnt het antwoord boven een muur van herkomst en leest niemand
+het meer — de herkomst ook niet. Dichtklappen maakt het antwoord weer leesbaar.
+
+De **telling staat in de kop** en dat is het hele punt van de constructie. Je
+ziet zonder klikken dát er zes beweringen onderbouwd zijn en negen bronnen zijn
+ingezien; je klikt alleen als je wilt weten wélke. Een balkje zonder telling zou
+hetzelfde verstoppen als weglaten, en dan is de grounding-belofte iets waar je
+maar op moet vertrouwen.
+
+Het zijn `<details>`-elementen en geen eigen open/dicht-state: toetsenbord,
+schermlezer en zoeken-op-de-pagina werken dan zonder dat wij daar iets voor
+doen.
+
+Bij een weigering gaat de bronnenlijst ook mee: dan zie je wat de assistent wél
+had en kun je zelf kijken.
 
 ## Rechten
 
