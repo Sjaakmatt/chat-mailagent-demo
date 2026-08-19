@@ -26,3 +26,4 @@ export * from './prompt.js';
 export * from './answer.js';
 export * from './analyse-gate.js';
 export * from './analyse-plan.js';
+export * from './inzicht.js';

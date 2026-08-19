@@ -79,18 +79,18 @@ interface Beurt {
  * voor is: beslissen over wat er in de bak ligt.
  */
 const ALGEMEEN = [
-  "Wat wacht er op mijn goedkeuring?",
-  "Waar moet een beheerder aan te pas komen?",
-  "Welk beleid geldt bij een creditnota?",
-  "Wat staat er het langst open?",
+  "Hoeveel vragen kwamen er vandaag binnen?",
+  "Welke vraag komt het vaakst terug?",
+  "Hoeveel klachten hebben we deze maand?",
+  "Bij hoeveel klanten speelt dit?",
 ];
 
-/** En mét een voorstel open: over dít besluit. */
+/** En mét een voorstel open: over deze klant en deze zaak. */
 const OVER_DIT = [
+  "Hoe vaak heeft deze klant al gemaild?",
+  "Waar gaat het bij hem meestal over?",
   "Waarom stelt hij dit voor?",
-  "Mag ik dit zelf goedkeuren?",
-  "Waar komt dit bedrag vandaan?",
-  "Heeft deze klant hier eerder over gemaild?",
+  "Is dit eerder voorgekomen?",
 ];
 
 export function AssistantDock({ moduleId }: { moduleId: string }) {
@@ -202,10 +202,10 @@ export function AssistantDock({ moduleId }: { moduleId: string }) {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {draad.length === 0 && (
           <p className="text-xs text-ink-muted leading-relaxed">
-            Vraag wat je nodig hebt om te beslissen over{" "}
-            {subject ? "dit voorstel" : "het werk in deze bak"}. Elk antwoord
-            komt met de bronnen erbij; kan hij iets niet herleiden, dan zegt hij
-            dat.
+            Vraag wat je wilt weten over{" "}
+            {subject ? "deze zaak en deze klant" : "het werk in deze bak"} —
+            aantallen, patronen, wat er speelt. Elk antwoord komt met de bronnen
+            erbij; kan hij iets niet herleiden, dan zegt hij dat.
           </p>
         )}
 
