@@ -32,6 +32,11 @@ import {
   type ReviewMetricRow,
 } from "@/lib/db";
 import { listTickets } from "@/lib/tickets";
+import {
+  listActionsByReviewItem,
+  toActionViewModel,
+  type CockpitAction,
+} from "@/lib/actions";
 import { mailProposed } from "./klantenservice";
 import type { ReviewItemRow } from "@/lib/review";
 
@@ -221,6 +226,68 @@ async function eerdereZakenSources(
 }
 
 /**
+ * De schrijfoperaties die bij dit voorstel klaarstaan.
+ *
+ * Dit is de bron voor de vraag die een medewerker in een werkbak het vaakst
+ * heeft en die nergens anders beantwoord werd: **mag ik dit zelf goedkeuren, en
+ * waar komt dat bedrag vandaan?**
+ *
+ * De assistent zag `aios_proposed_actions` niet. Hij kon dus wél uitleggen
+ * waarom de agent iets voorstelde, maar niet wat er dan precies zou worden
+ * weggeschreven, welke rang daarvoor nodig is, en waarop het voorstel is
+ * gebaseerd. Dat is precies het stuk waar iemand op klikt.
+ *
+ * De vereiste rang komt uit `toActionViewModel` en dus uit dezelfde registratie
+ * als de knop zelf. Zou dit hier zijn nagerekend, dan kan de assistent
+ * "medewerker" zeggen terwijl de knop een beheerder eist — en dan geloven
+ * mensen de assistent.
+ */
+function actiesSource(
+  reviewItemId: string,
+  acties: CockpitAction[],
+  nu: Date,
+): AssistantSource | null {
+  if (acties.length === 0) return null;
+
+  const blokken = acties.map((a) => {
+    const vm = toActionViewModel(a, nu);
+    return regelsVan(
+      `${vm.typeLabel} — status ${vm.status}${vm.expired ? " (verlopen)" : ""}`,
+      `  Impact: ${vm.impact}`,
+      `  Mag worden goedgekeurd door: ${vm.approverRole}`,
+      `  Geldig tot: ${vm.expiresAt}`,
+      vm.editedBy ? `  Bijgesteld door: ${vm.editedBy}` : null,
+      vm.reason ? `  Reden: ${vm.reason}` : null,
+      `  Velden:`,
+      ...vm.fields.map(
+        (f) =>
+          `    - ${f.label}: ${f.value}` +
+          (f.origineel ? ` (agent stelde voor: ${f.origineel})` : "") +
+          (f.toolCallId ? ` [dekking: ${f.toolCallId}]` : " [GEEN DEKKING]"),
+      ),
+      vm.precondition.length > 0
+        ? `  Gebaseerd op de systeemstaat: ${vm.precondition
+            .map((p) => `${p.field}=${p.value}`)
+            .join(", ")}`
+        : null,
+    );
+  });
+
+  return makeSource({
+    id: `acties:${reviewItemId}`,
+    kind: "voorstel",
+    label: `Klaargezette acties (${acties.length})`,
+    href: `/tickets`,
+    text: blokken.join("\n\n"),
+  });
+}
+
+/** Kleine helper: regels samenvoegen en de lege eruit. */
+function regelsVan(...r: (string | null)[]): string {
+  return r.filter((x): x is string => x !== null).join("\n");
+}
+
+/**
  * Alle bronnen bij één voorstel.
  *
  * Faalt een losse bron, dan valt die weg en gaat de rest door — een assistent
@@ -239,15 +306,23 @@ export async function collectKlantenserviceSources(
     proposed.original?.from ??
     null;
 
-  const [beslislog, rules, historie, eerder] = await Promise.all([
+  const [beslislog, rules, historie, eerder, acties] = await Promise.all([
     beslislogSource(client, row.id).catch(() => null),
     listPolicyRules(client).catch((): PolicyRuleRow[] => []),
     klanthistorieSources(client, email),
     eerdereZakenSources(client, category, row.id),
+    listActionsByReviewItem(client, [row.id]).catch(
+      () => new Map<string, CockpitAction[]>(),
+    ),
   ]);
+
+  const bijDitItem = actiesSource(row.id, acties.get(row.id) ?? [], new Date());
 
   return [
     voorstelSource(row),
+    // Vlak achter het voorstel: wat er klaarstaat om geschreven te worden gaat
+    // vóór de verantwoording waaróm. Een medewerker beslist hierover.
+    ...(bijDitItem ? [bijDitItem] : []),
     ...(beslislog ? [beslislog] : []),
     ...beleidSources(rules, category),
     ...historie,
@@ -395,6 +470,48 @@ function vanDezeModule(r: ReviewMetricRow): boolean {
 }
 
 /**
+ * Wat er wacht op een besluit, over de hele werkbak.
+ *
+ * De andere kant van dezelfde vraag: niet "mag ik dit goedkeuren" maar "waar
+ * wacht iets op mij". Met de vereiste rang erbij, want het praktische antwoord
+ * is meestal "drie dingen mag jij, één moet naar een beheerder".
+ */
+function openActiesSource(
+  perItem: Map<string, CockpitAction[]>,
+  nu: Date,
+): AssistantSource | null {
+  const open = [...perItem.values()]
+    .flat()
+    .map((a) => toActionViewModel(a, nu))
+    .filter((vm) => vm.open);
+  if (open.length === 0) return null;
+
+  const perRang = new Map<string, number>();
+  for (const vm of open) perRang.set(vm.approverRole, (perRang.get(vm.approverRole) ?? 0) + 1);
+
+  return makeSource({
+    id: "acties:open",
+    kind: "werkvoorraad",
+    label: `Wacht op goedkeuring (${open.length})`,
+    href: "/tickets",
+    text: [
+      `Aantal openstaande schrijfoperaties: ${open.length}`,
+      "",
+      "Per vereiste rang:",
+      ...[...perRang.entries()].map(([rol, n]) => `- ${rol}: ${n}`),
+      "",
+      "Wat er klaarstaat:",
+      ...open.map(
+        (vm) =>
+          `- ${vm.typeLabel}: ${vm.impact}` +
+          ` (rang: ${vm.approverRole}, geldig tot ${vm.expiresAt}` +
+          `${vm.expired ? ", VERLOPEN" : ""})`,
+      ),
+    ].join("\n"),
+  });
+}
+
+/**
  * De bronnen voor een gesprek zonder geopend voorstel.
  *
  * Dit is de assistent in de werkbak zelf: beleid, werkvoorraad, open tickets en
@@ -429,11 +546,20 @@ export async function collectKlantenserviceGeneralSources(
     (r) => r.applies_to.length === 0 || r.applies_to.some((c) => eigenCategorieen.has(c)),
   );
 
+  // Pas hier op te halen: de acties hangen aan de review-items die net door de
+  // modulezeef zijn gegaan, dus eerder zou de vraag te breed zijn.
+  const acties = await listActionsByReviewItem(
+    client,
+    mijn.filter((r) => r.status === "PENDING").map((r) => r.id),
+  ).catch(() => new Map<string, CockpitAction[]>());
+
   const open = openTicketsSource(tickets);
   const recent = recentBeslistSource(mijn);
+  const wachtend = openActiesSource(acties, new Date());
 
   return [
     werkvoorraadSource(mijn),
+    ...(wachtend ? [wachtend] : []),
     ...(open ? [open] : []),
     // Alle regels van déze module: zonder voorstel is er geen categorie om op
     // te matchen, en "welk beleid geldt bij X" is juist de vraag die generiek

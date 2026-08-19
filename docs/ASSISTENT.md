@@ -45,10 +45,20 @@ gaat, gaat via de bestaande knoppen.
 
 ## Wat hij kan
 
+**Hij is er voor de medewerker, niet voor de klant.** Dat onderscheid stuurt wat
+hij mag lezen en welke voorbeeldvragen er staan. "Wat kost module X" is een
+klantvraag: die hoort de agent te beantwoorden in een concept dat langs een mens
+gaat. De assistent beantwoordt de vraag díé mens heeft — mag ik dit goedkeuren,
+waar komt dat bedrag vandaan, wat is hier eerder besloten. Staat er een
+klantvraag als voorbeeld in het venster, dan wordt het een productencyclopedie
+en mist het waar het voor is.
+
 Bij een geopend voorstel:
 
 | Vraag | Bron |
 | --- | --- |
+| Mag ik dit zelf goedkeuren? | De klaargezette acties, met de vereiste rang uit dezelfde registratie als de knop |
+| Waar komt dit bedrag vandaan? | De payloadvelden met hun dekking per veld, en de systeemstaat waarop het voorstel rust |
 | Waarom stelt hij dit voor? | Het beslislog van die run: poort, categorie, specialist, stappen, geraadpleegde bronnen, afgekeurde claims |
 | Wat is de geschiedenis van deze klant? | Eerdere tickets van hetzelfde e-mailadres |
 | Welk beleid geldt hier? | De beleidsregels die op de categorie matchen, met de vindplaats |
@@ -58,6 +68,7 @@ En zonder:
 
 | Vraag | Bron |
 | --- | --- |
+| Wat wacht er op mijn goedkeuring? | De openstaande schrijfoperaties, geteld per vereiste rang |
 | Wat staat er nu open? | De werkvoorraad, uitgeschreven per status en per categorie |
 | Welke tickets liggen er nog? | De openstaande tickets, met wie ze heeft opgepakt |
 | Welk beleid geldt bij X? | Alle actieve beleidsregels van deze module |

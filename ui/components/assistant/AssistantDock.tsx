@@ -68,20 +68,29 @@ interface Beurt {
   error: string | null;
 }
 
-/** Voorbeeldvragen zonder geopend voorstel: over het proces. */
+/**
+ * Voorbeeldvragen. Ze doen meer dan tijd besparen: ze zetten de verwachting.
+ *
+ * Daarom zijn het allemaal vragen van een **medewerker over zijn eigen werk**,
+ * en niet vragen die een klant zou stellen. "Wat kost de kennisbank" is een
+ * klantvraag; die hoort de agent te beantwoorden in een concept, niet de
+ * assistent aan een collega. Zou zo'n vraag hier als voorbeeld staan, dan
+ * gebruikt iedereen dit venster als productencyclopedie en mist hij waar het
+ * voor is: beslissen over wat er in de bak ligt.
+ */
 const ALGEMEEN = [
-  "Wat staat er nu open?",
+  "Wat wacht er op mijn goedkeuring?",
+  "Waar moet een beheerder aan te pas komen?",
   "Welk beleid geldt bij een creditnota?",
-  "Welke tickets liggen er nog?",
-  "Wat is er vandaag afgehandeld?",
+  "Wat staat er het langst open?",
 ];
 
-/** En mét: over dat ene voorstel. */
+/** En mét een voorstel open: over dít besluit. */
 const OVER_DIT = [
   "Waarom stelt hij dit voor?",
-  "Wat is de geschiedenis van deze klant?",
-  "Welk beleid geldt hier?",
-  "Is dit eerder voorgekomen?",
+  "Mag ik dit zelf goedkeuren?",
+  "Waar komt dit bedrag vandaan?",
+  "Heeft deze klant hier eerder over gemaild?",
 ];
 
 export function AssistantDock({ moduleId }: { moduleId: string }) {
@@ -193,8 +202,8 @@ export function AssistantDock({ moduleId }: { moduleId: string }) {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {draad.length === 0 && (
           <p className="text-xs text-ink-muted leading-relaxed">
-            Vraag wat je wilt weten over{" "}
-            {subject ? "dit voorstel" : "het werk in deze werkbak"}. Elk antwoord
+            Vraag wat je nodig hebt om te beslissen over{" "}
+            {subject ? "dit voorstel" : "het werk in deze bak"}. Elk antwoord
             komt met de bronnen erbij; kan hij iets niet herleiden, dan zegt hij
             dat.
           </p>
