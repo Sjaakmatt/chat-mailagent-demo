@@ -3,7 +3,10 @@ import {
   aggregationSource,
   buildAnalysePlanPrompt,
   finalizeAssistantAnswer,
+  makeSource,
+  mightBeAggregationQuestion,
   parseAnalysePlan,
+  parseAssistantAnswer,
   resolveAnalysePlan,
   type AggregationCatalogEntry,
   type AggregationSummary,
@@ -203,21 +206,85 @@ describe('geen aggregatievraag versus mislukte aggregatie', () => {
     expect(plan.ok === false && plan.geenAggregatievraag).toBe(true);
   });
 
-  it('markeert een verzonnen tool NIET zo — daar werd wél om een cijfer gevraagd', () => {
+  it('markeert een verzonnen tool ook zo — er is dan geen aggregatie gekozen', () => {
+    // Modellen vullen `cannotAnswer` lang niet altijd in; ze verzinnen liever
+    // een toolnaam. Bij "hoeveel tickets staan er open?" komt er met een
+    // catalogus van twee aggregaties een derde uit die niet bestaat. Weigeren
+    // zou daar onzin zijn: het aantal staat in de werkvoorraad-bron, en het
+    // dossierpad kan het er gedekt uit halen.
     const plan = resolveAnalysePlan(
       { tool: 'aggregate_omzet', args: { van: '2026-01-01', tot: '2026-01-31' }, cannotAnswer: null },
       catalog,
     );
     expect(plan.ok).toBe(false);
-    expect(plan.ok === false && plan.geenAggregatievraag).toBeFalsy();
+    expect(plan.ok === false && plan.geenAggregatievraag).toBe(true);
   });
 
-  it('markeert een ontbrekende periode NIET zo', () => {
+  it('markeert een ontbrekende periode NIET zo — daar is wél een echte aggregatie gekozen', () => {
     const plan = resolveAnalysePlan(
       { tool: 'aggregate_complaint_rate', args: {}, cannotAnswer: null },
       catalog,
     );
     expect(plan.ok).toBe(false);
     expect(plan.ok === false && plan.geenAggregatievraag).toBeFalsy();
+  });
+});
+
+describe('mightBeAggregationQuestion', () => {
+  const wel = [
+    'Hoeveel procent van de tickets was vorige maand een klacht?',
+    'Wat is de gemiddelde doorlooptijd?',
+    'Hoe vaak komt dit voor?',
+    'Geef me het aantal klachten over de laatste 30 dagen',
+    'Wat is het aandeel storingen dit kwartaal?',
+    'Zit er een stijging in?',
+  ];
+  const niet = [
+    'Waarom stelt hij dit voor?',
+    'Welk beleid geldt hier?',
+    'Wat is de geschiedenis van deze klant?',
+    'Wat staat er nu open?',
+    'Mag ik deze creditnota zelf goedkeuren?',
+    'Is dit eerder voorgekomen?',
+  ];
+
+  for (const v of wel) {
+    it(`herkent een grootheid in: ${v}`, () => {
+      expect(mightBeAggregationQuestion(v)).toBe(true);
+    });
+  }
+
+  for (const v of niet) {
+    it(`slaat de planner over bij: ${v}`, () => {
+      expect(mightBeAggregationQuestion(v)).toBe(false);
+    });
+  }
+
+  it('is hoofdletterongevoelig', () => {
+    expect(mightBeAggregationQuestion('HOEVEEL TICKETS?')).toBe(true);
+  });
+
+  // Dit is de eigenschap die het een kostenfilter maakt en geen poort: valt een
+  // vraag er ten onrechte buiten, dan gaat hij naar het dossierpad — en dat
+  // pad heeft dezelfde grounding-controle. Er ontstaat nooit een ongedekt getal
+  // doordat dit filter iets mist.
+  it('kan niets doorlaten wat de controle daarna niet ziet', () => {
+    const bron = makeSource({
+      id: 'beleid:1',
+      kind: 'beleid',
+      label: 'Regel',
+      text: 'Bij een klacht binnen 24 uur reageren.',
+    });
+    const uit = finalizeAssistantAnswer(
+      parseAssistantAnswer(
+        JSON.stringify({
+          answer: 'Er waren 12 klachten.',
+          claims: [{ statement: 'Er waren 12 klachten.', sourceId: 'beleid:1' }],
+          cannotAnswer: null,
+        }),
+      ),
+      [bron],
+    );
+    expect(uit.ok).toBe(false);
   });
 });
