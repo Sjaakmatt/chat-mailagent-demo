@@ -23,6 +23,10 @@ import {
   collectKlantenserviceGeneralSources,
   collectKlantenserviceSources,
 } from "./klantenservice-sources";
+import {
+  collectDemoSourcesForOrder,
+  collectDemoSystemSources,
+} from "./klantenservice-demo-sources";
 import { klantenserviceAuditSource } from "./klantenservice-audit";
 
 /**
@@ -175,6 +179,19 @@ function badgesFor(row: ReviewItemRow, proposed: MailProposedContent): CardBadge
   return badges;
 }
 
+/**
+ * Het ordernummer dat de classificatie uit het bericht heeft gehaald.
+ *
+ * Uit de run en niet uit de payload van een actie: een werkticket draagt geen
+ * ordernummer, en dan zou "geen ordernummer" in het dossier belanden terwijl de
+ * klant het gewoon genoemd heeft.
+ */
+function orderNumberOf(row: ReviewItemRow): string | null {
+  const extracted = mailProposed(row).classification?.extracted;
+  const nummer = extracted?.orderNumber;
+  return typeof nummer === "string" && nummer.trim() ? nummer.trim() : null;
+}
+
 export const klantenserviceModule: WorkbenchModule = {
   id: KLANTENSERVICE_MODULE.id,
   label: KLANTENSERVICE_MODULE.label,
@@ -184,8 +201,24 @@ export const klantenserviceModule: WorkbenchModule = {
   kinds: KLANTENSERVICE_MODULE.kinds,
   categories: KLANTENSERVICE_MODULE.categories,
   detailHref,
-  collectSources: collectKlantenserviceSources,
-  collectGeneralSources: collectKlantenserviceGeneralSources,
+  // Maatwerk van deze demo: naast de cockpit-bronnen uit het fundament leest
+  // de assistent ook de demo-bronsystemen. Bij een echte klant komt die kennis
+  // uit de MCP's; hier staat ze in `demo_*`. Zie
+  // `klantenservice-demo-sources.ts` voor waarom dat verschil er is.
+  async collectSources(client, row) {
+    const [basis, uitBron] = await Promise.all([
+      collectKlantenserviceSources(client, row),
+      collectDemoSourcesForOrder(client, orderNumberOf(row)),
+    ]);
+    return [...basis, ...uitBron];
+  },
+  async collectGeneralSources(client) {
+    const [basis, uitBron] = await Promise.all([
+      collectKlantenserviceGeneralSources(client),
+      collectDemoSystemSources(client),
+    ]);
+    return [...basis, ...uitBron];
+  },
   toCard(row: ReviewItemRow): ReviewCardViewModel {
     const proposed = mailProposed(row);
     const triage = triageOf(row);
