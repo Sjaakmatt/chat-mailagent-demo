@@ -201,6 +201,30 @@ jobs:
         run: |
           set -euo pipefail
           git checkout -q main
+
+          # Main kan zijn verschoven terwijl wij aan het verifiëren waren — een
+          # mens die zelf mergede, of een tweede run. Zonder deze controle
+          # pusht deze stap een tip die achterloopt, krijgt "non-fast-forward"
+          # terug, en faalt de hele workflow rood terwijl er niets mis is.
+          #
+          # Een rode workflow die je moet leren negeren is erger dan geen
+          # workflow: de volgende keer dat hij rood staat kijkt niemand meer.
+          git fetch --quiet origin main
+
+          if git merge-base --is-ancestor upstream/main origin/main; then
+            echo "::notice::Main bevat deze fundament-update al (iemand was ons voor). Niets te doen."
+            exit 0
+          fi
+
+          if [ "$(git rev-parse origin/main)" != "$(git rev-parse main)" ]; then
+            # Main is om een ándere reden verschoven. Dan is onze verificatie op
+            # de oude basis gedraaid en zegt hij niets meer over wat er nu zou
+            # landen. Niet alsnog pushen: de volgende run doet het opnieuw,
+            # mét verificatie op de juiste basis.
+            echo "::notice::Main is verschoven tijdens de verificatie. Deze run landt niets; de volgende pakt 'm op vanaf de nieuwe basis."
+            exit 0
+          fi
+
           git merge --ff-only sync-probe
           git push origin main
           echo "::notice::Fundament-update gemerged naar main."
