@@ -53,7 +53,11 @@
     // Toegang-pagina toont per voorwaarde waarom hij aan of uit staat.
     // Beide vereisen het secret ANTHROPIC_API_KEY.
     "ASSISTANT_DOSSIER": "true",
-    "ASSISTANT_ANALYSE": "true",
+    // Laag 2 (aggregatie via de MCP's) staat UIT tot de klantkoppelingen er
+    // zijn. Zonder bereikbare MCP levert hij alleen een extra modelcall en een
+    // weigering op cijfervragen op, terwijl het inzicht dat de demo laat zien
+    // uit de cockpit-database zelf komt en die telt gewoon.
+    // "ASSISTANT_ANALYSE": "true",
     // Aan: dit is de demo-repo. Zet dit NOOIT op een productie-cockpit — het
     // laat een beheerder synthetische mail in de echte werkbak zetten.
     "DEMO_MODE": "true"
@@ -111,8 +115,9 @@
         // iets (fail-closed), en dat lijkt dan op een kapotte staging.
         "LICENSED_MODULES": "*",
         "MODEL_ASSISTANT": "claude-sonnet-5",
-        "ASSISTANT_DOSSIER": "true",
-        "ASSISTANT_ANALYSE": "true"
+        // Zie de opmerking bij de prod-vars: laag 2 wacht op de MCP-koppelingen.
+        // "ASSISTANT_ANALYSE": "true"
+        "ASSISTANT_DOSSIER": "true"
       }
     }
   }
