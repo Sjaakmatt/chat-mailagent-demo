@@ -95,13 +95,39 @@ toevallig een telling was.
 
 Het onderscheid dat telt zit in `resolveAnalysePlan`:
 
+De regel: **weiger alleen als er een échte aggregatie is gekozen die niet
+geleverd kan worden.**
+
 | Uitkomst | Wat er gebeurt |
 | --- | --- |
-| Er werd niets geteld (`geenAggregatievraag`) | Doorlopen naar het dossierpad |
-| Wél een cijfervraag, maar de aggregatie lukt niet | Weigeren mét de reden |
+| Het model zegt dat er niets te tellen valt | Doorlopen naar het dossierpad |
+| Het model verzint een toolnaam | Doorlopen — er ís dan geen aggregatie gekozen |
+| Onleesbaar plan | Doorlopen |
+| Bestaande tool, maar geen periode | Weigeren: noem een periode |
+| Bestaande tool, maar de MCP faalt of je mag het niet zien | Weigeren mét de reden |
 
-Dat tweede blijft een weigering, want anders vroeg de gebruiker om een cijfer en
-krijgt hij een verhaal — en dan vult hij het getal zelf in.
+Die verzonnen toolnaam is geen randgeval. Modellen vullen `cannotAnswer` lang
+niet altijd in; ze kiezen liever iets dat er ongeveer op lijkt. Bij "hoeveel
+tickets staan er open?" komt er met een catalogus van twee aggregaties een derde
+uit die niet bestaat — en weigeren is daar onzin, want het aantal staat gewoon
+in de werkvoorraad-bron. Doorlaten is veilig omdat het dossierpad niets kan
+verzinnen: elk getal moet daar letterlijk in een bron staan.
+
+De onderste twee blijven een weigering, want daar vroeg iemand om een concreet
+cijfer dat wél bestaat. Een verhaal terugkrijgen betekent dat hij het getal zelf
+invult.
+
+### Het voorfilter ervoor
+
+`mightBeAggregationQuestion` kijkt vóór de planner of er überhaupt om een
+grootheid wordt gevraagd. Puur kosten: zonder dat deed élke vraag eerst een
+modelcall om te horen dat er niets te tellen viel.
+
+Het is nadrukkelijk **geen poort** — poorten in dit product zijn mechanismen,
+geen inschattingen. Hij kan ook niets tegenhouden: ten onrechte ja kost één
+overbodige call, ten onrechte nee stuurt de vraag naar het dossierpad, waar
+dezelfde grounding-controle staat. In geen van beide gevallen ontstaat er een
+getal dat er niet hoort. Daarom staat de lijst ruim: bij twijfel ja.
 
 Twee controles in `finalizeAssistantAnswer`, met een verschillende betekenis:
 

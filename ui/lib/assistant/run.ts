@@ -19,6 +19,7 @@
 import {
   buildAssistantPrompt,
   finalizeAssistantAnswer,
+  mightBeAggregationQuestion,
   parseAssistantAnswer,
   type AggregationSummary,
   type AssistantResult,
@@ -130,8 +131,12 @@ export async function askAssistant(
   //
   // Dat tweede blijft een weigering omdat de gebruiker anders om een cijfer
   // vroeg en een verhaal terugkrijgt — en dan vult hij het getal zelf in.
+  //
+  // Het voorfilter ervoor is puur kosten: zonder dat deed élke vraag eerst een
+  // modelcall om te horen dat er niets te tellen viel. Het houdt niets tegen —
+  // zie `mightBeAggregationQuestion`.
   let aggregatie: AssistantRunResult["aggregatie"];
-  if (options.analyse) {
+  if (options.analyse && mightBeAggregationQuestion(question)) {
     const outcome = await planAndRunAggregation(
       env,
       question,

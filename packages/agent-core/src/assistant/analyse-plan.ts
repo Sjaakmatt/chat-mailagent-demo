@@ -139,6 +139,71 @@ export function buildAnalysePlanPrompt(
   ];
 }
 
+/**
+ * Woorden die verraden dat er om een grootheid wordt gevraagd.
+ *
+ * Ze worden gematcht op woordbegin, niet als losse tekenreeks. Dat is niet
+ * kosmetisch: op tekenreeks matcht `tel` in "s**tel**t hij dit voor", en dan
+ * gaat precies de vraag waarvoor dit filter bestaat alsnog langs de planner.
+ * Met woordbegin dekt één term ook de verbuigingen — `gemiddeld` vangt
+ * "gemiddelde", `aantal` vangt "aantallen".
+ *
+ * Niet uitputtend en dat hoeft ook niet — zie `mightBeAggregationQuestion` voor
+ * waarom een gemiste term hier geen fout antwoord oplevert.
+ */
+const TELWOORDEN: readonly string[] = Object.freeze([
+  // hoeveelheid
+  'hoeveel', 'aantal', 'totaal', 'tel',
+  // verhouding
+  'percentage', 'procent', 'aandeel', 'verhouding', 'ratio', 'deel van',
+  // middelen en spreiding
+  'gemiddeld', 'mediaan', 'spreiding',
+  // duur en frequentie
+  'doorlooptijd', 'hoe vaak', 'hoe lang', 'hoe snel', 'frequentie',
+  // beweging
+  'trend', 'groei', 'daling', 'stijging', 'toename', 'afname',
+  // vorm van het antwoord
+  'cijfer', 'statistiek', 'meest', 'vaakst', 'top',
+  // periode — een aggregatie zonder periode bestaat hier niet, dus een vraag
+  // met een periode erin is een serieuze kandidaat
+  'vorige maand', 'vorige week', 'afgelopen', 'dit jaar', 'vorig jaar',
+  'dit kwartaal', 'per maand', 'per week', 'per dag', 'per kwartaal',
+  'sinds', 'tussen',
+]);
+
+/**
+ * Zou dit een aggregatievraag kúnnen zijn?
+ *
+ * Een voorfilter vóór de planner, en uitsluitend om kosten: zonder dit doet
+ * elke vraag — ook "waarom stelt hij dit voor" — eerst een modelcall om te
+ * horen dat er niets te tellen valt. Dat is een seconde en een call per vraag,
+ * voor een antwoord dat je aan de vraag kunt zien.
+ *
+ * ## Waarom een heuristiek hier mag
+ *
+ * Omdat hij niets kan tegenhouden. De twee kanten zijn niet gelijkwaardig:
+ *
+ *   ten onrechte ja  → één overbodige modelcall, daarna gewoon het dossierpad
+ *   ten onrechte nee → de vraag gaat naar het dossier, dat antwoordt op zijn
+ *                      eigen bronnen of zegt eerlijk dat het er niet staat
+ *
+ * In geen van beide gevallen ontstaat er een getal dat er niet hoort te staan —
+ * de grounding-controle staat achter béíde paden. Het ergste wat er misgaat is
+ * "dat kan ik hier niet vinden" op een vraag die met een extra call wél was
+ * gelukt. Daarom staat de lijst ruim: bij twijfel ja.
+ *
+ * Dit is dus geen poort. Poorten in dit product zijn mechanismen, geen
+ * inschattingen; deze functie is een kostenbesparing met een begrensde
+ * mislukking, en hij hoort nooit iets te zijn waar een controle op leunt.
+ */
+export function mightBeAggregationQuestion(question: string): boolean {
+  const v = question.toLowerCase();
+  // Een getal met een eenheid eraan ("laatste 30 dagen") telt ook mee.
+  if (/\d+\s*(dag|week|weken|maand|kwartaal|jaar)/.test(v)) return true;
+  if (v.includes('%')) return true;
+  return TELWOORDEN.some((w) => new RegExp(`\\b${w}`).test(v));
+}
+
 /** Leest de keuze van het model. Null bij onleesbare output. */
 export function parseAnalysePlan(raw: string): ParsedAnalysePlan | null {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -204,12 +269,25 @@ export function resolveAnalysePlan(
 
   const entry = catalog.find((c) => c.tool === parsed.tool);
   if (!entry) {
-    // Het model verzon een tool. Niet benaderen met iets wat er wél is.
+    // Het model verzon een tool. We benaderen hem niet met iets wat er wél is —
+    // maar dit is ook geen reden om de vraag te laten vallen.
+    //
+    // Een gekozen tool die niet bestaat, betekent dat er géén echte aggregatie
+    // is geselecteerd. Dat is hetzelfde als "hier valt niets te tellen", alleen
+    // met een model dat liever iets verzint dan `cannotAnswer` invult. En dat
+    // doet het vaak: bij "hoeveel tickets staan er open?" met een catalogus van
+    // twee aggregaties komt er een `aggregate_open_tickets` uit die niet
+    // bestaat. Weigeren op die vraag is onzin — het aantal staat gewoon in de
+    // werkvoorraad-bron, en het dossierpad kan het daar gedekt uit halen.
+    //
+    // Doorlaten is veilig omdat het dossierpad niets kan verzinnen: elk getal
+    // moet daar letterlijk in een bron staan.
     return {
       ok: false,
       reden:
         `Die aggregatie bestaat hier niet (${parsed.tool}). ` +
-        'Ik benader hem niet met een andere; vraag of hij gebouwd kan worden.',
+        'Ik benader hem niet met een andere.',
+      geenAggregatievraag: true,
     };
   }
 
@@ -217,6 +295,9 @@ export function resolveAnalysePlan(
   const van = typeof args.van === 'string' ? args.van : null;
   const tot = typeof args.tot === 'string' ? args.tot : null;
   if (!van || !tot) {
+    // Hier is wél een bestaande aggregatie gekozen, alleen niet uitvoerbaar
+    // zoals gevraagd. Dat is bruikbare feedback en geen routering: de gebruiker
+    // hoort te weten dat hij een periode moet noemen.
     return {
       ok: false,
       reden: 'Ik heb een periode nodig — een cijfer zonder periode zegt niets.',
