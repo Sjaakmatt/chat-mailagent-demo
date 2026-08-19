@@ -19,7 +19,11 @@
 
 import {
   KLANTENSERVICE_MODULE,
+  klantInzichtSource,
   makeSource,
+  perKlantSource,
+  terugkerendSource,
+  volumeSource,
   type AssistantSource,
   type Ticket,
 } from "@factumai/agent-core";
@@ -37,6 +41,7 @@ import {
   toActionViewModel,
   type CockpitAction,
 } from "@/lib/actions";
+
 import { mailProposed } from "./klantenservice";
 import type { ReviewItemRow } from "@/lib/review";
 
@@ -306,7 +311,7 @@ export async function collectKlantenserviceSources(
     proposed.original?.from ??
     null;
 
-  const [beslislog, rules, historie, eerder, acties] = await Promise.all([
+  const [beslislog, rules, historie, eerder, acties, alleRijen] = await Promise.all([
     beslislogSource(client, row.id).catch(() => null),
     listPolicyRules(client).catch((): PolicyRuleRow[] => []),
     klanthistorieSources(client, email),
@@ -314,9 +319,18 @@ export async function collectKlantenserviceSources(
     listActionsByReviewItem(client, [row.id]).catch(
       () => new Map<string, CockpitAction[]>(),
     ),
+    listReviewRows(client, 500).catch((): ReviewMetricRow[] => []),
   ]);
 
   const bijDitItem = actiesSource(row.id, acties.get(row.id) ?? [], new Date());
+  // Deze klant in cijfers: hoe vaak heeft hij gemaild, waarover, en hoe vaak
+  // ging het al eerder over hetzelfde. Dat is de vraag achter "is dit eerder
+  // voorgekomen" — een lijst zaken beantwoordt 'm niet, een telling wel.
+  const klantCijfers = klantInzichtSource(
+    alleRijen.filter(vanDezeModule),
+    email,
+    row.id,
+  );
 
   return [
     voorstelSource(row),
@@ -325,6 +339,7 @@ export async function collectKlantenserviceSources(
     ...(bijDitItem ? [bijDitItem] : []),
     ...(beslislog ? [beslislog] : []),
     ...beleidSources(rules, category),
+    ...(klantCijfers ? [klantCijfers] : []),
     ...historie,
     ...eerder,
   ];
@@ -557,8 +572,20 @@ export async function collectKlantenserviceGeneralSources(
   const recent = recentBeslistSource(mijn);
   const wachtend = openActiesSource(acties, new Date());
 
+  // De cijfers over het werk zelf. Deterministisch geteld en uitgeschreven, want
+  // het model rekent niet — het leest en citeert.
+  const klachtCategorieen = KLANTENSERVICE_MODULE.categories
+    .filter((c) => c.slug === "klacht" || c.slug === "storing_sla")
+    .map((c) => c.slug);
+  const perKlant = perKlantSource(mijn, tickets, klachtCategorieen);
+  const terugkerend = terugkerendSource(mijn);
+
   return [
     werkvoorraadSource(mijn),
+    // Vooraan: dit is waar een medewerker het vaakst naar vraagt.
+    volumeSource(mijn, new Date()),
+    ...(perKlant ? [perKlant] : []),
+    ...(terugkerend ? [terugkerend] : []),
     ...(wachtend ? [wachtend] : []),
     ...(open ? [open] : []),
     // Alle regels van déze module: zonder voorstel is er geen categorie om op
