@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireAccess } from "@/lib/auth/access";
 import { cockpitEnv, makeClient, listAuditEntriesForExport } from "@/lib/db";
-import { domainAuditSources } from "@/lib/audit-sources";
+import { allowedDomainSources } from "@/lib/audit-sources";
 import { auditEntriesToCsv } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +10,22 @@ export const dynamic = "force-dynamic";
  * GET /api/audit/export?status=&q=&from=&to=  — CSV van besliste ReviewItems.
  * Zelfde server-side filtering als de auditlog-pagina (geen paginering: alle
  * matches tot een hoge cap). Reviewer+ mag exporteren.
+ *
+ * De modulegrens loopt via `requireAccess` en niet via `requireRole`. Dat was
+ * het gat: de pagina toonde straks alleen je eigen afdelingen, maar de export
+ * erachter keek alleen naar de rang — dus stond de hele auditlog van elk proces
+ * één klik verderop in een CSV.
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  const guard = await requireRole("reviewer");
-  if (guard instanceof NextResponse) return guard;
+  const me = await requireAccess("reviewer");
+  if (me instanceof NextResponse) return me;
 
   const p = request.nextUrl.searchParams;
   const src = p.get("source");
-  const validSources = ["review", ...domainAuditSources().map((d) => d.id)];
+  const validSources = [
+    "review",
+    ...allowedDomainSources(me.modules).map((d) => d.id),
+  ];
   const source: string = src && validSources.includes(src) ? src : "all";
   let entries;
   try {
@@ -29,6 +37,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       decidedBy: p.get("decidedBy") ?? undefined,
       category: p.get("category") ?? undefined,
       source,
+      modules: me.modules,
     });
   } catch {
     return NextResponse.json({ error: "fetch_failed" }, { status: 500 });

@@ -15,8 +15,9 @@ import {
   listAuditEntriesPage,
   listAuditFacets,
 } from "@/lib/db";
-import { domainAuditSources } from "@/lib/audit-sources";
-import { categoryLabel } from "@/lib/modules";
+import { allowedDomainSources } from "@/lib/audit-sources";
+import { categoryLabel, moduleById } from "@/lib/modules";
+import { getCurrentAccess } from "@/lib/auth/access";
 import { timeAgoNL } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +58,14 @@ export default async function AuditPage({
   }>;
 }) {
   const sp = await searchParams;
+  // De modules waar deze gebruiker in mag. Alles hieronder — de bronfilter, de
+  // query, de facetten — wordt daarop ingekort. De layout laat niemand zonder
+  // sessie hier komen; valt het toch weg, dan is leeg het juiste antwoord en
+  // niet "alles".
+  const me = await getCurrentAccess();
+  const mijnModules = me?.modules ?? [];
+  const bronnen = allowedDomainSources(mijnModules);
+
   const status = sp.status ?? "";
   const q = sp.q ?? "";
   const from = sp.from ?? "";
@@ -64,7 +73,7 @@ export default async function AuditPage({
   const decidedBy = sp.decidedBy ?? "";
   const category = sp.category ?? "";
   const sourceParam = sp.source ?? "";
-  const validSources = ["review", ...domainAuditSources().map((s) => s.id)];
+  const validSources = ["review", ...bronnen.map((s) => s.id)];
   const source: string = validSources.includes(sourceParam) ? sourceParam : "all";
   const page = Math.max(0, Number.parseInt(sp.page ?? "0", 10) || 0);
 
@@ -85,10 +94,11 @@ export default async function AuditPage({
         decidedBy,
         category,
         source,
+        modules: mijnModules,
         page,
         pageSize: PAGE_SIZE,
       }),
-      listAuditFacets(client),
+      listAuditFacets(client, mijnModules),
     ]);
     entries = res.entries;
     hasNext = res.hasNext;
@@ -156,8 +166,8 @@ export default async function AuditPage({
             className="rounded-lg border border-brand-200 px-3 py-2 text-sm bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <option value="">Alle bronnen</option>
-            <option value="review">Mail-beslissingen</option>
-            {domainAuditSources().map((src) => (
+            <option value="review">Beslissingen</option>
+            {bronnen.map((src) => (
               <option key={src.id} value={src.id}>
                 {src.label}
               </option>
@@ -169,13 +179,13 @@ export default async function AuditPage({
             className="rounded-lg border border-brand-200 px-3 py-2 text-sm bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <option value="">Alle acties</option>
-            <optgroup label="Mail">
+            <optgroup label="Beslissingen">
               <option value="APPROVED">Goedgekeurd</option>
               <option value="EDITED">Bewerkt</option>
               <option value="EXECUTED">Verstuurd</option>
               <option value="REJECTED">Afgewezen</option>
             </optgroup>
-            {domainAuditSources().map((src) => (
+            {bronnen.map((src) => (
               <optgroup key={src.id} label={src.label}>
                 {src.actions.map((a) => (
                   <option key={a} value={a}>
@@ -238,14 +248,20 @@ export default async function AuditPage({
                     label: e.action,
                     cls: "bg-surface-muted text-ink-muted border-brand-100",
                   };
-                  const domainSrc = domainAuditSources().find(
-                    (s) => s.id === e.source,
-                  );
+                  const domainSrc = bronnen.find((s) => s.id === e.source);
                   const SourceIcon = domainSrc ? Package : Mail;
                   const domainHref = domainSrc?.linkHref?.(e) ?? null;
                   const categoryNice = e.source === "review" && e.meta
-                    ? (categoryLabel(e.meta) ?? e.meta)
+                    ? (categoryLabel(e.meta, e.module) ?? e.meta)
                     : null;
+                  // De bron van een event is een voorstel, en waar dát te zien
+                  // is weet alleen zijn module. Kent de schil de module niet
+                  // (meer), dan is er geen link — liever geen link dan een die
+                  // naar het verkeerde proces wijst.
+                  const bronHref =
+                    e.reviewItemId
+                      ? (moduleById(e.module)?.detailHref(e.reviewItemId) ?? null)
+                      : null;
                   return (
                     <div
                       key={e.key}
@@ -287,13 +303,14 @@ export default async function AuditPage({
                             <Package className="w-4 h-4" />
                           </Link>
                         )}
-                        {/* Naar de bron-mail (geldt ook voor domein-events: die
-                            zijn altijd uit een mail ontstaan via review_item_id). */}
-                        {e.reviewItemId ? (
+                        {/* Naar het bron-voorstel (geldt ook voor domein-events:
+                            die zijn uit een voorstel ontstaan via
+                            review_item_id). */}
+                        {bronHref ? (
                           <Link
-                            href={`/mail/${encodeURIComponent(e.reviewItemId)}`}
+                            href={bronHref}
                             className="text-ink-subtle hover:text-brand-700"
-                            title="Bekijk bron-mail"
+                            title="Bekijk bron"
                           >
                             <ExternalLink className="w-4 h-4" />
                           </Link>

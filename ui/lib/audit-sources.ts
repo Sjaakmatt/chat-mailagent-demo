@@ -14,10 +14,21 @@
 import { moduleAuditSources } from "./modules";
 import type { AuditEntry, AuditQuery } from "./db";
 import type { CockpitDbClient } from "./tenant-query";
+import type { ModuleId } from "@factumai/agent-core";
 
 export interface DomainAuditSource {
   /** Slug in `AuditEntry.source` en in de bron-dropdown (bv. "warehouse"). */
   id: string;
+  /**
+   * De module waar deze bron bij hoort. Gezet door de registry voor bronnen die
+   * op een module hangen; leeg voor klantspecifieke bronnen, en die zijn dan
+   * voor iedereen zichtbaar die de auditlog mag lezen.
+   *
+   * Bepaalt of een gebruiker deze events te zien krijgt: de events van een
+   * afdeling waar je niet in mag, horen net zo goed niet in jouw tijdlijn als
+   * de voorstellen van die afdeling.
+   */
+  module?: ModuleId;
   /** Label in de bron-dropdown en de CSV-kolom (bv. "Magazijn"). */
   label: string;
   /**
@@ -80,9 +91,28 @@ export function domainAuditActions(): string[] {
   return [...new Set(domainAuditSources().flatMap((s) => s.actions))];
 }
 
-/** Bronnen die passen bij de gevraagde `source`-filter ("all" = allemaal). */
-export function selectedDomainSources(source: string): DomainAuditSource[] {
+/**
+ * De bronnen die deze gebruiker mag lezen: alle klantspecifieke bronnen plus de
+ * bronnen van de modules waar hij in mag.
+ *
+ * `undefined` betekent "geen begrenzing" en is bedoeld voor plekken zonder
+ * sessie. Geef bij twijfel een lijst mee, ook een lege — dan is leeg het
+ * antwoord in plaats van alles.
+ */
+export function allowedDomainSources(
+  modules?: readonly ModuleId[],
+): DomainAuditSource[] {
   const all = domainAuditSources();
+  if (!modules) return all;
+  return all.filter((s) => !s.module || modules.includes(s.module));
+}
+
+/** Bronnen die passen bij de gevraagde `source`-filter ("all" = allemaal). */
+export function selectedDomainSources(
+  source: string,
+  modules?: readonly ModuleId[],
+): DomainAuditSource[] {
+  const all = allowedDomainSources(modules);
   if (source === "all") return all;
   return all.filter((s) => s.id === source);
 }

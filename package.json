@@ -8,6 +8,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "eval:gate": "tsx scripts/adversarial-gate.ts",
+    "eval:golden": "tsx scripts/golden.ts",
     "eval:feedback": "tsx scripts/eval-from-feedback.ts"
   },
   "devDependencies": {

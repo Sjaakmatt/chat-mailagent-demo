@@ -487,6 +487,43 @@ Hoever loopt een klant achter?
 git fetch upstream && git log --oneline HEAD..upstream/main | wc -l
 ```
 
+### Updates met een migratie erbij
+
+De sync-workflow raakt de database niet aan. Zit er een migratie in de update,
+dan moet die met de hand op het Supabase-project van de klant draaien, en de
+volgorde luistert: **eerst de migratie, dan de deploy.** Andersom draait er even
+code tegen een schema dat de kolom nog niet heeft.
+
+Wat er per update te draaien valt, staat in `migrations/README.md`. Twee
+migraties vragen daarnaast iets van jou:
+
+| Migratie | Wat je zelf moet doen |
+| --- | --- |
+| `0021_revoke_security_definer` | Verplicht op elke bestaande database — hij zet RPC-grants dicht |
+| `0035_module_columns` | Zie hieronder |
+
+**Bij `0035_module_columns`:**
+
+1. Draai de migratie vóór je de agent-Worker en de cockpit deployt. Hij zet een
+   `module`-kolom op elke werk- en kennistabel, met `klantenservice` als
+   backfill en default — bestaande rijen kloppen dus meteen.
+2. De teller voor ticketnummers loopt daarna per module. De oude
+   drie-argument-RPC blijft bestaan en trekt uit de klantenservice-reeks, dus
+   een Worker die nog niet gedeployd is blijft werken. Lopende nummerreeksen
+   breken niet.
+3. `aios_policy_rules.applies_to` gaat van kale slugs naar `module:slug`. De
+   migratie zet bestaande regels om naar `klantenservice:<slug>`. Heb je zelf
+   regels aangemaakt buiten de cockpit om, controleer die dan na afloop in
+   **Beleid**: een regel waarvan de categorieën leeg staan, matcht nergens meer.
+4. Draai je de migratie later dan de deploy, dan blijft je beleid werken: een
+   kale slug matcht voorlopig nog in elke module. Zodra er een tweede module
+   bijkomt is dat niet meer wat je wilt, dus stel het niet uit.
+
+Heb je **eigen tabellen** met werk of kennis van één proces (een magazijnmodule,
+een eigen ticketsysteem)? Zet daar dezelfde kolom en index op, in een eigen
+migratie op het eerstvolgende vrije nummer. Zonder die kolom valt jouw tabel
+buiten elke modulezeef, en dan lekt hij straks over de afdelingen heen.
+
 ## Maatwerk en fundament-updates
 
 Een conflict is geen storing: het is het fundament dat een bestand raakt dat jij

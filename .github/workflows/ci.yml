@@ -43,6 +43,15 @@ jobs:
       - name: Test
         run: pnpm -r test
 
+      # De golden set: dezelfde 41 berichten door de poort en de router, met een
+      # vaste LLM-respons per regel. Meet niet het oordeel van het model maar de
+      # mechaniek eromheen — categorie naar specialist, specialist naar uitkomst,
+      # en een dichte poort die de run stopt. Dat is precies wat bij een refactor
+      # gelijk hoort te blijven, en wat geen unittest per bestand betrapt zodra
+      # de mapping verhuist.
+      - name: Golden set
+        run: pnpm eval:golden
+
       # De Next-build vangt fouten die tsc niet ziet (server/client-grenzen,
       # ontbrekende route-exports). Goedkoper dan de volledige OpenNext-build,
       # en het is wat in de praktijk een deploy breekt.

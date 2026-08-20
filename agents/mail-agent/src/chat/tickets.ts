@@ -14,6 +14,7 @@ import {
   ticketReadiness,
   confirmationText,
   categoryLabel,
+  KLANTENSERVICE_MODULE,
   CONFIRMATION,
   type TicketIdentity,
 } from '@factumai/agent-core';
@@ -70,9 +71,17 @@ export async function createTicket(
   const prefix = normalizeTicketPrefix(env.TICKET_PREFIX);
   const period = ticketPeriod(new Date());
 
+  // De teller loopt per module (migratie 0035): zonder `p_module` zouden twee
+  // afdelingen dezelfde reeks delen en springt het nummer dat de klant krijgt
+  // over de nummers van de andere afdeling heen.
   const numbers = await db.request<string[] | string>(ctx, db.rpcUrl('aios_next_ticket_number'), {
     method: 'POST',
-    body: JSON.stringify({ p_org: input.organizationId, p_prefix: prefix, p_period: period }),
+    body: JSON.stringify({
+      p_org: input.organizationId,
+      p_prefix: prefix,
+      p_period: period,
+      p_module: KLANTENSERVICE_MODULE.id,
+    }),
   });
   const number = Array.isArray(numbers) ? numbers[0] : numbers;
   if (typeof number !== 'string' || !number) {
@@ -85,6 +94,7 @@ export async function createTicket(
     body: JSON.stringify({
       id,
       organization_id: input.organizationId,
+      module: KLANTENSERVICE_MODULE.id,
       number,
       conversation_id: input.conversationId ?? null,
       review_item_id: input.reviewItemId ?? null,

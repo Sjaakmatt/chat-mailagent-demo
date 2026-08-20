@@ -1,5 +1,6 @@
 import {
   buildFewShotBlock,
+  categoryKeyMatches,
   categoryToSpecialist,
   categoryLabel,
   evaluateDomainGate,
@@ -7,6 +8,7 @@ import {
   outcomeFromClassification,
   renderPrompt,
   CATEGORY_GUIDE,
+  KLANTENSERVICE_MODULE,
   getIntentConfig,
   knownSpecialistIds,
   type OrchestrationSteps,
@@ -15,6 +17,7 @@ import {
   type Plan,
   type ReviewItem,
   type MemoryEntry,
+  type ModuleId,
   type Signal,
   type LlmClient,
   type SpecialistId,
@@ -520,12 +523,26 @@ async function loadPolicyRules(env: Env): Promise<PolicyRuleRow[]> {
   return Array.isArray(rows) ? rows : [];
 }
 
-/** Eerste (= laagste priority-getal) actieve regel waarvan appliesTo de categorie dekt. */
+/**
+ * Eerste (= laagste priority-getal) actieve regel waarvan `applies_to` de
+ * categorie van deze module dekt.
+ *
+ * Matcht op `module:slug` en niet op de kale slug: dezelfde slug betekent in
+ * een ander proces iets anders, en een regel die de beheerder voor
+ * klantenservice aanklikte hoort niet stilzwijgend ook op administratie te
+ * slaan. Een kale slug in `applies_to` is een regel van vóór migratie 0035 en
+ * matcht nog in elke module — zie `categoryKeyMatches` in agent-core.
+ */
 function selectPolicyRule(
   rules: PolicyRuleRow[],
+  module: ModuleId,
   category: string,
 ): PolicyRuleRow | undefined {
-  return rules.find((r) => Array.isArray(r.applies_to) && r.applies_to.includes(category));
+  return rules.find(
+    (r) =>
+      Array.isArray(r.applies_to) &&
+      r.applies_to.some((key) => categoryKeyMatches(key, module, category)),
+  );
 }
 
 /** Eén eerdere beurt zoals de chat-DO 'm meegeeft. */
@@ -986,7 +1003,11 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
       let policyMeta: Plan['policy'] | undefined;
       if (!isCompoundTask) {
         try {
-          const rule = selectPolicyRule(await loadPolicyRules(env), classification.category);
+          const rule = selectPolicyRule(
+            await loadPolicyRules(env),
+            KLANTENSERVICE_MODULE.id,
+            classification.category,
+          );
           if (rule) {
             policyDirective = rule.response_directive ?? '';
             policyMeta = {
