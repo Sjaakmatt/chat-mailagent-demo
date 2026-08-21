@@ -24,6 +24,7 @@ import { chatWidgetResponse } from './chat/widget.js';
 import { widgetLoaderResponse, widgetFrameResponse } from './chat/embed.js';
 import { verifyChatIdentity, customerSessionId } from '@factumai/agent-core';
 import { handleWebhook } from './intake/webhook.js';
+import { runAutomations } from './intake/schedule.js';
 import type { Env } from './env.js';
 
 export {
@@ -151,12 +152,23 @@ export default {
     });
   },
   /**
-   * Cron-trigger (zie `triggers.crons` in wrangler.jsonc). Doel: safety-net
-   * dat de poller-DO in leven houdt na deploys, restarts of edge-cases waar
-   * het alarm ooit stopt. De DO regelt intern de back-off (1s–30s) zolang
-   * er werk is; de cron is puur een "kick if dead".
+   * Cron-trigger (zie `triggers.crons` in wrangler.jsonc). Twee taken:
+   *
+   * 1. **De poller wakker houden.** Safety-net na deploys, restarts en
+   *    edge-cases waar het alarm ooit stopt. De DO regelt intern de back-off
+   *    (1s–30s) zolang er werk is; dit is puur een "kick if dead".
+   * 2. **De geplande automatiseringen draaien.** Dit is de ingang waarlangs een
+   *    domein begint zonder dat er iemand mailt.
+   *
+   * De twee staan los van elkaar en dat is met opzet: valt het uitlezen van de
+   * automatiseringen om, dan blijft de poller alsnog leven. Andersom net zo.
    */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await kickPoller(env);
+    const uitkomsten = await Promise.allSettled([kickPoller(env), runAutomations(env)]);
+    for (const uitkomst of uitkomsten) {
+      if (uitkomst.status === 'rejected') {
+        console.error('[cron] taak faalde:', uitkomst.reason);
+      }
+    }
   },
 } satisfies ExportedHandler<Env>;
