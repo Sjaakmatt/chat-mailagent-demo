@@ -7,9 +7,10 @@
  * - ExecuteWorkflow       — ná approve: idempotente side effect → memory → DONE
  * - ActionExecuteWorkflow — ná approve van een schrijfoperatie: hervalideren → schrijven
  *
- * De fetch-handler is bewust minimaal: publieke inbound hoort op de domein-MCP
- * (verify+normalize+enqueue) en de cockpit-UI, niet hier. Dit endpoint dient
- * alleen om de poller-DO te wekken (achter auth, intern).
+ * De fetch-handler is smal gehouden. Eén publiek pad: `POST /hooks/:bron`, voor
+ * bronnen waarvoor geen domein-MCP bestaat — die verifieert en emit, en verder
+ * niets. Heeft een bron wél een MCP, dan hoort de inbound daar (verify +
+ * normalize + enqueue). De rest van de routes is intern of demo.
  */
 import { MailPoller } from './poller-do.js';
 import { OrchestrationWorkflow } from './workflows/orchestration.js';
@@ -22,6 +23,7 @@ import { ChatSession } from './chat/session-do.js';
 import { chatWidgetResponse } from './chat/widget.js';
 import { widgetLoaderResponse, widgetFrameResponse } from './chat/embed.js';
 import { verifyChatIdentity, customerSessionId } from '@factumai/agent-core';
+import { handleWebhook } from './intake/webhook.js';
 import type { Env } from './env.js';
 
 export {
@@ -48,6 +50,12 @@ async function kickPoller(env: Env): Promise<void> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    // Externe gebeurtenissen. Bovenaan omdat dit het enige publieke,
+    // ondertekende pad naar de bus is; alles eronder is intern of demo.
+    const hook = await handleWebhook(request, env, url);
+    if (hook) return hook;
+
     if (url.pathname === '/__poller/start' && request.method === 'POST') {
       await kickPoller(env);
       return new Response('poller gestart', { status: 202 });

@@ -24,6 +24,7 @@ export * from './specialists/index.js';
 export * from './taxonomy/index.js';
 export * from './channels/index.js';
 export * from './envelope/index.js';
+export * from './webhooks/index.js';
 export * from './modules/index.js';
 export * from './modules/contract.js';
 export * from './modules/registry.js';
