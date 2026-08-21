@@ -8,9 +8,10 @@ import {
   kindsHandledOutsideWorkbench,
   type DecisionLog,
   type DecisionLogRow,
+  type ModuleId,
 } from "@factumai/agent-core";
 import {
-  domainAuditSources,
+  allowedDomainSources,
   selectedDomainSources,
   type DomainAuditSource,
 } from "./audit-sources";
@@ -149,6 +150,17 @@ export interface AuditQuery {
    * geregistreerde domein-auditbron (zie `audit-sources.ts`).
    */
   source?: "review" | "all" | (string & {});
+  /**
+   * De modules die de aanroeper mag lezen. **Altijd meegeven** vanaf een plek
+   * met een sessie: zonder deze lijst leest de auditlog de beslissingen van élk
+   * proces, en dat was precies het lek — een salesmedewerker las de
+   * afhandeling van administratie-items zonder dat er ergens een controle was
+   * overgeslagen, want de query was gewoon te breed.
+   *
+   * Weglaten betekent "geen begrenzing" en is er voor aanroepers zonder
+   * sessie. Een lege lijst betekent leeg.
+   */
+  modules?: readonly ModuleId[];
   page?: number; // 0-based
   pageSize?: number; // default 50
 }
@@ -161,6 +173,12 @@ export interface AuditQuery {
 export interface AuditEntry {
   /** Stabiele id voor React-keys. */
   key: string;
+  /**
+   * Het proces waar dit event uit komt. Bepaalt waar "bekijk bron" heen wijst:
+   * de detailweergave van een voorstel is van de module, niet van de schil.
+   * Null als de bron geen module claimt (een klantspecifieke auditbron).
+   */
+  module?: ModuleId | null;
   /** "review" of de `id` van een geregistreerde domein-auditbron. */
   source: "review" | (string & {});
   /** Actie: APPROVED/EDITED/EXECUTED/REJECTED, of een domein-eigen actie. */
@@ -173,7 +191,12 @@ export interface AuditEntry {
   summary: string;
   /** Voor review: order/categorie. Domeinbronnen vullen hun eigen context. */
   meta: string | null;
-  /** Linkbaar naar mail-detail; domein-events verwijzen naar hun bron-item. */
+  /**
+   * Het voorstel waar dit event bij hoort. De link ernaartoe loopt via
+   * `detailHref` van de module in `module` — de schil weet niet waar het
+   * detailscherm van een proces staat, en `/mail/{id}` was daar de aanname die
+   * bij de tweede module omvalt.
+   */
   reviewItemId?: string | null;
   /** Id van het domein-record achter dit event (bv. een werkticket). */
   domainRef?: string | null;
@@ -189,12 +212,31 @@ export interface AuditPage {
 }
 
 const AUDIT_SELECT =
-  "id,status,kind,summary,confidence,created_at,decided_at,executed_at,decided_by,category:proposed->classification->>category";
+  "id,status,kind,summary,confidence,created_at,decided_at,executed_at,decided_by,module," +
+  "category:proposed->classification->>category";
+
+/**
+ * De PostgREST-filterwaarde voor een modulelijst.
+ *
+ * Een lege lijst betekent dat deze gebruiker nergens in mag, en dat moet leeg
+ * opleveren. `in.()` is geen geldige filter, dus zetten we er een waarde in die
+ * geen enkele rij draagt — leeg is hier het juiste antwoord, en een filter die
+ * de server weigert zou de hele pagina blank slaan.
+ */
+function moduleFilter(modules: readonly ModuleId[]): string {
+  const lijst = modules.length > 0 ? modules : ["__geen_module__"];
+  return `in.(${lijst.join(",")})`;
+}
 
 function applyAuditFilters(url: URL, q: AuditQuery): void {
   // Alleen besliste items (geen PENDING). Specifieke status filtert verder.
   if (q.status) url.searchParams.set("status", `eq.${q.status}`);
   else url.searchParams.set("status", "neq.PENDING");
+  // Server-side en niet ná het ophalen: anders vult het werk van een andere
+  // afdeling de cap van 500 en verdwijnen de eigen events onderaan uit beeld.
+  // De kolom is not-null sinds migratie 0030, dus dit filter laat niets
+  // legitiems vallen.
+  if (q.modules) url.searchParams.set("module", moduleFilter(q.modules));
   if (q.from) url.searchParams.append("created_at", `gte.${q.from}`);
   if (q.to) url.searchParams.append("created_at", `lte.${q.to}T23:59:59`);
   if (q.decidedBy) {
@@ -256,6 +298,7 @@ function reviewRowToEntry(r: ReviewMetricRow): AuditEntry {
     summary: r.summary,
     meta: r.category,
     reviewItemId: r.id,
+    module: r.module,
   };
 }
 
@@ -289,7 +332,7 @@ export async function listAuditEntriesPage(
     wantReview
       ? fetchReviewEntries(client, query, FETCH_CAP)
       : Promise.resolve<AuditEntry[]>([]),
-    ...selectedDomainSources(source).map((src) =>
+    ...selectedDomainSources(source, query.modules).map((src) =>
       fetchDomainEntries(src, client, query, FETCH_CAP),
     ),
   ]);
@@ -331,7 +374,7 @@ export async function listAuditEntriesForExport(
   const wantReview = source === "review" || source === "all";
   const [reviewEntries, ...domainEntries] = await Promise.all([
     wantReview ? fetchReviewEntries(client, query, cap) : Promise.resolve<AuditEntry[]>([]),
-    ...selectedDomainSources(source).map((src) =>
+    ...selectedDomainSources(source, query.modules).map((src) =>
       fetchDomainEntries(src, client, query, cap),
     ),
   ]);
@@ -381,7 +424,11 @@ async function fetchDomainEntries(
   // Filtert de gevraagde status deze bron per definitie weg? Dan niet ophalen.
   if (q.status && !src.actions.includes(q.status)) return [];
   try {
-    return await src.fetch(client, q, cap);
+    const entries = await src.fetch(client, q, cap);
+    // De herkomst stempelen we hier en laten we niet aan de bron over: een bron
+    // die 'm vergeet zou anders een event opleveren waarvan niemand meer weet
+    // bij welk proces het hoort.
+    return src.module ? entries.map((e) => ({ ...e, module: src.module })) : entries;
   } catch {
     return [];
   }
@@ -395,6 +442,7 @@ async function fetchDomainEntries(
  */
 export async function listAuditFacets(
   client: CockpitDbClient,
+  modules?: readonly ModuleId[],
 ): Promise<{ decidedBy: string[]; categories: string[] }> {
   const [reviews, ...domainActors] = await Promise.all([
     (async () => {
@@ -404,6 +452,7 @@ export async function listAuditFacets(
         "decided_by,category:proposed->classification->>category",
       );
       url.searchParams.set("status", "neq.PENDING");
+      if (modules) url.searchParams.set("module", moduleFilter(modules));
       url.searchParams.set("limit", "1000");
       return (
         await client.request<
@@ -411,7 +460,7 @@ export async function listAuditFacets(
         >(CTX, url, { method: "GET" })
       ) ?? [];
     })(),
-    ...domainAuditSources().map(async (src) => {
+    ...allowedDomainSources(modules).map(async (src) => {
       if (!src.actors) return [] as string[];
       try {
         return await src.actors(client);

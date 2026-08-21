@@ -28,6 +28,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const APP = "ui/app/(dashboard)";
+const MODULES_DIR = "ui/lib/modules";
+const REGISTRY = join(MODULES_DIR, "registry.generated.ts");
+const CLIENT_MODULES_DIR = "ui/lib/client-modules";
 const GUARD = "requireModulePage";
 /**
  * De áánroep, niet de naam.
@@ -40,19 +43,56 @@ const GUARD = "requireModulePage";
 const GUARD_CALL = `${GUARD}(`;
 
 /**
- * De routes die bij een module horen.
+ * De routes die bij een module horen, afgeleid uit de moduleregistratie.
  *
- * Handmatig, en dat is een bewuste keuze: dit script uit `registry.ts` laten
- * lezen zou TypeScript moeten compileren en de hele database-laag meetrekken.
- * Komt er een module bij, dan komt hier een regel bij — en die regel is precies
- * het moment waarop je nadenkt over de guard.
+ * Dit stond hier eerst met de hand, en dat was de zwakke plek: komt er een
+ * module bij, dan moest iemand eraan denken hier een regel toe te voegen — en
+ * juist dat vergeten levert een scherm zonder guard op, het geval dat dit
+ * script hoort te vangen.
+ *
+ * Waarom het register niet gewoon geïmporteerd wordt: dat trekt de
+ * module-registraties mee, en die trekken via `collectSources` de database-laag
+ * en de Cloudflare-runtime het node-proces in. Dat is een zware afhankelijkheid
+ * voor wat een grep is. In plaats daarvan lezen we welke bestanden het
+ * gegenereerde register importeert, en vissen uit díe bestanden de paden — één
+ * laag diep, want een moduleregistratie noemt zijn eigen schermen en die van
+ * niemand anders.
  */
-const MODULE_ROUTES = [
-  "tickets",
-  "gesprekken",
-  "feedback",
-  "mail",
-];
+function moduleRouteSegments() {
+  const segments = new Set();
+  for (const file of registeredModuleFiles()) {
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      // Alleen regels die over een link gaan: `href: "/tickets"` in navItems en
+      // de `detailHref`-definitie. Zo pikken we geen pad op uit bijvoorbeeld een
+      // fetch-aanroep die toevallig in hetzelfde bestand staat.
+      if (!/href/i.test(line)) continue;
+      for (const match of line.matchAll(/["'`]\/([A-Za-z0-9_-]+)/g)) {
+        segments.add(match[1]);
+      }
+    }
+  }
+  return [...segments].sort();
+}
+
+/**
+ * De bestanden die het gegenereerde register als module importeert.
+ *
+ * Twee vormen, precies zoals de generator ze schrijft: `./naam` voor een module
+ * uit het fundament en `../client-modules/naam` voor een module van deze klant.
+ */
+function registeredModuleFiles() {
+  const bron = readFileSync(REGISTRY, "utf8");
+  const files = [];
+  for (const match of bron.matchAll(
+    /from\s+["'](\.\/|\.\.\/client-modules\/)([A-Za-z0-9_-]+)["']/g,
+  )) {
+    // `contract` bevat alleen types en registreert niets.
+    if (match[2] === "contract") continue;
+    const map = match[1] === "./" ? MODULES_DIR : CLIENT_MODULES_DIR;
+    files.push(join(map, `${match[2]}.ts`));
+  }
+  return files;
+}
 
 function pagesUnder(dir) {
   const out = [];
@@ -71,6 +111,16 @@ function pagesUnder(dir) {
     }
   }
   return out;
+}
+
+const MODULE_ROUTES = moduleRouteSegments();
+
+if (MODULE_ROUTES.length === 0) {
+  // Geen enkele route gevonden betekent dat de afleiding stuk is, niet dat er
+  // niets te bewaken valt. Luid melden: een script dat nul routes controleert
+  // is altijd groen en bewaakt niets.
+  console.error(`✗ geen module-routes afgeleid uit ${REGISTRY}`);
+  process.exitCode = 1;
 }
 
 const ontbreekt = [];
@@ -100,5 +150,7 @@ if (ontbreekt.length > 0) {
   );
   process.exitCode = 1;
 } else if (process.exitCode !== 1) {
-  console.log(`✓ alle module-schermen roepen ${GUARD} aan`);
+  console.log(
+    `✓ alle module-schermen roepen ${GUARD} aan (${MODULE_ROUTES.join(", ")})`,
+  );
 }

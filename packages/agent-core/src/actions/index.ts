@@ -125,7 +125,7 @@ function normaliseerAdres(waarde: string | null | undefined): string | null {
  *
  * Bij chat weegt dat lichter dan bij mail — daar typt de bezoeker het From-adres
  * zelf in plaats van dat een mailsysteem het aanlevert. Dat verschil zit niet
- * hier maar in `ACTION_TYPES.channels`: de gevaarlijke typen staan op chat
+ * hier maar in `channels` op het actietype: de gevaarlijke typen staan op chat
  * gewoon uit.
  */
 export function identificationLevel(evidence: IdentityEvidence): IdentificationLevel {
@@ -536,152 +536,15 @@ export interface ActionPayloadField {
   editable?: boolean;
 }
 
-/**
- * De startset.
- *
- * Volgorde is niet willekeurig. `werkticket_aanmaken` staat eerst omdat dat het
- * type is om de machinerie op te beproeven: de tool bestaat al, de impact op de
- * klant is nul, en beide kanalen mogen. Een fout kost hier een overbodig ticket
- * en niets anders.
- *
- * De typen waarvan de tool nog niet bestaat staan er bewust wél in, met
- * `enabled` per tenant als rem: de registratie is de plek waar je ziet wat er
- * nog moet komen, en een lege lijst zou dat verstoppen.
- */
-export const ACTION_TYPES: readonly ActionTypeDef[] = Object.freeze([
-  {
-    slug: 'werkticket_aanmaken',
-    label: 'Werkticket aanmaken',
-    target: { mcp: 'tickets', tool: 'create_ticket' },
-    preconditionKind: 'geen',
-    channels: ['mail', 'chat'],
-    // Intern, geen klantimpact: hier is doorvragen duurder dan de fout.
-    requiredIdentification: 'zwak',
-    approverRole: 'reviewer',
-    expiresAfterMinutes: 7 * 24 * 60,
-    payloadFields: [
-      { name: 'subject', label: 'Onderwerp', hint: 'korte omschrijving van wat er uitgezocht moet worden' , source: 'bericht', editable: true },
-      { name: 'description', label: 'Toelichting', hint: 'wat de klant vraagt, in eigen woorden' , source: 'bericht', editable: true },
-    ],
-  },
-  {
-    slug: 'order_annuleren',
-    label: 'Order annuleren',
-    target: { mcp: 'crm', tool: 'update_order' },
-    preconditionKind: 'orderstatus',
-    // Onomkeerbaar aan klantzijde; niet vanuit een chatgesprek.
-    channels: ['mail'],
-    requiredIdentification: 'gematcht',
-    approverRole: 'reviewer',
-    expiresAfterMinutes: 24 * 60,
-    payloadFields: [
-      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'reason', label: 'Reden', hint: 'waarom de klant annuleert' , source: 'bericht', editable: true },
-    ],
-  },
-  {
-    slug: 'adres_wijzigen',
-    // Bewust niet 'Verzendadres wijzigen'. Bij een klant die dozen verstuurt is
-    // dit het afleveradres; bij een dienstverlener het adres op het contract.
-    // Dezelfde actie, dezelfde fraudewaarde, dus één type — een label dat maar
-    // op de helft van de klanten slaat, is een label dat je per klant moet
-    // patchen.
-    label: 'Adres wijzigen',
-    target: { mcp: 'erp', tool: 'update_order_address' },
-    preconditionKind: 'orderstatus',
-    // De grootste fraudewaarde van de hele set: een adres omleggen is schade,
-    // geen ongemak. Daarom mail-only, en bij mail nog steeds gematcht.
-    channels: ['mail'],
-    requiredIdentification: 'gematcht',
-    approverRole: 'reviewer',
-    expiresAfterMinutes: 12 * 60,
-    payloadFields: [
-      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'address.street', label: 'Straat en huisnummer', hint: 'exact zoals de klant het opgaf' , source: 'bericht', editable: true },
-      { name: 'address.postalCode', label: 'Postcode', hint: 'exact zoals de klant het opgaf' , source: 'bericht', editable: true },
-      { name: 'address.city', label: 'Plaats', hint: 'exact zoals de klant het opgaf' , source: 'bericht', editable: true },
-    ],
-  },
-  {
-    slug: 'retour_aanmelden',
-    label: 'Retour aanmelden',
-    target: { mcp: 'erp', tool: 'register_return' },
-    preconditionKind: 'orderstatus',
-    // Schade bij misbruik is klein, dus chat mag — maar dan wel bevestigd.
-    channels: ['mail', 'chat'],
-    requiredIdentification: 'bevestigd',
-    approverRole: 'reviewer',
-    expiresAfterMinutes: 7 * 24 * 60,
-    payloadFields: [
-      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'sku', label: 'Artikel', hint: 'het artikelnummer uit de opgehaalde orderregels' },
-      { name: 'reason', label: 'Reden', hint: 'waarom het artikel retour gaat' , source: 'bericht', editable: true },
-    ],
-  },
-  {
-    slug: 'nalevering_aanmaken',
-    label: 'Nalevering aanmaken',
-    target: { mcp: 'erp', tool: 'create_backorder_shipment' },
-    preconditionKind: 'orderstatus',
-    // Er gaan goederen de deur uit. Niet vanuit een chatgesprek waar de
-    // bezoeker het afzenderadres zelf intypt.
-    channels: ['mail'],
-    requiredIdentification: 'gematcht',
-    approverRole: 'reviewer',
-    expiresAfterMinutes: 7 * 24 * 60,
-    payloadFields: [
-      { name: 'orderNumber', label: 'Ordernummer', hint: 'het ordernummer uit de opgehaalde order' },
-      { name: 'sku', label: 'Artikel', hint: 'het artikelnummer dat ontbrak, uit de orderregels' },
-      { name: 'quantity', label: 'Aantal', hint: 'hoeveel er nageleverd moet worden', editable: true },
-    ],
-  },
-  {
-    slug: 'onderzoek_vervoerder',
-    label: 'Onderzoek bij vervoerder starten',
-    target: { mcp: 'shipping', tool: 'shipping_open_investigation' },
-    preconditionKind: 'geen',
-    // Geen geld en geen goederen, dus lichter dan een creditnota. Maar er komt
-    // wél een dossier over andermans pakket bij een externe partij te liggen,
-    // en dat is precies wat een anoniem gesprek niet in gang moet kunnen
-    // zetten. Vandaar mail, en daar gematcht.
-    channels: ['mail'],
-    requiredIdentification: 'gematcht',
-    approverRole: 'reviewer',
-    expiresAfterMinutes: 7 * 24 * 60,
-    payloadFields: [
-      { name: 'trackingCode', label: 'Trackingcode', hint: 'de trackingcode uit de opgehaalde zending' },
-      { name: 'carrier', label: 'Vervoerder', hint: 'de vervoerder uit de opgehaalde zending' },
-      { name: 'reason', label: 'Aanleiding', hint: 'wat de klant meldt over het pakket' , source: 'bericht', editable: true },
-    ],
-  },
-  {
-    slug: 'creditnota_voorstellen',
-    label: 'Creditnota voorstellen',
-    target: { mcp: 'crm', tool: 'create_credit_note' },
-    preconditionKind: 'factuurstatus',
-    channels: ['mail'],
-    requiredIdentification: 'gematcht',
-    approverRole: 'reviewer',
-    // Schade zonder beeld is een bewering. Vragen om een foto kost de klant een
-    // minuut; een onterechte creditnota kost geld en is niet terug te draaien.
-    requiresPhoto: true,
-    // Geld. Boven dit bedrag moet een admin het doen.
-    amountThreshold: 250,
-    expiresAfterMinutes: 24 * 60,
-    payloadFields: [
-      { name: 'invoiceNumber', label: 'Factuurnummer', hint: 'het factuurnummer uit de opgehaalde factuur' },
-      { name: 'amount', label: 'Bedrag', hint: 'bedrag in euro, uitsluitend uit de opgehaalde factuurregels', editable: true },
-      { name: 'reason', label: 'Reden', hint: 'waarvoor gecrediteerd wordt' , source: 'bericht', editable: true },
-    ],
-  },
-]);
+// De actietypen zelf staan op het modulepakket
+// (`modules/klantenservice/actions.ts`). Ze horen daar en niet hier: een
+// creditnota en een adreswijziging zijn operaties van een webshop, en
+// administratie brengt straks een eigen set mee. Wat hier blijft is de vorm en
+// de poort — wat een actietype ís, en wanneer er eentje mag ontstaan.
 
-export const ACTION_TYPE_SLUGS: readonly string[] = Object.freeze(
-  ACTION_TYPES.map((t) => t.slug),
-);
-
-export function getActionType(slug: string): ActionTypeDef | undefined {
-  return ACTION_TYPES.find((t) => t.slug === slug);
+/** De slugs van deze set — voor de plan-prompt en validatie. */
+export function actionTypeSlugs(types: readonly ActionTypeDef[]): string[] {
+  return types.map((t) => t.slug);
 }
 
 /**
@@ -697,6 +560,8 @@ export function getActionType(slug: string): ActionTypeDef | undefined {
  * hier niet in stond, komt daar niet doorheen.
  */
 export function proposableActionTypes(input: {
+  /** De actietypen van de module die dit signaal behandelt. */
+  types: readonly ActionTypeDef[];
   channel: ChannelId;
   identification: IdentificationLevel;
   /**
@@ -706,7 +571,7 @@ export function proposableActionTypes(input: {
   attachments?: readonly ActionAttachment[];
 }): ActionTypeDef[] {
   const foto = hasPhoto(input.attachments);
-  return ACTION_TYPES.filter(
+  return input.types.filter(
     (t) =>
       t.channels.includes(input.channel) &&
       identificationSuffices(input.identification, t.requiredIdentification) &&
@@ -721,7 +586,7 @@ export function proposableActionTypes(input: {
 export interface ProposedAction {
   id: string;
   organizationId: string;
-  /** Slug uit `ACTION_TYPES`. */
+  /** Slug van een actietype uit het modulepakket. */
   type: string;
   /** De volledige, uitvoerbare aanroep — niet een beschrijving ervan. */
   payload: Record<string, unknown>;
@@ -758,7 +623,7 @@ export interface ProposedAction {
  * registratie.
  */
 export interface PlannedAction {
-  /** Slug uit `ACTION_TYPES`. Een onbekende slug wordt geweigerd, niet gemaakt. */
+  /** Slug van een actietype. Een onbekende slug wordt geweigerd, niet gemaakt. */
   type: string;
   payload: Record<string, unknown>;
   evidence: FieldEvidence[];
@@ -769,6 +634,12 @@ export interface PlannedAction {
 
 export interface ActionProposalInput {
   planned: readonly PlannedAction[];
+  /**
+   * De actietypen van de module die dit signaal behandelt
+   * (`pack.actions`). Een voorstel voor een type dat deze module niet kent,
+   * wordt geweigerd — dat is de eerste poort.
+   */
+  types: readonly ActionTypeDef[];
   channel: ChannelId;
   identification: IdentificationLevel;
   organizationId: string;
@@ -858,6 +729,7 @@ export function buildProposedActions(input: ActionProposalInput): ActionProposal
 
   input.planned.forEach((voorstel, index) => {
     const poort = mayProposeAction({
+      types: input.types,
       type: voorstel.type,
       channel: input.channel,
       identification: input.identification,
@@ -941,11 +813,13 @@ export function buildProposedActions(input: ActionProposalInput): ActionProposal
  * waaróm niet.
  */
 export function mayProposeAction(input: {
+  /** De actietypen van de module die dit signaal behandelt. */
+  types: readonly ActionTypeDef[];
   type: string;
   channel: ChannelId;
   identification: IdentificationLevel;
 }): { ok: true; def: ActionTypeDef } | { ok: false; reason: string } {
-  const def = getActionType(input.type);
+  const def = input.types.find((t) => t.slug === input.type);
   if (!def) return { ok: false, reason: `onbekend actietype: ${input.type}` };
   if (!def.channels.includes(input.channel)) {
     return { ok: false, reason: `${def.slug} staat uit op kanaal ${input.channel}` };
@@ -1028,11 +902,19 @@ export function isExpired(action: Pick<ProposedAction, 'expiresAt'>, now: Date):
  */
 export function evaluateApproval(input: {
   action: Pick<ProposedAction, 'status' | 'expiresAt' | 'precondition' | 'type' | 'payload'>;
+  /**
+   * Het actietype van dit voorstel, opgezocht door de aanroeper.
+   *
+   * Meegegeven en niet hier opgezocht: de typen staan op het modulepakket, en
+   * deze functie is generiek. `null` als geen enkele geregistreerde module het
+   * type (meer) kent — dan is goedkeuren juist wat je niet wilt.
+   */
+  def: ActionTypeDef | null | undefined;
   actueel: Record<string, unknown>;
   approverRole: 'viewer' | 'reviewer' | 'admin';
   now: Date;
 }): { ok: true } | { ok: false; status: 'verlopen' | 'afgewezen'; reason: string } {
-  const { action, actueel, approverRole, now } = input;
+  const { action, def, actueel, approverRole, now } = input;
 
   if (!canTransitionAction(action.status, 'goedgekeurd')) {
     return {
@@ -1046,7 +928,6 @@ export function evaluateApproval(input: {
     return { ok: false, status: 'verlopen', reason: 'het voorstel is over de geldigheidsdatum' };
   }
 
-  const def = getActionType(action.type);
   if (!def) {
     return { ok: false, status: 'afgewezen', reason: `onbekend actietype: ${action.type}` };
   }

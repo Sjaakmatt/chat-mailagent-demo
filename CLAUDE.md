@@ -19,16 +19,17 @@ Drie deployables in één pnpm-workspace:
 
 | Map                   | Wat                                                          |
 | --------------------- | ------------------------------------------------------------ |
-| `packages/agent-core` | Runtime-agnostische lus-kern. Self-contained, volledig getest. |
+| `packages/agent-core` | Runtime-agnostische lus-kern plus de modulepakketten. Self-contained, volledig getest. |
 | `agents/mail-agent`   | De agent-Worker: Durable Object poller + Workflows.           |
 | `ui`                  | De cockpit-werkbak (Next.js + OpenNext op Workers).           |
 | `migrations`          | SQL voor de klant-Supabase (`aios_*`, pgmq, pgvector).        |
 | `examples`            | Referentie-implementaties. Géén productiecode.                |
 
 De werkbak is de **schil**, niet het scherm van de mailagent. Automatiseringen
-dokken erin als module — klantenservice vandaag, sales en administratie later —
-met een eigen tab, eigen categorieën en eigen schermen. De schil kent geen enkele
-module bij naam behalve in `ui/lib/modules/registry.ts`. Lees
+dokken erin als **modulepakket** — klantenservice vandaag, sales en administratie
+later — met een eigen poort, eigen categorieën, eigen specialisten en eigen
+schermen. Geen van beide helften kent een module bij naam: de twee registers
+worden gegenereerd uit `client.manifest.yaml` (`pnpm modules:generate`). Lees
 [`docs/MODULES.md`](./docs/MODULES.md) vóór je iets aan de werkbak toevoegt:
 mailkennis in een kernbestand van de cockpit is een regressie.
 
@@ -72,16 +73,19 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 
 | Wil je…                        | Bewerk                                          |
 | ------------------------------ | ----------------------------------------------- |
-| Een tweede automatisering (sales, administratie) | `packages/agent-core/src/modules/` + `ui/lib/modules/` — zie `docs/MODULES.md` |
-| Andere categorieën             | `packages/agent-core/src/taxonomy/index.ts`      |
-| Waar de agent wél/niet over gaat | `packages/agent-core/src/domain-gate/index.ts` |
-| Wanneer iets automatisch mag | `packages/agent-core/src/outcomes/index.ts` |
+| Een tweede automatisering (sales, administratie) | `packages/agent-core/src/modules/` + `ui/lib/modules/` + het `modules:`-blok in `client.manifest.yaml` — zie `docs/MODULES.md` |
+| Een module die alleen déze klant heeft | `packages/agent-core/src/client-modules/` + `ui/lib/client-modules/` — het fundament raakt die mappen nooit aan |
+| Andere categorieën             | `packages/agent-core/src/modules/<module>/taxonomy.ts` |
+| Waar de agent wél/niet over gaat | `packages/agent-core/src/modules/<module>/gate.ts` |
+| Wanneer iets automatisch mag | `packages/agent-core/src/modules/<module>/outcomes.ts` |
+| Welke schrijfoperaties de agent mag voorstellen | `packages/agent-core/src/modules/<module>/actions.ts` |
 | Andere naam/kleuren/navigatie  | `ui/lib/brand.ts` + `ui/app/globals.css`         |
-| Een extra intent/specialist    | `packages/agent-core/src/specialists/`           |
+| Een extra intent/specialist    | `packages/agent-core/src/modules/<module>/specialists/` |
 | Een side effect na goedkeuring | `agents/mail-agent/src/domain/index.ts`          |
 | Eigen events in de auditlog    | `ui/lib/audit-sources.ts`                        |
 | Wie wat mag zien/goedkeuren    | `aios_role_grants` — zie `docs/RECHTEN.md`; nooit een tweede rechtenmodel |
 | Wat de assistent mag inzien    | `collectSources` op de module — zie `docs/ASSISTENT.md`; elke bewering herleidbaar |
+| Een ingang die niet bij mail begint (klok, poll) | `packages/agent-core/src/modules/<module>/triggers.ts` — zie `docs/TRIGGERS.md` |
 | Een tweede kanaal (chat)       | `packages/agent-core/src/channels/` + `agents/mail-agent/src/channels.ts` |
 | Andere demo-mails              | `ui/lib/demo/scenarios.ts` + `migrations/0005_*` |
 
@@ -108,5 +112,7 @@ geen org-id's. Dat is hoe het fundament beter wordt.
 - Falende MCP-calls mogen de pipeline nooit laten crashen: fail-soft terugvallen
   (zie `McpToolResult`). Een agent die stilvalt is erger dan een agent die één
   mail naar review stuurt.
-- `pnpm -r typecheck` én `pnpm -r test` groen vóór commit.
+- `pnpm -r typecheck` én `pnpm -r test` groen vóór commit, plus `pnpm eval:golden`
+  — die legt vast hoe de lus zich hoort te gedragen en hoort een refactor te
+  overleven zonder één regel te wijzigen.
 - Nederlands in code-commentaar en UI-teksten, consistent met de rest.

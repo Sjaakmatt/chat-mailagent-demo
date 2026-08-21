@@ -12,6 +12,10 @@ import { MODULES, allCategories } from "@/lib/modules";
 // module leest dit als vroeger; bij meer modules staat erbij uit welk proces
 // een categorie komt, want "facturatie" betekent iets anders in administratie
 // dan in klantenservice.
+//
+// De regel bewaart `cat.key` (`module:slug`) en niet de kale slug. Anders zou
+// een regel op "facturatie" in beide processen matchen zodra de tweede module
+// bestaat, en dat is niet wat iemand aanklikt.
 const CATEGORIES = allCategories();
 const SHOW_MODULE = MODULES.length > 1;
 
@@ -69,6 +73,21 @@ interface PolicyEditorProps {
    * prod-cockpit die per ongeluk true krijgt tóch niet kan promoten.
    */
   promoteEnabled?: boolean;
+}
+
+/**
+ * De categorieën van een regel, leesbaar. Een sleutel die geen enkele module
+ * (meer) kent tonen we ruw: een regel die nergens meer op matcht hoort op te
+ * vallen, niet weggepoetst te worden.
+ */
+function describeAppliesTo(keys: string[] | null | undefined): string {
+  return (keys ?? [])
+    .map((key) => {
+      const hit = CATEGORIES.find((c) => c.key === key || c.slug === key);
+      if (!hit) return key;
+      return SHOW_MODULE ? `${hit.moduleLabel} · ${hit.label}` : hit.label;
+    })
+    .join(", ");
 }
 
 export function PolicyEditor({
@@ -254,7 +273,7 @@ export function PolicyEditor({
                 )}
               </div>
               <div className="text-xs text-ink-subtle truncate mt-0.5 pl-9">
-                {(r.applies_to ?? []).join(", ") || "—"}
+                {describeAppliesTo(r.applies_to) || "—"}
               </div>
             </button>
           ))}
@@ -289,12 +308,12 @@ export function PolicyEditor({
             <Field label="Categorieën (waarop deze regel matcht)">
               <div className="flex flex-wrap gap-1.5">
                 {CATEGORIES.map((cat) => {
-                  const on = draft.appliesTo.includes(cat.slug);
+                  const on = draft.appliesTo.includes(cat.key);
                   return (
                     <button
-                      key={cat.slug}
+                      key={cat.key}
                       type="button"
-                      onClick={() => toggleCategory(cat.slug)}
+                      onClick={() => toggleCategory(cat.key)}
                       title={SHOW_MODULE ? `${cat.moduleLabel} · ${cat.label}` : cat.label}
                       className={cn(
                         "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",

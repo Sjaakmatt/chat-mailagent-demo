@@ -1,4 +1,4 @@
-import type { IntentConfig } from './types.js';
+import type { IntentConfig } from '../../../specialists/index.js';
 
 /**
  * order_change — wijzigingsverzoek op een bestaande bestelling.

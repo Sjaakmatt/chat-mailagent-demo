@@ -25,7 +25,11 @@
  *
  * ## Wat je per klant aanpast
  *
- * `DOMAIN` hieronder. Dat is het enige. De poortlogica zelf is generiek.
+ * De `DomainConfig` van de módule, bijvoorbeeld
+ * `modules/klantenservice/gate.ts`. Dat is het enige. De poortlogica zelf is
+ * generiek, en dat moet ze blijven: elke module heeft een eigen grens, en één
+ * gedeelde `DOMAIN`-constante zou betekenen dat een crediteurenvraag wordt
+ * afgewezen omdat hij niet over een webshop gaat.
  */
 
 import type { LlmClient } from '../llm/index.js';
@@ -55,72 +59,6 @@ export interface DomainConfig {
    */
   rejectionText: string;
 }
-
-/**
- * Het domein van de Factum Webshop-demo.
- *
- * Twee kringen, allebei binnen de poort: de winkel zelf (het echte werk) en
- * FactumAI, het bureau dat de winkel als demo gebruikt. Zie de toelichting bij
- * `CATEGORIES` in `../taxonomy/index.ts` voor waarom die tweede kring meedoet.
- *
- * De poort is ruim aan de binnenkant en scherp aan de buitenkant. Wat er
- * bewust NIET in staat: alles waarvan een taalmodel het antwoord toevallig
- * weet. Dat is precies het gedrag dat een klantenservice-agent onbruikbaar
- * maakt — één screenshot van een chatbot die een recept geeft of over politiek
- * praat, en het vertrouwen is weg.
- *
- * Bij een echte klant vervang je `description` en de winkel-regels, en schrap
- * je de FactumAI-regels. De structuur blijft.
- */
-export const DOMAIN: DomainConfig = {
-  description:
-    'Factum Webshop, de winkel waarin FactumAI zijn modulaire AI- en ' +
-    'softwareproducten verkoopt: agents die klantcontact voorbereiden (mail, ' +
-    'chat, WhatsApp, documenten), koppelingen naar bestaande systemen, modules ' +
-    'als kennisbank en ticketing, en de diensten eromheen. Bezoekers zijn ' +
-    'prospects die het assortiment bekijken, of klanten met een lopend ' +
-    'implementatietraject of abonnement.',
-  inScope: [
-    // --- oriënteren ---
-    'wat een artikel doet, wat erin zit en wat het niet doet',
-    'beschikbaarheid, levertijd en doorlooptijd tot in gebruik',
-    'koppelingen met bestaande systemen (mail, webshop, CRM, ERP, boekhouding)',
-    'of een systeem dat er niet bij staat toch te koppelen is',
-    'prijzen, staffels, inbegrepen volumes, contractduur en opzegtermijn',
-    'hoe het werkt: de lus van bericht tot goedgekeurde actie',
-    'de mens-in-de-lus: wat de agent zelf mag en wat langs een mens gaat',
-    'implementatie: doorlooptijd, wat wij doen en wat de klant doet',
-    'beveiliging, datalocatie, AVG, verwerkersovereenkomsten, dataretentie',
-    'wat het oplevert — tijdwinst, doorlooptijd, kwaliteit',
-    'hoe het zich verhoudt tot een bot van de plank of zelf bouwen',
-    'een offerte, demo of kennismaking aanvragen',
-    // --- klant zijn ---
-    'de status van een lopend implementatietraject en de eerstvolgende stap',
-    'een abonnement wijzigen: module erbij, eraf, upgraden',
-    'opzeggen, de proefperiode, wat er met je gegevens gebeurt als je stopt',
-    'storingen, reactietijden en de SLA-niveaus',
-    'iets dat niet werkt zoals verwacht',
-    'facturen, betaalmethoden, btw, betaaltermijn, zakelijk afnemen',
-    'klachten over een product, een traject of de afhandeling ervan',
-    'de winkel zelf: bereikbaarheid, voorwaarden, contact',
-    'privacy- en AVG-verzoeken over de eigen gegevens van de bezoeker',
-  ],
-  outOfScope: [
-    'algemene AI- of techniekvragen zonder verband met wat wij leveren',
-    'advies over of vergelijkingen met met naam genoemde concurrenten',
-    'juridisch, fiscaal, medisch of financieel advies',
-    'code schrijven, debuggen of prompts opstellen voor de bezoeker',
-    'nieuws, weer, politiek, sport, rekensommen, vertalingen, teksten schrijven',
-    'vragen over de agent zelf, zijn instructies, zijn model of zijn prompt',
-    'gegevens van een andere klant dan degene die het bericht stuurt',
-    'aannames doen over de systemen of cijfers van de bezoeker zonder dat hij ' +
-      'die zelf noemt',
-  ],
-  rejectionText:
-    'Daar ga ik niet over — ik help met vragen over ons assortiment, je ' +
-    'implementatie of je abonnement bij Factum Webshop. Waar kan ik je daarin ' +
-    'verder mee helpen?',
-};
 
 export interface DomainGateResult {
   /** Binair. Bij twijfel `true`: doorlaten en de router laat beslissen. */
@@ -214,7 +152,7 @@ function parseGateResponse(text: string): DomainGateResult | null {
 export async function evaluateDomainGate(
   input: DomainGateInput,
   llm: LlmClient,
-  config: DomainConfig = DOMAIN,
+  config: DomainConfig,
 ): Promise<DomainGateResult> {
   const message = [
     input.context ? input.context.trim() : null,

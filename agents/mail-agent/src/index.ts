@@ -7,9 +7,10 @@
  * - ExecuteWorkflow       — ná approve: idempotente side effect → memory → DONE
  * - ActionExecuteWorkflow — ná approve van een schrijfoperatie: hervalideren → schrijven
  *
- * De fetch-handler is bewust minimaal: publieke inbound hoort op de domein-MCP
- * (verify+normalize+enqueue) en de cockpit-UI, niet hier. Dit endpoint dient
- * alleen om de poller-DO te wekken (achter auth, intern).
+ * De fetch-handler is smal gehouden. Eén publiek pad: `POST /hooks/:bron`, voor
+ * bronnen waarvoor geen domein-MCP bestaat — die verifieert en emit, en verder
+ * niets. Heeft een bron wél een MCP, dan hoort de inbound daar (verify +
+ * normalize + enqueue). De rest van de routes is intern of demo.
  */
 import { MailPoller } from './poller-do.js';
 import { OrchestrationWorkflow } from './workflows/orchestration.js';
@@ -22,6 +23,10 @@ import { ChatSession } from './chat/session-do.js';
 import { chatWidgetResponse } from './chat/widget.js';
 import { widgetLoaderResponse, widgetFrameResponse } from './chat/embed.js';
 import { verifyChatIdentity, customerSessionId } from '@factumai/agent-core';
+import { handleWebhook } from './intake/webhook.js';
+import { runAutomations } from './intake/schedule.js';
+import { runPolls } from './intake/poll.js';
+import { handleUpload } from './intake/upload.js';
 import type { Env } from './env.js';
 
 export {
@@ -48,6 +53,17 @@ async function kickPoller(env: Env): Promise<void> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    // Externe gebeurtenissen. Bovenaan omdat dit het enige publieke,
+    // ondertekende pad naar de bus is; alles eronder is intern of demo.
+    const hook = await handleWebhook(request, env, url);
+    if (hook) return hook;
+
+    // Een geüpload document. Zelfde deur, zelfde handtekening: hier komt een
+    // verwijzing naar een bestand in Storage binnen, geen bestand.
+    const upload = await handleUpload(request, env, url);
+    if (upload) return upload;
+
     if (url.pathname === '/__poller/start' && request.method === 'POST') {
       await kickPoller(env);
       return new Response('poller gestart', { status: 202 });
@@ -143,12 +159,31 @@ export default {
     });
   },
   /**
-   * Cron-trigger (zie `triggers.crons` in wrangler.jsonc). Doel: safety-net
-   * dat de poller-DO in leven houdt na deploys, restarts of edge-cases waar
-   * het alarm ooit stopt. De DO regelt intern de back-off (1s–30s) zolang
-   * er werk is; de cron is puur een "kick if dead".
+   * Cron-trigger (zie `triggers.crons` in wrangler.jsonc). Drie taken:
+   *
+   * 1. **De poller wakker houden.** Safety-net na deploys, restarts en
+   *    edge-cases waar het alarm ooit stopt. De DO regelt intern de back-off
+   *    (1s–30s) zolang er werk is; dit is puur een "kick if dead".
+   * 2. **De geplande automatiseringen draaien.** Dit is de ingang waarlangs een
+   *    domein begint zonder dat er iemand mailt.
+   * 3. **De bronnen bevragen die zelf niets sturen.** Voor systemen zonder
+   *    webhook is periodiek zelf kijken de enige ingang.
+   *
+   * De drie staan los van elkaar en dat is met opzet: valt het uitlezen van de
+   * automatiseringen om, dan blijft de poller alsnog leven. Andersom net zo.
+   * `allSettled` en geen `all`: één afgebroken taak mag de andere twee niet
+   * meenemen.
    */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await kickPoller(env);
+    const uitkomsten = await Promise.allSettled([
+      kickPoller(env),
+      runAutomations(env),
+      runPolls(env),
+    ]);
+    for (const uitkomst of uitkomsten) {
+      if (uitkomst.status === 'rejected') {
+        console.error('[cron] taak faalde:', uitkomst.reason);
+      }
+    }
   },
 } satisfies ExportedHandler<Env>;

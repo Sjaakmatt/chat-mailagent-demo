@@ -15,6 +15,31 @@ import type { ChatSession } from './chat/session-do.js';
  */
 export interface Env {
   /**
+   * Het gedeelde geheim per webhook-bron: `WEBHOOK_SECRET_<BRON>`, met de
+   * bronnaam in hoofdletters en streepjes als liggend streepje
+   * (`exact-online` → `WEBHOOK_SECRET_EXACT_ONLINE`).
+   *
+   * **Een bron bestaat als er een geheim voor staat.** Er is bewust geen aparte
+   * lijst met toegestane bronnen: die zou uit de pas gaan lopen met de secrets,
+   * en dan geeft `/hooks/exact` een 404 terwijl het geheim er is. Ongezet is
+   * dus 404, en dat is de veilige kant.
+   *
+   * Zet 'm met `wrangler secret put WEBHOOK_SECRET_<BRON>`. Nooit als `var`.
+   */
+  [webhookSecret: `WEBHOOK_SECRET_${string}`]: string | undefined;
+
+  /**
+   * Gedeeld geheim voor `POST /upload`, waarmee de cockpit (of een scan-
+   * postbus) meldt dat er een document in Storage staat.
+   *
+   * Dezelfde HMAC als de webhooks: `sha256(<timestamp>.<body>)`. Ongezet is de
+   * route 404 — een vergeten secret hoort de deur dicht te houden.
+   *
+   * Zet 'm met `wrangler secret put UPLOAD_SECRET`. Nooit als `var`.
+   */
+  UPLOAD_SECRET?: string;
+
+  /**
    * Klantnaam zoals de agent 'm in mails naar eindklanten mag noemen. Vult de
    * `{{client}}`-placeholder in de specialist-prompts. Zet 'm als `var` in
    * wrangler.jsonc — geen secret.

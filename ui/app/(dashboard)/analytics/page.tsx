@@ -7,6 +7,8 @@ import {
   Gauge,
 } from "lucide-react";
 import { cockpitEnv, makeClient, listReviewRows } from "@/lib/db";
+import { categoryLabel, moduleForRow } from "@/lib/modules";
+import { getCurrentAccess } from "@/lib/auth/access";
 import { computeMetrics, humanDuration } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +24,22 @@ export default async function AnalyticsPage() {
   } catch {
     rows = [];
   }
-  const m = computeMetrics(rows);
+
+  // Dezelfde zeef als de werkbak. Zonder deze stap staan hier de cijfers van
+  // álle modules: een salesmedewerker las de doorlooptijden en de
+  // categorieverdeling van administratie, en de pagina zag er precies hetzelfde
+  // uit als wanneer hij dat wél mocht. De layout laat niemand zonder sessie
+  // hier komen; valt het toch weg, dan is leeg het juiste antwoord.
+  const me = await getCurrentAccess();
+  const zichtbaar = rows.filter((row) => {
+    const mod = moduleForRow(row);
+    // Geen geregistreerde module: hetzelfde weesitem als in de werkbak. Niet
+    // meetellen — anders tellen de cijfers werk mee dat nergens te zien is.
+    if (!mod) return false;
+    return me?.access.mayEnter(mod.id) ?? false;
+  });
+
+  const m = computeMetrics(zichtbaar);
   const maxCat = Math.max(1, ...m.byCategory.map((c) => c.count));
   const maxDay = Math.max(1, ...m.byDay.map((d) => d.count));
 
@@ -89,8 +106,8 @@ export default async function AnalyticsPage() {
                 <div className="space-y-2">
                   {m.byCategory.slice(0, 8).map((c) => (
                     <div key={c.category} className="flex items-center gap-3">
-                      <span className="text-sm text-ink w-32 truncate capitalize">
-                        {c.category.replace(/_/g, " ")}
+                      <span className="text-sm text-ink w-32 truncate">
+                        {categoryLabel(c.category) ?? c.category}
                       </span>
                       <div className="flex-1 h-2 rounded-full bg-brand-100 overflow-hidden">
                         <div

@@ -7,7 +7,9 @@ import {
 } from '@factumai/agent-core';
 import type { Env, PlatformStore, RouterParams } from '../env.js';
 import { createPlatformStore } from '../store.js';
-import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from '../steps.js';
+import { buildOrchestrationSteps, buildLlmClient } from '../steps.js';
+import { prepareSignal } from '../hydrators/index.js';
+import { resolveModule } from '../modules.js';
 
 /**
  * Onder deze router-confidence loggen we naar aios_unknown_intent_log voor
@@ -46,9 +48,25 @@ export class RouterWorkflow extends WorkflowEntrypoint<Env, RouterParams> {
 
     await step.do('route-and-dispatch', async () => {
       const raw = await store.loadSignal(signalId);
-      const signal = await hydrateSignal(this.env, raw);
+      const { signal, envelope } = await prepareSignal(this.env, raw);
+
+      // Wie behandelt dit? Geen match is een expliciete uitkomst en geen
+      // terugval: een signaal door de poort van een willekeurig ander proces
+      // sturen levert een net geformuleerd "daar ga ik niet over" op iets waar
+      // wél iemand naar had moeten kijken. Het signaal blijft staan.
+      const pack = resolveModule(signal);
+      if (!pack) {
+        console.warn(
+          `[router] geen module claimt ${signalId} (${signal.domain}/${signal.type}) — ` +
+            `niet gerouteerd`,
+        );
+        return;
+      }
+
       const classification = await runRoute(signal, {
-        steps: buildOrchestrationSteps(this.env, llm),
+        pack,
+        envelope,
+        steps: buildOrchestrationSteps(this.env, llm, pack),
       });
 
       // Auto-discovery: best-effort logging bij twijfel of escalate-fallback.

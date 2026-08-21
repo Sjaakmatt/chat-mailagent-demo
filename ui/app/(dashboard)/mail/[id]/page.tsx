@@ -1,3 +1,4 @@
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -17,7 +18,7 @@ import {
   listReviewEdits,
   getDecisionLog,
 } from "@/lib/db";
-import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+
 import { requireModulePage } from "@/lib/auth/access";
 import { signAttachmentUrl } from "@/lib/storage";
 import { ReviewForm } from "@/components/mail-detail/ReviewForm";

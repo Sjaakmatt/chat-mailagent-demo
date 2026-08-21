@@ -1,4 +1,4 @@
-import type { IntentConfig } from './types.js';
+import type { IntentConfig } from '../../../specialists/index.js';
 
 /**
  * escalate — fallback voor mails die de router niet met voldoende

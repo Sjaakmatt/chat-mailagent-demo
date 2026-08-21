@@ -1,5 +1,6 @@
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import { ThumbsUp } from "lucide-react";
-import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+
 import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { listFeedback, type FeedbackItem } from "@/lib/visitor-feedback";

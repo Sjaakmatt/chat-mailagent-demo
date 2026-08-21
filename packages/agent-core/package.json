@@ -7,6 +7,9 @@
   "exports": {
     ".": "./dist/index.js",
     "./contracts": "./dist/contracts/index.js",
+    "./envelope": "./dist/envelope/index.js",
+    "./webhooks": "./dist/webhooks/index.js",
+    "./triggers": "./dist/triggers/index.js",
     "./llm": "./dist/llm/index.js",
     "./embeddings": "./dist/embeddings/index.js",
     "./grounding": "./dist/grounding/index.js",
@@ -27,6 +30,7 @@
     "./tickets": "./dist/tickets/index.js",
     "./access": "./dist/access/index.js",
     "./modules": "./dist/modules/index.js",
+    "./modules/klantenservice": "./dist/modules/klantenservice/descriptor.js",
     "./llm-anthropic": "./dist/llm/anthropic.js",
     "./mcp": "./dist/mcp/index.js"
   },

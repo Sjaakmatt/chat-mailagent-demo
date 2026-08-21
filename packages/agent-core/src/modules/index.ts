@@ -86,4 +86,71 @@ export function moduleForKind(
   return descriptors.find((d) => d.kinds.includes(kind)) ?? null;
 }
 
-export { KLANTENSERVICE_MODULE } from './klantenservice.js';
+// ---------------------------------------------------------------------------
+// Categorie-sleutels: een slug betekent alleen iets binnen zijn module
+// ---------------------------------------------------------------------------
+
+/**
+ * Het scheidingsteken tussen module en slug in een categorie-sleutel.
+ *
+ * Een dubbele punt en geen streepje of punt: slugs bevatten `_` en soms `-`,
+ * en een teken dat in een slug kan voorkomen maakt het parsen dubbelzinnig.
+ */
+const KEY_SEPARATOR = ':';
+
+/**
+ * De sleutel waarmee een categorie buiten zijn module wordt aangeduid:
+ * `klantenservice:facturatie`.
+ *
+ * Bestaat omdat een kale slug niet uniek is. `facturatie` betekent in
+ * administratie iets anders dan in klantenservice, en overal waar de twee bij
+ * elkaar komen — de beleidseditor, `aios_policy_rules.applies_to`, een
+ * categoriefilter over modules heen — verdwijnt zonder deze sleutel stilzwijgend
+ * de tweede. Binnen één module blijft de kale slug de sleutel; die staat op het
+ * ReviewItem en in de classificatie, en verandert hier niet door.
+ */
+export function categoryKey(module: ModuleId, slug: string): string {
+  return `${module}${KEY_SEPARATOR}${slug}`;
+}
+
+/**
+ * Splitst een sleutel terug in module en slug.
+ *
+ * Een sleutel zonder scheidingsteken is een **kale slug van vóór de
+ * namespacing**: die geeft `module: null` terug en betekent "elke module".
+ * Bewust geen fout — de beleidsregels van een klant die de migratie nog niet
+ * heeft gedraaid, moeten blijven matchen. Zie `categoryKeyMatches`.
+ */
+export function parseCategoryKey(key: string): {
+  module: ModuleId | null;
+  slug: string;
+} {
+  const at = key.indexOf(KEY_SEPARATOR);
+  if (at === -1) return { module: null, slug: key };
+  return { module: key.slice(0, at), slug: key.slice(at + 1) };
+}
+
+/**
+ * Dekt deze sleutel de categorie `slug` binnen `module`?
+ *
+ * Een gekwalificeerde sleutel matcht alleen zijn eigen module. Een kale slug
+ * matcht in élke module: dat is de terugval voor beleidsregels van vóór de
+ * namespacing, die nooit een module bij zich droegen. Zodra de migratie is
+ * gedraaid komt die vorm niet meer voor, en dan is de eerste tak de enige die
+ * telt.
+ */
+export function categoryKeyMatches(
+  key: string,
+  module: ModuleId,
+  slug: string,
+): boolean {
+  const parsed = parseCategoryKey(key);
+  if (parsed.slug !== slug) return false;
+  return parsed.module === null || parsed.module === module;
+}
+
+// Bewust géén re-export van een concrete module. De kern kent er geen bij naam;
+// wie de descriptor van één module nodig heeft (zijn eigen registratie in de
+// cockpit, een scherm van dat proces) importeert 'm via het subpad
+// `@factumai/agent-core/modules/klantenservice`. Wie een pakket bij id zoekt,
+// gebruikt `packById` uit de registry.

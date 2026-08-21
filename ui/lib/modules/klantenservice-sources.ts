@@ -18,15 +18,18 @@
  */
 
 import {
-  KLANTENSERVICE_MODULE,
+  categoryKeyMatches,
+  categoryLabelIn,
   klantInzichtSource,
   makeSource,
+  parseCategoryKey,
   perKlantSource,
   terugkerendSource,
   volumeSource,
   type AssistantSource,
   type Ticket,
 } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import type { CockpitDbClient } from "@/lib/tenant-query";
 import {
   getDecisionLog,
@@ -124,16 +127,34 @@ async function beslislogSource(
   });
 }
 
+/**
+ * De sleutel uit `applies_to` als leesbaar label. Een sleutel die deze module
+ * niet kent tonen we ruw: dat de regel ergens anders over gaat, is zelf ook
+ * informatie voor wie het beslislog naleest.
+ */
+function beleidCategorieLabel(key: string): string {
+  const { module, slug } = parseCategoryKey(key);
+  if (module !== null && module !== KLANTENSERVICE_MODULE.id) return key;
+  return categoryLabelIn(KLANTENSERVICE_MODULE, slug) ?? slug;
+}
+
 /** Het beleid dat op de categorie van dit voorstel van toepassing is. */
 function beleidSources(
   rules: PolicyRuleRow[],
   category: string | null | undefined,
 ): AssistantSource[] {
-  // Regels zonder `applies_to` gelden overal; die horen er dus ook bij.
+  // Regels zonder `applies_to` gelden overal; die horen er dus ook bij. De
+  // rest matcht op `module:slug`: een regel die de beheerder voor administratie
+  // aanklikte hoort hier niet in het dossier te belanden, ook niet als de slug
+  // toevallig dezelfde is.
   const relevant = rules.filter(
     (r) =>
       r.enabled &&
-      (r.applies_to.length === 0 || (category != null && r.applies_to.includes(category))),
+      (r.applies_to.length === 0 ||
+        (category != null &&
+          r.applies_to.some((key) =>
+            categoryKeyMatches(key, KLANTENSERVICE_MODULE.id, category),
+          ))),
   );
 
   return relevant.map((r) =>
@@ -145,7 +166,11 @@ function beleidSources(
       text: [
         `Naam: ${r.name}`,
         r.description ? `Toelichting: ${r.description}` : null,
-        `Geldt voor: ${r.applies_to.length > 0 ? r.applies_to.join(", ") : "alle categorieën"}`,
+        `Geldt voor: ${
+          r.applies_to.length > 0
+            ? r.applies_to.map(beleidCategorieLabel).join(", ")
+            : "alle categorieën"
+        }`,
         `Actie: ${r.action}`,
         `Prioriteit: ${r.priority}`,
         `Richtlijn: ${r.response_directive}`,
@@ -558,7 +583,15 @@ export async function collectKlantenserviceGeneralSources(
     KLANTENSERVICE_MODULE.categories.map((c) => c.slug),
   );
   const mijnRegels = rules.filter(
-    (r) => r.applies_to.length === 0 || r.applies_to.some((c) => eigenCategorieen.has(c)),
+    (r) =>
+      r.applies_to.length === 0 ||
+      r.applies_to.some((key) => {
+        // Een sleutel is van mij als hij mijn module noemt (of geen module,
+        // want dat is een regel van vóór 0035) én een categorie die ik ken.
+        const { module, slug } = parseCategoryKey(key);
+        if (module !== null && module !== KLANTENSERVICE_MODULE.id) return false;
+        return eigenCategorieen.has(slug);
+      }),
   );
 
   // Pas hier op te halen: de acties hangen aan de review-items die net door de
