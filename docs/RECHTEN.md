@@ -87,6 +87,9 @@ de standaard is. "Leeg" en "bewust zo ingesteld" zien er anders identiek uit.
 | Plek | Wat |
 | --- | --- |
 | `ui/app/(dashboard)/page.tsx` | Alleen tabs en items van modules waar je in mag |
+| `ui/app/(dashboard)/analytics/page.tsx` | Telt alleen de items van modules waar je in mag |
+| `ui/app/(dashboard)/audit/page.tsx` | Alleen beslissingen en domein-events van jouw modules; de bronfilter toont de rest niet eens |
+| `ui/app/api/audit/export/route.ts` | Dezelfde grens als de pagina — een export die alleen op rang controleert zet de hele auditlog één klik verderop in een CSV |
 | `ui/app/api/review/[id]/route.ts` | Goedkeuren/afwijzen checkt de modulegrant ná het ophalen — vóórdat je het item hebt, weet je niet uit welk proces het komt |
 | `ui/app/api/review/[id]/draft/route.ts` | Idem bij bewerken: een concept aanpassen is meebeslissen over wat naar buiten gaat |
 | MCP-laag | Snijdt elk antwoord bij op de meegestuurde `dataCategories` |

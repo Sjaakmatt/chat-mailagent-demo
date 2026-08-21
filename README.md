@@ -69,7 +69,8 @@ rust:
 | Onderwerp                      | Bestand                                       |
 | ------------------------------ | --------------------------------------------- |
 | Slug, naam, org-id, MCP's      | `client.manifest.yaml` + de wrangler-configs   |
-| Categorieën                    | `packages/agent-core/src/taxonomy/index.ts`    |
+| Categorieën + domeingrens      | `packages/agent-core/src/modules/<module>/`    |
+| Welke modules deze klant draait | `client.manifest.yaml` (`modules:`) + `pnpm modules:generate` |
 | Naam, kleuren, navigatie       | `ui/lib/brand.ts` + `ui/app/globals.css`       |
 | Demo-mails                     | `ui/lib/demo/scenarios.ts`                     |
 | Beleidsregels, tone-of-voice   | in de cockpit / database — **niet** in code    |

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   applyActionEdits,
-  getActionType,
+  actionTypeBySlug,
   isExpired,
   isOpenAction,
   requiredApproverRole,
@@ -116,7 +116,7 @@ export async function POST(
     );
   }
 
-  const def = getActionType(action.type);
+  const def = actionTypeBySlug(action.type);
   if (!def) {
     return NextResponse.json(
       { error: "Dit actietype bestaat niet meer" },
@@ -246,7 +246,7 @@ export async function PATCH(
     );
   }
 
-  const def = getActionType(action.type);
+  const def = actionTypeBySlug(action.type);
   if (!def) {
     return NextResponse.json({ error: "Dit actietype bestaat niet meer" }, { status: 409 });
   }

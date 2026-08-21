@@ -147,8 +147,8 @@ ui/wrangler.jsonc` geeft niets meer terug.
 
 ## Stap 4 — taxonomie
 
-Open `packages/agent-core/src/taxonomy/index.ts` en vervang de startset door de
-categorieën van deze klant. Dit is de belangrijkste inhoudelijke stap: de
+Open `packages/agent-core/src/modules/klantenservice/taxonomy.ts` en vervang de
+startset door de categorieën van deze klant. Dit is de belangrijkste inhoudelijke stap: de
 classifier kiest hieruit en het beleid matcht erop.
 
 Vuistregel: een categorie verdient een eigen slug als er ánder beleid of een
@@ -156,7 +156,7 @@ andere specialist bij hoort. Anders hoort 'ie bij `overig`. Meestal kom je uit
 op 8 à 12.
 
 **Vul de `hint` in, altijd.** Die regel gaat mee de classify-prompt in
-(`CATEGORY_GUIDE`) en is werkende configuratie, geen documentatie. Zonder hint
+(`categoryGuide`) en is werkende configuratie, geen documentatie. Zonder hint
 raadt het model de betekenis uit de naam, en dan valt een bericht in de
 categorie die er het meest naar klínkt in plaats van waar het hoort — waarna het
 beleid van díé categorie draait en de agent iets vraagt wat niemand wilde vragen.
@@ -183,8 +183,8 @@ en een hint draagt.
 
 ## Stap 4b — domeingrens
 
-Open `packages/agent-core/src/domain-gate/index.ts` en beschrijf waar deze klant
-over gaat. Dit is de poort vóór de router: valt een bericht erbuiten, dan stopt
+Open `packages/agent-core/src/modules/klantenservice/gate.ts` en beschrijf waar
+deze klant over gaat. Dit is de poort vóór de router: valt een bericht erbuiten, dan stopt
 de run — geen specialist, geen tool-call, geen gegenereerde tekst. De klant
 krijgt een **vaste** afwijzingstekst uit dezelfde config.
 
@@ -252,6 +252,17 @@ npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put FACTUMAI_MCP_MAIL_URL
 # en de overige MCP-URL's + auth die deze klant gebruikt
 ```
+
+Alleen nodig als deze klant die ingang gebruikt (zie
+[`docs/TRIGGERS.md`](./TRIGGERS.md)):
+
+```bash
+npx wrangler secret put WEBHOOK_SECRET_<BRON>   # per bron die naar /hooks/<bron> post
+npx wrangler secret put UPLOAD_SECRET           # voor POST /upload
+```
+
+Beide zijn fail-closed: zonder secret geeft de route 404. Een vergeten geheim
+houdt de deur dus dicht in plaats van open.
 
 Voor de cockpit hetzelfde, plus `SUPABASE_ANON_KEY` — zonder die key blijft de
 werkbak fail-closed op slot.
@@ -487,6 +498,43 @@ Hoever loopt een klant achter?
 git fetch upstream && git log --oneline HEAD..upstream/main | wc -l
 ```
 
+### Updates met een migratie erbij
+
+De sync-workflow raakt de database niet aan. Zit er een migratie in de update,
+dan moet die met de hand op het Supabase-project van de klant draaien, en de
+volgorde luistert: **eerst de migratie, dan de deploy.** Andersom draait er even
+code tegen een schema dat de kolom nog niet heeft.
+
+Wat er per update te draaien valt, staat in `migrations/README.md`. Twee
+migraties vragen daarnaast iets van jou:
+
+| Migratie | Wat je zelf moet doen |
+| --- | --- |
+| `0021_revoke_security_definer` | Verplicht op elke bestaande database — hij zet RPC-grants dicht |
+| `0035_module_columns` | Zie hieronder |
+
+**Bij `0035_module_columns`:**
+
+1. Draai de migratie vóór je de agent-Worker en de cockpit deployt. Hij zet een
+   `module`-kolom op elke werk- en kennistabel, met `klantenservice` als
+   backfill en default — bestaande rijen kloppen dus meteen.
+2. De teller voor ticketnummers loopt daarna per module. De oude
+   drie-argument-RPC blijft bestaan en trekt uit de klantenservice-reeks, dus
+   een Worker die nog niet gedeployd is blijft werken. Lopende nummerreeksen
+   breken niet.
+3. `aios_policy_rules.applies_to` gaat van kale slugs naar `module:slug`. De
+   migratie zet bestaande regels om naar `klantenservice:<slug>`. Heb je zelf
+   regels aangemaakt buiten de cockpit om, controleer die dan na afloop in
+   **Beleid**: een regel waarvan de categorieën leeg staan, matcht nergens meer.
+4. Draai je de migratie later dan de deploy, dan blijft je beleid werken: een
+   kale slug matcht voorlopig nog in elke module. Zodra er een tweede module
+   bijkomt is dat niet meer wat je wilt, dus stel het niet uit.
+
+Heb je **eigen tabellen** met werk of kennis van één proces (een magazijnmodule,
+een eigen ticketsysteem)? Zet daar dezelfde kolom en index op, in een eigen
+migratie op het eerstvolgende vrije nummer. Zonder die kolom valt jouw tabel
+buiten elke modulezeef, en dan lekt hij straks over de afdelingen heen.
+
 ## Maatwerk en fundament-updates
 
 Een conflict is geen storing: het is het fundament dat een bestand raakt dat jij
@@ -494,8 +542,8 @@ voor deze klant hebt aangepast. Hoe vaak dat gebeurt, hangt af van wáár je het
 maatwerk hebt gezet.
 
 **Op een extensiepunt — verwacht, en prima.**
-`taxonomy/index.ts`, `ui/lib/brand.ts`, `globals.css`, de wrangler-configs,
-`domain/index.ts`, `audit-sources.ts`, `demo/scenarios.ts`. Deze bestanden zijn
+`modules/<module>/taxonomy.ts` en `gate.ts`, `ui/lib/brand.ts`, `globals.css`,
+de wrangler-configs, `domain/index.ts`, `audit-sources.ts`, `demo/scenarios.ts`. Deze bestanden zijn
 bedoeld om per klant af te wijken. Het fundament raakt ze zelden, en als het
 gebeurt is het conflict klein en leesbaar. Vuistregel bij het oplossen: **de
 klant-versie wint**, en je neemt alleen over wat je bewust wilt.

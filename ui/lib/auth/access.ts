@@ -108,6 +108,28 @@ export async function accessFor(user: AuthedUser): Promise<AuthedAccess> {
 }
 
 /**
+ * Guard voor route-handlers die over **meerdere** modules lezen — de auditlog,
+ * de export, straks de cijfers.
+ *
+ * Controleert alleen de rang; wélke modules deze gebruiker mag zien staat in
+ * `modules` op het resultaat en dat is wat de caller in zijn query zet. Bewust
+ * geen `requireModule` per module in een lus: een leeslijst hoort niet te
+ * weigeren maar in te korten, anders krijgt iemand met één afdeling een 403 op
+ * een pagina waar gewoon minder in staat.
+ */
+export async function requireAccess(
+  minRole: Role,
+): Promise<AuthedAccess | NextResponse> {
+  const RANK: Record<Role, number> = { viewer: 0, reviewer: 1, admin: 2 };
+  const user = await getCurrentAccess();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (RANK[user.role] < RANK[minRole]) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return user;
+}
+
+/**
  * Guard voor route-handlers die op één module werken. Controleert de rol én de
  * modulegrant, in die volgorde — een salesmedewerker die genoeg rang heeft om
  * goed te keuren, mag dat nog steeds niet in administratie.

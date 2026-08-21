@@ -13,7 +13,7 @@
  */
 
 import {
-  getActionType,
+  actionTypeBySlug,
   isOpenAction,
   requiredApproverRole,
   type ActionStatus,
@@ -251,7 +251,7 @@ export function toActionViewModel(
   action: CockpitAction,
   now: Date,
 ): ActionViewModel {
-  const def = getActionType(action.type);
+  const def = actionTypeBySlug(action.type);
   const dekking = new Map(action.evidence.map((e) => [e.field, e.toolCallId]));
   const labels = new Map((def?.payloadFields ?? []).map((v) => [v.name, v.label]));
 

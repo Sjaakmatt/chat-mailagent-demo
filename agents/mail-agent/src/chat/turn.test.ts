@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ReviewItem, OutcomeDecision } from '@factumai/agent-core';
-import { CONFIRMATION, DOMAIN } from '@factumai/agent-core';
+import { CONFIRMATION, packById } from '@factumai/agent-core';
+
+// De beurt draait altijd binnen één module; deze tests toetsen het gedrag van
+// de klantenservice-lus, dus die halen we uit de registry.
+const pack = packById('klantenservice')!;
+const DOMAIN = pack.gate;
 
 // De bezorging en het ticket-aanmaken raken de database; hier gaat het om de
 // beslissing wát de bezoeker krijgt, niet om het transport.
@@ -50,7 +55,7 @@ beforeEach(() => {
 
 describe('wat de bezoeker terugkrijgt', () => {
   it('buiten domein: de vaste afwijzingstekst, niets van de bezoeker', async () => {
-    const res = await finishChatTurn(env, item(DOMAIN.rejectionText), undefined, {
+    const res = await finishChatTurn(env, pack, item(DOMAIN.rejectionText), undefined, {
       outOfDomain: true,
       conversationId: 'conv_1',
     });
@@ -60,7 +65,7 @@ describe('wat de bezoeker terugkrijgt', () => {
   });
 
   it.each(['kennis', 'systeem'])('%s: het opgestelde antwoord gaat direct uit', async (o) => {
-    const res = await finishChatTurn(env, item('Je pakket komt morgen.'), uitkomst(o), {
+    const res = await finishChatTurn(env, pack, item('Je pakket komt morgen.'), uitkomst(o), {
       conversationId: 'conv_1',
     });
     expect(res?.reply).toBe('Je pakket komt morgen.');
@@ -73,6 +78,7 @@ describe('wat de bezoeker terugkrijgt', () => {
   it('taak: ticket plus bevestiging, niet het opgestelde antwoord', async () => {
     const res = await finishChatTurn(
       env,
+      pack,
       item('Ik zeg je abonnement meteen op.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
       uitkomst('taak'),
       { conversationId: 'conv_1', category: 'opzegging_proef' },
@@ -96,7 +102,7 @@ describe('wat de bezoeker terugkrijgt', () => {
       handoverReason: 'Een wijziging bevestigen we altijd met een collega.',
     };
 
-    await finishChatTurn(env, ri, uitkomst('taak'), {
+    await finishChatTurn(env, pack, ri, uitkomst('taak'), {
       conversationId: 'conv_1',
       category: 'order_wijziging',
     });
@@ -109,6 +115,7 @@ describe('wat de bezoeker terugkrijgt', () => {
   it('taak zonder beleidsregel: geen reden, dan pakt de tekst de terugval', async () => {
     await finishChatTurn(
       env,
+      pack,
       item('Concept.', { from: 'k@example.com', orderNumber: 'DEMO-1' }),
       uitkomst('taak'),
       { conversationId: 'conv_1', category: 'overig' },
@@ -118,7 +125,7 @@ describe('wat de bezoeker terugkrijgt', () => {
 
   it('taak zonder bruikbare identificatie: om gegevens vragen, geen ticket', async () => {
     ticketAnswer = null;
-    const res = await finishChatTurn(env, item('Ik regel het.'), uitkomst('taak'), {
+    const res = await finishChatTurn(env, pack, item('Ik regel het.'), uitkomst('taak'), {
       conversationId: 'conv_1',
     });
     expect(res?.reply).toBe(CONFIRMATION.needsIdentityText);
@@ -127,7 +134,7 @@ describe('wat de bezoeker terugkrijgt', () => {
   });
 
   it('onbekend: doorvragen, en géén ticket', async () => {
-    const res = await finishChatTurn(env, item('Bedoel je je laatste bestelling?'), uitkomst('onbekend'), {
+    const res = await finishChatTurn(env, pack, item('Bedoel je je laatste bestelling?'), uitkomst('onbekend'), {
       conversationId: 'conv_1',
     });
     expect(res?.reply).toBe('Bedoel je je laatste bestelling?');
@@ -135,15 +142,15 @@ describe('wat de bezoeker terugkrijgt', () => {
   });
 
   it('stuurt niets bij een lege body', async () => {
-    expect(await finishChatTurn(env, item('   '), uitkomst('kennis'), { conversationId: 'c' })).toBeNull();
-    expect(await finishChatTurn(env, item(''), uitkomst('onbekend'), { conversationId: 'c' })).toBeNull();
+    expect(await finishChatTurn(env, pack, item('   '), uitkomst('kennis'), { conversationId: 'c' })).toBeNull();
+    expect(await finishChatTurn(env, pack, item(''), uitkomst('onbekend'), { conversationId: 'c' })).toBeNull();
     expect(pushed).toEqual([]);
   });
 
   // Zonder uitkomst is `taak` de veilige aanname: liever een ticket dan een
   // ongecontroleerd antwoord.
   it('valt zonder uitkomst terug op taak', async () => {
-    await finishChatTurn(env, item('Iets'), undefined, {
+    await finishChatTurn(env, pack, item('Iets'), undefined, {
       conversationId: 'conv_1',
     });
     expect(createdTickets).toHaveLength(1);
@@ -154,6 +161,7 @@ describe('wat de bezoeker terugkrijgt', () => {
     ticketAnswer = null;
     const res = await finishChatTurn(
       env,
+      pack,
       {
         ...item('Ik zoek het op.', {}),
         proposed: {
@@ -173,6 +181,7 @@ describe('wat de bezoeker terugkrijgt', () => {
     ticketAnswer = null;
     const res = await finishChatTurn(
       env,
+      pack,
       {
         ...item('Ik zoek het op.', {}),
         proposed: {
@@ -191,6 +200,7 @@ describe('wat de bezoeker terugkrijgt', () => {
     ticketAnswer = null;
     const res = await finishChatTurn(
       env,
+      pack,
       {
         ...item('Ik zoek het op.', {}),
         proposed: { body: 'Ik zoek het op.', original: {}, classification: { extracted: {} } },

@@ -1,11 +1,13 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import {
   getIntentConfig,
+  type ModulePack,
   type PartialResponse,
   type SpecialistId,
 } from '@factumai/agent-core';
 import type { AggregatorParams, Env } from '../env.js';
 import { createPlatformStore } from '../store.js';
+import { requirePack } from '../modules.js';
 import { buildLlmClient } from '../steps.js';
 import { buildCompoundReviewItem, pickPrecedence } from './aggregator-helpers.js';
 
@@ -56,9 +58,13 @@ export class AggregatorWorkflow extends WorkflowEntrypoint<Env, AggregatorParams
     await step.do('aggregate-and-save', async () => {
       const partials = await store.listPartialResponses(signalId);
       const signal = await store.loadSignal(signalId);
-      const precedence = pickPrecedence(partials);
-      const body = await weavePartials(llm, this.env, signal.payload, partials, precedence);
+      // De router heeft dit signaal al aan een module toegewezen; komt hij hier
+      // zonder pakket, dan is dat een bug en geen scenario.
+      const pack = requirePack(signal);
+      const precedence = pickPrecedence(pack, partials);
+      const body = await weavePartials(llm, this.env, pack, signal.payload, partials, precedence);
       const item = buildCompoundReviewItem({
+        pack,
         signalId,
         organizationId: signal.organizationId,
         partials,
@@ -80,6 +86,7 @@ export class AggregatorWorkflow extends WorkflowEntrypoint<Env, AggregatorParams
 async function weavePartials(
   llm: ReturnType<typeof buildLlmClient>,
   env: Env,
+  pack: ModulePack,
   payload: Record<string, unknown>,
   partials: PartialResponse[],
   precedence: SpecialistId | null,
@@ -87,13 +94,13 @@ async function weavePartials(
   const subject = typeof payload.subject === 'string' ? payload.subject : '';
   const bodyText = typeof payload.bodyText === 'string' ? payload.bodyText : '';
   const precedenceLine = precedence
-    ? `PRIORITEIT-TOON: deze mail bevat een ${getIntentConfig(precedence).displayName.toLowerCase()}-element. Neem die toon aan voor het HELE antwoord — zelfs voor de neutrale deel-antwoorden.`
+    ? `PRIORITEIT-TOON: deze mail bevat een ${(getIntentConfig(pack.specialists, precedence)?.displayName ?? precedence).toLowerCase()}-element. Neem die toon aan voor het HELE antwoord — zelfs voor de neutrale deel-antwoorden.`
     : 'Neem een neutraal-zakelijke toon aan.';
 
   const partialsText = partials
     .map((p, i) => {
-      const cfg = getIntentConfig(p.intent);
-      const header = `[deel ${i + 1} — ${cfg.displayName} — status: ${p.status}]`;
+      const label = getIntentConfig(pack.specialists, p.intent)?.displayName ?? p.intent;
+      const header = `[deel ${i + 1} — ${label} — status: ${p.status}]`;
       return `${header}\n${p.proposedContent || '(geen concept — specialist gaf op)'}`;
     })
     .join('\n\n');

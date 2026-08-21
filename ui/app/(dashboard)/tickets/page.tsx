@@ -1,5 +1,6 @@
 import { ClipboardList } from "lucide-react";
-import { KLANTENSERVICE_MODULE, type Ticket } from "@factumai/agent-core";
+import { type Ticket } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { listTickets } from "@/lib/tickets";

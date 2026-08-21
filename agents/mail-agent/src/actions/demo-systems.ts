@@ -32,6 +32,7 @@ import { SupabaseClient, ServiceRoleCredentialStore } from '@factumai/agent-core
 import type { TenantContext } from '@factumai/agent-core';
 import type { Env } from '../env.js';
 import { createTicket } from '../chat/tickets.js';
+import { requirePackForAction } from '../modules.js';
 import type { ActionExecutionContext, ActionExecutor, PreconditionReader } from './execute.js';
 
 const CTX: TenantContext = {
@@ -169,6 +170,9 @@ export const DEMO_EXECUTORS: ActionExecutor[] = [
     async run(ctx) {
       const feiten = await runFeiten(ctx);
       const ticket = await createTicket(ctx.env, {
+        // Het pakket dat dit actietype bezit. Het voorstel draagt alleen de
+        // slug, dus de registry zoekt 'm terug; de ticketreeks loopt per module.
+        pack: requirePackForAction(ctx.action.type),
         organizationId: ctx.action.organizationId,
         // Geen chatgesprek: dit komt uit een mailrun. Het ReviewItem is de
         // koppeling terug naar het concept-antwoord en de onderbouwing.

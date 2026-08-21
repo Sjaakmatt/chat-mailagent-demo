@@ -1,4 +1,4 @@
-import type { IntentConfig } from './types.js';
+import type { IntentConfig } from '../../../specialists/index.js';
 
 /**
  * simple_reply — de "korte-vraag / status-check"-specialist.

@@ -7,7 +7,9 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "modules:generate": "node scripts/generate-registry.mjs",
     "eval:gate": "tsx scripts/adversarial-gate.ts",
+    "eval:golden": "tsx scripts/golden.ts",
     "eval:feedback": "tsx scripts/eval-from-feedback.ts"
   },
   "devDependencies": {

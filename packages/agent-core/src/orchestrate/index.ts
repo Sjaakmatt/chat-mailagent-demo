@@ -14,6 +14,7 @@
  */
 
 import type {
+  ModuleId,
   ReviewItem,
   ReviewItemKind,
   Signal,
@@ -27,19 +28,18 @@ import {
   type PlanClaim,
 } from '../grounding/index.js';
 import { getIntentConfig, type IntentConfig } from '../specialists/index.js';
-import { DOMAIN } from '../domain-gate/index.js';
 import {
   finalizeOutcome,
   isIdentified,
-  outcomeFromClassification,
   type Outcome,
   type OutcomeDecision,
 } from '../outcomes/index.js';
+import type { ModulePack } from '../modules/contract.js';
+import { senderOf, type SignalEnvelope } from '../envelope/index.js';
 import { channelForDomain } from '../channels/index.js';
 import {
   buildProposedActions,
   identificationLevel,
-  type ActionAttachment,
   type IdentificationLevel,
   type PlannedAction,
   type ProposedAction,
@@ -277,6 +277,25 @@ export interface StepTiming {
 }
 
 export interface OrchestrationDeps {
+  /**
+   * Het modulepakket dat dit signaal behandelt.
+   *
+   * Verplicht, en met opzet geen terugval op "de eerste module". De kern kent
+   * geen enkele module bij naam; wélke module dit signaal krijgt, beslist
+   * `resolveModule(signal)` aan de rand — en die mag `null` teruggeven. Een
+   * signaal dat niemand claimt hoort te blijven staan met een leesbare reden,
+   * niet door de poort van een willekeurig ander proces te gaan.
+   */
+  pack: ModulePack;
+  /**
+   * Het signaal zoals de kern het leest.
+   *
+   * Verplicht, en met opzet geen terugval op `signal.payload`. Tot fase 2 las
+   * de lus hier rechtstreeks `payload.from` en `payload.attachments`, en
+   * daarmee was de kern een mailagent met een generieke naam. De envelop komt
+   * van de hydrator van het domein; zie `envelope/index.ts`.
+   */
+  envelope: SignalEnvelope;
   steps: OrchestrationSteps;
   now?: () => string;
   newId?: () => string;
@@ -297,8 +316,9 @@ export interface OrchestrationDeps {
    */
   onProgress?: (phase: ProgressPhase) => void;
   /**
-   * Vaste tekst voor een bericht buiten het domein. Default: de tekst uit
-   * `DOMAIN`. Wordt letterlijk gebruikt — nooit door een model aangeraakt.
+   * Vaste tekst voor een bericht buiten het domein. Default: de tekst uit de
+   * poort van het pakket. Wordt letterlijk gebruikt — nooit door een model
+   * aangeraakt.
    */
   rejectionText?: string;
 }
@@ -392,7 +412,14 @@ export function outOfDomainReviewItem(
   signal: Signal,
   reason: string,
   rejectionText: string,
-  opts: { kind?: ReviewItemKind; now?: () => string; newId?: () => string } = {},
+  opts: {
+    kind?: ReviewItemKind;
+    module?: ModuleId;
+    /** Het bewijsstuk uit de envelop; valt terug op de ruwe payload. */
+    raw?: Record<string, unknown>;
+    now?: () => string;
+    newId?: () => string;
+  } = {},
 ): ReviewItem {
   const now = opts.now ?? (() => new Date().toISOString());
   const newId = opts.newId ?? defaultId;
@@ -400,11 +427,12 @@ export function outOfDomainReviewItem(
     id: newId(),
     organizationId: signal.organizationId,
     signalId: signal.id,
+    module: opts.module,
     kind: opts.kind ?? 'draft_email',
     summary: `Buiten domein — ${reason || 'geen toelichting'}`,
     proposed: {
       body: rejectionText,
-      original: signal.payload ?? {},
+      original: opts.raw ?? signal.payload ?? {},
       outOfDomain: { reason },
       triage: { tier: 'simple', reason: 'buiten domein' } satisfies Triage,
     },
@@ -504,13 +532,13 @@ export async function runSpecialize(
       ? await meet(deps, 'retrieve', () => retrieveStep(signal, classification, resolved))
       : [];
 
-  // Multi-agent Fase 1: als de router een specialist heeft gekozen, laad de
-  // bijbehorende IntentConfig uit de registry en geef 'm door aan plan().
-  // Onbekende SpecialistId → getIntentConfig() valt terug op `escalate` — de
-  // plan-stap kan dan een minimalistisch antwoord bouwen en de reviewer
-  // ontvangt een "kon niet classificeren"-taak.
+  // Als de router een specialist heeft gekozen, laad de bijbehorende
+  // IntentConfig uit **dit pakket** en geef 'm door aan plan(). Onbekende
+  // SpecialistId → `getIntentConfig` valt terug op de escalatie-variant van
+  // deze module: de plan-stap bouwt dan een minimalistisch antwoord en de
+  // reviewer krijgt een "kon niet classificeren"-taak.
   const intentConfig = classification.specialist
-    ? getIntentConfig(classification.specialist)
+    ? getIntentConfig(deps.pack.specialists, classification.specialist)
     : undefined;
 
   // Bij een taak schrijft de plan-stap geen antwoord voor de bezoeker maar een
@@ -541,10 +569,11 @@ export async function runSpecialize(
   if (ungrounded.length > 0) proposed.guardrail = { ungroundedClaims: ungrounded };
   if (plan.policy) proposed.policy = plan.policy;
 
-  // Snapshot van wat de agent zag (het originele, gehydrateerde signaal) en
-  // besloot (classificatie). Zo kan de cockpit het origineel + de analyse tonen
-  // zonder live MCP-call, en dient het als onveranderlijke audit-snapshot.
-  proposed.original = signal.payload ?? {};
+  // Snapshot van wat de agent zag en besloot. Zo kan de cockpit het origineel
+  // plus de analyse tonen zonder live MCP-call, en dient het als
+  // onveranderlijke audit-snapshot. `raw` en niet de envelop: het bewijsstuk is
+  // wat het domein aanleverde, niet onze lezing ervan.
+  proposed.original = deps.envelope.raw;
   proposed.classification = {
     category: classification.category,
     confidence: classification.confidence,
@@ -558,16 +587,17 @@ export async function runSpecialize(
   // de klant geïdentificeerd is én er echt een systeemantwoord terugkwam.
   // Ontbreekt een van beide, dan degradeert 'ie naar `taak` (bouwbriefing §3).
   const channel = channelForDomain(signal.domain)?.id ?? signal.domain;
-  const payload = (signal.payload ?? {}) as Record<string, unknown>;
+  const afzender = senderOf(deps.envelope);
+  const orderReference =
+    typeof classification.extracted.orderNumber === 'string'
+      ? classification.extracted.orderNumber
+      : null;
   const outcome: OutcomeDecision = finalizeOutcome(
-    classification.outcome ?? outcomeFromClassification(classification),
+    classification.outcome ?? deps.pack.outcomes.fallbackOutcome(classification),
     {
-      identified: isIdentified(channel, {
-        senderAddress: typeof payload.from === 'string' ? payload.from : null,
-        orderReference:
-          typeof classification.extracted.orderNumber === 'string'
-            ? classification.extracted.orderNumber
-            : null,
+      identified: isIdentified(deps.pack.outcomes.identification, channel, {
+        senderAddress: afzender,
+        orderReference,
       }),
       systemAnswer: plan.systemAnswer === true,
     },
@@ -587,6 +617,10 @@ export async function runSpecialize(
     id: newId(),
     organizationId: signal.organizationId,
     signalId: signal.id,
+    // Welk proces dit voortbracht. Bepaalt de tab in de werkbak en wie het mag
+    // goedkeuren; zonder deze regel zou de schil terug moeten vallen op `kind`,
+    // en dat werkt alleen zolang geen twee modules dezelfde vorm produceren.
+    module: deps.pack.descriptor.id,
     kind: plan.kind,
     summary: plan.summary,
     proposed,
@@ -612,26 +646,22 @@ export async function runSpecialize(
   // eigen zekerheid over de klant mocht opgeven, zou het de poort kunnen
   // openzetten die precies daarvoor bedoeld is.
   const identification = identificationLevel({
-    senderAddress: typeof payload.from === 'string' ? payload.from : null,
-    orderReference:
-      typeof classification.extracted.orderNumber === 'string'
-        ? classification.extracted.orderNumber
-        : null,
+    senderAddress: afzender,
+    orderReference,
     sourceEmail: plan.sourceEmail ?? null,
   });
   const { actions, rejected: rejectedActions } = buildProposedActions({
     planned: plan.actions ?? [],
+    types: deps.pack.actions,
     channel,
     identification,
     organizationId: signal.organizationId,
     runId: signal.id,
     reviewItemId: reviewItem.id,
     now: new Date(reviewItem.createdAt),
-    // De bijlagen zoals het kanaal ze aanleverde. Typen die beeldmateriaal
+    // De bijlagen zoals het domein ze aanleverde. Typen die beeldmateriaal
     // eisen leunen hierop; het model komt er niet aan te pas.
-    attachments: Array.isArray(payload.attachments)
-      ? (payload.attachments as ActionAttachment[])
-      : [],
+    attachments: deps.envelope.attachments,
   });
 
   return {
@@ -670,8 +700,14 @@ export async function orchestrate(
     const reviewItem = outOfDomainReviewItem(
       signal,
       classification.outOfDomain.reason,
-      deps.rejectionText ?? DOMAIN.rejectionText,
-      { now: deps.now, newId: deps.newId },
+      deps.rejectionText ?? deps.pack.gate.rejectionText,
+      {
+        kind: deps.pack.review.defaultKind,
+        module: deps.pack.descriptor.id,
+        raw: deps.envelope.raw,
+        now: deps.now,
+        newId: deps.newId,
+      },
     );
     return { reviewItem, classification, resolved: {}, ungrounded: [] };
   }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildCompoundReviewItem, pickPrecedence } from './aggregator-helpers.js';
-import type { PartialResponse } from '@factumai/agent-core';
+import { packById, type PartialResponse } from '@factumai/agent-core';
+
+// De aggregator weeft binnen één module: de labels en de vorm van het compound
+// ReviewItem komen uit dat pakket.
+const pack = packById('klantenservice')!;
 
 function partial(overrides: Partial<PartialResponse> = {}): PartialResponse {
   return {
@@ -20,7 +24,7 @@ function partial(overrides: Partial<PartialResponse> = {}): PartialResponse {
 
 describe('pickPrecedence', () => {
   it('kiest het eerste needsHitl-intent (klacht > simple_reply)', () => {
-    const p = pickPrecedence([
+    const p = pickPrecedence(pack, [
       partial({ intent: 'simple_reply' }),
       partial({ intent: 'complaint', taskId: 't1' }),
       partial({ intent: 'custom_intent', taskId: 't2' }),
@@ -29,7 +33,7 @@ describe('pickPrecedence', () => {
   });
 
   it('geeft null bij enkel neutrale intents', () => {
-    const p = pickPrecedence([
+    const p = pickPrecedence(pack, [
       partial({ intent: 'simple_reply' }),
       partial({ intent: 'simple_reply', taskId: 't1' }),
     ]);
@@ -37,7 +41,7 @@ describe('pickPrecedence', () => {
   });
 
   it('gdpr is ook needsHitl → wordt gepakt', () => {
-    const p = pickPrecedence([
+    const p = pickPrecedence(pack, [
       partial({ intent: 'simple_reply' }),
       partial({ intent: 'gdpr', taskId: 't1' }),
     ]);
@@ -65,6 +69,7 @@ describe('buildCompoundReviewItem', () => {
     ];
 
     const item = buildCompoundReviewItem({
+      pack,
       signalId: 'sig_1',
       organizationId: 'org_sun',
       partials,
@@ -88,6 +93,7 @@ describe('buildCompoundReviewItem', () => {
 
   it('drukt confidence extra naar beneden bij ontbrekende partials', () => {
     const item = buildCompoundReviewItem({
+      pack,
       signalId: 'sig_2',
       organizationId: 'org_sun',
       partials: [partial({ confidence: 0.9 })],
@@ -102,6 +108,7 @@ describe('buildCompoundReviewItem', () => {
 
   it('geeft confidence 0 als er geen partials binnenkwamen', () => {
     const item = buildCompoundReviewItem({
+      pack,
       signalId: 'sig_3',
       organizationId: 'org_sun',
       partials: [],
@@ -114,6 +121,7 @@ describe('buildCompoundReviewItem', () => {
 
   it('propageert precedenceIntent naar de ReviewItem + summary', () => {
     const item = buildCompoundReviewItem({
+      pack,
       signalId: 'sig_4',
       organizationId: 'org_sun',
       partials: [

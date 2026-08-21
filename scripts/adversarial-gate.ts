@@ -16,7 +16,19 @@
  * tegenhoudt.
  */
 
-import { evaluateDomainGate, DOMAIN, type LlmClient } from '@factumai/agent-core';
+import { evaluateDomainGate, packById, type LlmClient } from '@factumai/agent-core';
+
+/**
+ * De poort die we beproeven. Per module, want elke module heeft een eigen
+ * grens; dit script toetst die van klantenservice, de startset waar elke klant
+ * van vertrekt.
+ */
+const PACK = packById('klantenservice');
+if (!PACK) {
+  console.error('De module "klantenservice" staat niet in de registry.');
+  process.exit(2);
+}
+const DOMAIN = PACK.gate;
 
 const MODEL = process.env.MODEL_CLASSIFY ?? 'claude-haiku-4-5';
 const API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -183,7 +195,7 @@ async function main(): Promise<void> {
 
   console.log('── Moet geblokkeerd worden ──');
   for (const bericht of BUITEN) {
-    const res = await evaluateDomainGate({ body: bericht }, llm);
+    const res = await evaluateDomainGate({ body: bericht }, llm, DOMAIN);
     const ok = !res.inDomain;
     if (!ok) falsePass++;
     console.log(`${ok ? '  ok  ' : ' LEK  '} ${bericht.slice(0, 62).replace(/\n/g, ' ')}`);
@@ -195,6 +207,7 @@ async function main(): Promise<void> {
     const res = await evaluateDomainGate(
       { body: geval.bericht, context: geval.context },
       llm,
+      DOMAIN,
     );
     const ok = res.inDomain;
     if (!ok) falseBlock++;
@@ -204,7 +217,7 @@ async function main(): Promise<void> {
 
   console.log('\n── Moet doorgelaten worden ──');
   for (const bericht of BINNEN) {
-    const res = await evaluateDomainGate({ body: bericht }, llm);
+    const res = await evaluateDomainGate({ body: bericht }, llm, DOMAIN);
     const ok = res.inDomain;
     if (!ok) falseBlock++;
     console.log(`${ok ? '  ok  ' : ' BLOK '} ${bericht.slice(0, 62)}`);
@@ -221,12 +234,12 @@ async function main(): Promise<void> {
   // zelf, want te streng afstellen jaagt echte klanten weg.
   if (falsePass > 0) {
     console.error('\nGATE NIET GEHAALD — er lekt iets buiten het domein door.');
-    console.error('Scherp DOMAIN.outOfScope aan in packages/agent-core/src/domain-gate/index.ts.');
+    console.error('Scherp outOfScope aan in packages/agent-core/src/modules/klantenservice/gate.ts.');
     process.exit(1);
   }
   if (falseBlock > 0) {
     console.warn('\nGate gehaald, maar er worden echte vragen geblokkeerd.');
-    console.warn('Verruim DOMAIN.inScope voordat je live gaat.');
+    console.warn('Verruim inScope voordat je live gaat.');
     process.exit(0);
   }
   console.log('\nGATE GEHAALD.');

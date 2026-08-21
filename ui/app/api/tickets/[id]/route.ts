@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { TicketStatus } from "@factumai/agent-core";
-import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
+
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { requireModule } from "@/lib/auth/access";
 import { updateTicketStatus } from "@/lib/tickets";

@@ -8,25 +8,40 @@ import {
   getIntentConfig,
   type CompoundTaskSummary,
   type GroundingRef,
+  type ModulePack,
   type PartialResponse,
   type ReviewItem,
   type SpecialistId,
 } from '@factumai/agent-core';
 
 /**
+ * Het label van een specialist binnen dit pakket, met de ruwe id als terugval.
+ *
+ * Terugvallen en niet leeg laten: een partial van een specialist die deze
+ * module niet (meer) kent, hoort zichtbaar te blijven in de samenvatting.
+ */
+function specialistLabel(pack: ModulePack, intent: SpecialistId): string {
+  return getIntentConfig(pack.specialists, intent)?.displayName ?? intent;
+}
+
+/**
  * Kiest de intent die de toon van de samengestelde mail bepaalt. Regel:
  * eerste `needsHitl`-intent uit de partials wint; anders `null` (aggregator
  * neemt neutrale toon).
  */
-export function pickPrecedence(partials: PartialResponse[]): SpecialistId | null {
+export function pickPrecedence(
+  pack: ModulePack,
+  partials: PartialResponse[],
+): SpecialistId | null {
   for (const p of partials) {
-    const cfg = getIntentConfig(p.intent);
-    if (cfg.needsHitl) return p.intent;
+    if (getIntentConfig(pack.specialists, p.intent)?.needsHitl) return p.intent;
   }
   return null;
 }
 
 export interface BuildCompoundInput {
+  /** Het pakket dat dit signaal behandelt — levert de labels en de vorm. */
+  pack: ModulePack;
   signalId: string;
   organizationId: string;
   partials: PartialResponse[];
@@ -42,19 +57,20 @@ export interface BuildCompoundInput {
  * drilldown.
  */
 export function buildCompoundReviewItem(input: BuildCompoundInput): ReviewItem {
-  const { partials, expectedTasks, precedence, body, signalId, organizationId } = input;
+  const { pack, partials, expectedTasks, precedence, body, signalId, organizationId } =
+    input;
   const missing = expectedTasks - partials.length;
   const summary =
     `Compound antwoord — ${partials.length}/${expectedTasks} deel-antwoorden` +
     (missing > 0 ? ` (${missing} niet ontvangen)` : '') +
-    (precedence ? ` — toon: ${getIntentConfig(precedence).displayName}` : '');
+    (precedence ? ` — toon: ${specialistLabel(pack, precedence)}` : '');
 
   const tasks: CompoundTaskSummary[] = partials.map((p) => ({
     taskId: p.taskId,
     intent: p.intent,
     status: p.status,
     confidence: p.confidence,
-    summary: getIntentConfig(p.intent).displayName,
+    summary: specialistLabel(pack, p.intent),
     reason: p.reason ?? null,
   }));
 
@@ -74,7 +90,8 @@ export function buildCompoundReviewItem(input: BuildCompoundInput): ReviewItem {
     id: `ri_${signalId}_compound`,
     organizationId,
     signalId,
-    kind: 'draft_email',
+    module: pack.descriptor.id,
+    kind: pack.review.defaultKind,
     summary,
     proposed: { body, compound: true },
     confidence,

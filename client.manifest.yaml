@@ -92,11 +92,35 @@ ui:
   werkbak: true # ReviewItem-werkbak (approve/edit/reject)
   demo: true # demo-pagina aanzetten (DEMO_MODE=true op de cockpit-Worker)
 
+# ---------------------------------------------------------------------------
+# Modules — welke automatiseringen deze klant draait.
+#
+# Dit blok is de bron voor `scripts/generate-registry.mjs`, dat er twee
+# registers uit schrijft: `packages/agent-core/src/modules/registry.generated.ts`
+# (de lus) en `ui/lib/modules/registry.generated.ts` (de werkbak). Draai het
+# script na elke wijziging hier:
+#
+#   pnpm modules:generate
+#
+# Volgorde telt op twee manieren: `resolveModule` neemt de eerste module die een
+# signaal claimt, en de werkbak tabt in `order`-volgorde. Zet de specifiekste
+# module bovenaan.
+# ---------------------------------------------------------------------------
+modules:
+  - id: "klantenservice"
+    # 'core'   = uit het fundament (packages/agent-core/src/modules/<id>/).
+    # 'client' = van deze klant (packages/agent-core/src/client-modules/<id>/),
+    #            een map die het fundament nooit aanraakt.
+    source: "core"
+    # Tabvolgorde in de werkbak. Laag = links.
+    order: 10
+
 # Categorie-taxonomie: de slugs waarop de classifier kiest en het beleid matcht.
-# De code-versie staat in `packages/agent-core/src/taxonomy/index.ts` — houd die
-# twee gelijk. Begin met de startset en snoei/hernoem op basis van discovery.
+# De code-versie staat per module in
+# `packages/agent-core/src/modules/<id>/taxonomy.ts` — dat is het eerste bestand
+# dat je per klant aanpast. Begin met de startset en snoei op basis van discovery.
 taxonomy:
-  source: "packages/agent-core/src/taxonomy/index.ts"
+  source: "packages/agent-core/src/modules/klantenservice/taxonomy.ts"
   reviewed_with_client: false
 
 rag:
