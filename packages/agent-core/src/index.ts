@@ -24,6 +24,8 @@ export * from './specialists/index.js';
 export * from './taxonomy/index.js';
 export * from './channels/index.js';
 export * from './modules/index.js';
+export * from './modules/contract.js';
+export * from './modules/registry.js';
 export * from './chat-guard/index.js';
 export * from './chat-identity/index.js';
 export * from './domain-gate/index.js';

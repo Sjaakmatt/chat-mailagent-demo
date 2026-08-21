@@ -1,20 +1,20 @@
 /**
- * Categorie-taxonomie — **het eerste bestand dat je per klant aanpast.**
+ * Het taxonomie-contract — wat een categorie is, niet welke categorieën er zijn.
  *
- * Dit is de gedeelde woordenlijst van de agent: de classifier kiest hieruit,
- * de beleidsregels matchen erop (`aios_policy_rules.applies_to`), en de cockpit
- * toont de labels. Agent-Worker én cockpit lezen dezelfde lijst, zodat een
- * categorie nooit half doorgevoerd kan zijn.
+ * Een taxonomie is de gedeelde woordenlijst van één **module**: de classifier
+ * van dat proces kiest eruit, de beleidsregels matchen erop
+ * (`aios_policy_rules.applies_to`, als `module:slug`), en de cockpit toont de
+ * labels. De lijst zelf staat op het pakket — `modules/klantenservice/taxonomy.ts`
+ * voor de mailagent.
  *
- * De set hieronder is een neutrale klantenservice-startset. Vervang 'm door de
- * taxonomie die uit de discovery van de klant komt — meestal 8 à 12 categorieën.
- * Vuistregel: een categorie verdient een eigen slug als er ánder beleid of een
- * andere specialist bij hoort. Anders hoort 'ie bij `overig`.
+ * Tot fase 1 stond hier één `CATEGORIES` met elf webshop-categorieën. Dat las
+ * als "de taxonomie van de agent", en dat is precies waarom een tweede domein
+ * er niet naast paste: administratie classificeert niet in
+ * klantenservice-categorieën.
  *
- * Bij het toevoegen van een categorie:
- *   1. Zet 'm in `CATEGORIES` (slug + label + specialist).
- *   2. Draai `pnpm -r test` — de contract-tests bewaken de consistentie.
- *   3. Maak een beleidsregel in de cockpit die op de nieuwe slug matcht.
+ * **Het bestand dat je per klant aanpast** is daarmee verhuisd naar de
+ * taxonomie van de module die je wijzigt. De helpers hieronder blijven
+ * generiek: ze nemen de lijst als parameter.
  */
 
 import type { SpecialistId } from '../contracts/index.js';
@@ -46,21 +46,6 @@ export interface CategoryDef {
   hint?: string;
 }
 
-/** Neutrale startset — vervang per klant. */
-export const CATEGORIES: readonly CategoryDef[] = Object.freeze([
-  { slug: 'levertijd_status', label: 'Levertijd / status', specialist: 'simple_reply', hint: 'waar blijft mijn bestelling, wanneer wordt het geleverd, track & trace' },
-  { slug: 'order_wijziging', label: 'Orderwijziging', specialist: 'order_change', hint: 'adres, aantal of artikel wijzigen, of annuleren vóór verzending' },
-  { slug: 'retour_ruilen', label: 'Retour / ruilen', specialist: 'order_change', hint: 'retourneren, ruilen, herroepingsrecht, geld terug' },
-  { slug: 'garantie_claim', label: 'Garantieclaim', specialist: 'complaint', hint: 'defect binnen de garantietermijn, ontbrekende of kapotte onderdelen' },
-  { slug: 'product_vraag', label: 'Productvraag', specialist: 'simple_reply', hint: 'maten, materialen, compatibiliteit, gebruik — ook als de klant enthousiast klinkt. De standaard voor elke inhoudelijke vraag over een artikel' },
-  { slug: 'technisch_probleem', label: 'Technisch probleem', specialist: 'technical', hint: 'werkt niet zoals verwacht, maar nog niet vastgesteld dat er iets stuk is' },
-  { slug: 'facturatie', label: 'Facturatie', specialist: 'simple_reply', hint: 'facturen, betaalmethoden, btw, betaling die niet klopt' },
-  { slug: 'klacht', label: 'Klacht', specialist: 'complaint', hint: 'ontevredenheid over een product, bezorging of afhandeling; boze of teleurgestelde toon' },
-  { slug: 'commercieel', label: 'Commercieel', specialist: 'escalate', hint: 'grotere aantallen, offerte, wederverkoop, samenwerking. ALLEEN als de klant er zelf om vraagt' },
-  { slug: 'gdpr_verzoek', label: 'Privacy / GDPR-verzoek', specialist: 'gdpr', hint: 'AVG-verzoek over de eigen gegevens van de schrijver: inzage, verwijdering, uitschrijven' },
-  { slug: 'overig', label: 'Overig', specialist: 'escalate', hint: 'te vaag om te routeren, of past nergens onder. Bij een losse begroeting hoort dit, ook als er eerder in het gesprek iets anders speelde' },
-]);
-
 /**
  * De categorielijst zoals de classifier 'm te zien krijgt: slug plus afbakening.
  *
@@ -69,35 +54,37 @@ export const CATEGORIES: readonly CategoryDef[] = Object.freeze([
  * website" belandde onder `demo_aanvraag` omdat dat commercieel klinkt, waarna
  * de agent keurig om naam en bedrijf vroeg — het beleid voor die categorie.
  */
-export const CATEGORY_GUIDE: string = CATEGORIES.map(
-  (c) => `- ${c.slug}${c.hint ? `: ${c.hint}` : ''}`,
-).join('\n');
+export function categoryGuide(taxonomy: readonly CategoryDef[]): string {
+  return taxonomy.map((c) => `- ${c.slug}${c.hint ? `: ${c.hint}` : ''}`).join('\n');
+}
 
-/** Alle slugs — voor de classify-prompt en validatie. */
-export const CATEGORY_SLUGS: readonly string[] = Object.freeze(
-  CATEGORIES.map((c) => c.slug),
-);
-
-/** slug → label, voor cockpit-badges. */
-export const CATEGORY_LABELS: Readonly<Record<string, string>> = Object.freeze(
-  Object.fromEntries(CATEGORIES.map((c) => [c.slug, c.label])),
-);
-
-const CATEGORY_TO_SPECIALIST: Readonly<Record<string, SpecialistId>> = Object.freeze(
-  Object.fromEntries(CATEGORIES.map((c) => [c.slug, c.specialist])),
-);
+/** Alle slugs van deze taxonomie — voor de classify-prompt en validatie. */
+export function categorySlugs(taxonomy: readonly CategoryDef[]): string[] {
+  return taxonomy.map((c) => c.slug);
+}
 
 /**
- * Mapt een categorie op de bijbehorende SpecialistId. Onbekende categorie →
+ * Mapt een categorie op de bijbehorende `SpecialistId`. Onbekende categorie →
  * `escalate` (naar mens). Die fallback is bewust conservatief: beter een mens
  * dan een verkeerde specialist.
  */
-export function categoryToSpecialist(category: string): SpecialistId {
-  return CATEGORY_TO_SPECIALIST[category] ?? 'escalate';
+export function categoryToSpecialist(
+  taxonomy: readonly CategoryDef[],
+  category: string,
+): SpecialistId {
+  return taxonomy.find((c) => c.slug === category)?.specialist ?? 'escalate';
 }
 
-/** Leesbaar label, met de slug zelf als terugval. */
-export function categoryLabel(slug?: string | null): string | null {
+/**
+ * Leesbaar label, met de slug zelf als terugval.
+ *
+ * Terugvallen en niet leeg teruggeven: een experimentele categorie hoort
+ * zichtbaar te blijven in plaats van uit een badge te verdwijnen.
+ */
+export function categoryLabel(
+  taxonomy: readonly CategoryDef[],
+  slug?: string | null,
+): string | null {
   if (!slug) return null;
-  return CATEGORY_LABELS[slug] ?? slug;
+  return taxonomy.find((c) => c.slug === slug)?.label ?? slug;
 }

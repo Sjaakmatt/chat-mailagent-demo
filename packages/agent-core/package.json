@@ -27,6 +27,7 @@
     "./tickets": "./dist/tickets/index.js",
     "./access": "./dist/access/index.js",
     "./modules": "./dist/modules/index.js",
+    "./modules/klantenservice": "./dist/modules/klantenservice/descriptor.js",
     "./llm-anthropic": "./dist/llm/anthropic.js",
     "./mcp": "./dist/mcp/index.js"
   },

@@ -27,7 +27,7 @@
  */
 
 import {
-  getActionType,
+  actionTypeBySlug,
   type PreconditionKind,
   type ProposedAction,
 } from '@factumai/agent-core';
@@ -95,7 +95,7 @@ export const PRECONDITION_READERS: PreconditionReader[] = [];
 export async function readCurrentState(
   ctx: ActionExecutionContext,
 ): Promise<Record<string, unknown>> {
-  const def = getActionType(ctx.action.type);
+  const def = actionTypeBySlug(ctx.action.type);
   if (!def) throw new Error(`actietype ${ctx.action.type} bestaat niet meer in de registratie`);
   if (def.preconditionKind === 'geen') return ctx.action.precondition;
 
@@ -141,7 +141,7 @@ export async function executeAction(ctx: ActionExecutionContext): Promise<{ ref?
     (demoSystemsEnabled(env) ? DEMO_EXECUTORS.find((e) => e.type === action.type) : undefined);
   if (eigen) return eigen.run(ctx);
 
-  const def = getActionType(action.type);
+  const def = actionTypeBySlug(action.type);
   if (!def) {
     // Het type is uit de registratie verdwenen terwijl het voorstel er nog lag.
     // Niet gokken op basis van de payload: dan schrijven we iets waarvan

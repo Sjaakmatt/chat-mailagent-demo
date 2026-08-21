@@ -1,7 +1,8 @@
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MessagesSquare } from "lucide-react";
-import { KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+
 import { requireModulePage } from "@/lib/auth/access";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { getConversation, listMessages } from "@/lib/conversations";

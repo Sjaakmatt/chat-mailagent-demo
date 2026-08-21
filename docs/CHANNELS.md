@@ -372,7 +372,8 @@ script meet het oordeel: blokkeert het model wat het moet blokkeren, en laat het
 gewone klantvragen door? Een poort die alles tegenhoudt is net zo kapot als een
 poort die alles doorlaat, dus het telt beide kanten.
 
-Lekt er iets door, dan faalt het script — scherp `DOMAIN.outOfScope` aan.
+Lekt er iets door, dan faalt het script — scherp `outOfScope` aan in de poort
+van de module (`modules/<module>/gate.ts`).
 Draai dit vóórdat chat naar een echte bezoeker gaat: daar gaan `kennis` en
 `systeem` zonder mens naar buiten.
 

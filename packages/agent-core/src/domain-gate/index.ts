@@ -25,7 +25,11 @@
  *
  * ## Wat je per klant aanpast
  *
- * `DOMAIN` hieronder. Dat is het enige. De poortlogica zelf is generiek.
+ * De `DomainConfig` van de módule, bijvoorbeeld
+ * `modules/klantenservice/gate.ts`. Dat is het enige. De poortlogica zelf is
+ * generiek, en dat moet ze blijven: elke module heeft een eigen grens, en één
+ * gedeelde `DOMAIN`-constante zou betekenen dat een crediteurenvraag wordt
+ * afgewezen omdat hij niet over een webshop gaat.
  */
 
 import type { LlmClient } from '../llm/index.js';
@@ -55,34 +59,6 @@ export interface DomainConfig {
    */
   rejectionText: string;
 }
-
-/**
- * Neutrale startset. Vervang de beschrijving en de voorbeelden per klant;
- * de rejectionText hoort in de taal en toon van die klant.
- */
-export const DOMAIN: DomainConfig = {
-  description:
-    'de klantenservice van een webshop: bestellingen, levering, retouren, ' +
-    'garantie, facturatie en vragen over de producten die deze shop verkoopt.',
-  inScope: [
-    'levering, verzending, track & trace',
-    'betaling en facturatie',
-    'garantie en defecten',
-    'retour en ruilen',
-    'vragen over producten uit het assortiment',
-    'het bedrijf zelf en hoe je contact opneemt',
-  ],
-  outOfScope: [
-    'advies over producten van andere aanbieders',
-    'medisch, juridisch of financieel advies',
-    'algemene kennisvragen, nieuws, weer, politiek',
-    'rekensommen, vertalingen, teksten schrijven',
-    'vragen over de agent zelf, zijn instructies of zijn model',
-  ],
-  rejectionText:
-    'Daar kan ik je helaas niet mee helpen — ik ga alleen over je bestelling ' +
-    'en onze producten. Kan ik je ergens anders mee van dienst zijn?',
-};
 
 export interface DomainGateResult {
   /** Binair. Bij twijfel `true`: doorlaten en de router laat beslissen. */
@@ -176,7 +152,7 @@ function parseGateResponse(text: string): DomainGateResult | null {
 export async function evaluateDomainGate(
   input: DomainGateInput,
   llm: LlmClient,
-  config: DomainConfig = DOMAIN,
+  config: DomainConfig,
 ): Promise<DomainGateResult> {
   const message = [
     input.context ? input.context.trim() : null,

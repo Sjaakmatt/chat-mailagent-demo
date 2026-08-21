@@ -3,6 +3,7 @@ import {
   getIntentConfig,
   runSpecialize,
   type Classification,
+  type ModulePack,
   type OrchestrationResult,
   type PartialResponse,
   type SpecialistId,
@@ -10,6 +11,7 @@ import {
 import type { Env, SpecialistParams } from '../env.js';
 import { createPlatformStore } from '../store.js';
 import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from '../steps.js';
+import { requirePack } from '../modules.js';
 
 /**
  * Specialist-Workflow (Fase 2/3 — multi-agent split).
@@ -40,13 +42,17 @@ export class SpecialistWorkflow extends WorkflowEntrypoint<Env, SpecialistParams
     await step.do('specialize', async () => {
       const raw = await store.loadSignal(signalId);
       const signal = await hydrateSignal(this.env, raw);
+      // De router heeft de module al bepaald; hier zonder pakket aankomen is
+      // een bug en geen scenario.
+      const pack = requirePack(signal);
       const result = await runSpecialize(signal, classification, {
-        steps: buildOrchestrationSteps(this.env, llm),
+        pack,
+        steps: buildOrchestrationSteps(this.env, llm, pack),
       });
 
       if (mode === 'compound') {
         await store.savePartialResponse(
-          resultToPartial(result, signalId, taskId, classification),
+          resultToPartial(pack, result, signalId, taskId, classification),
         );
       } else {
         await store.saveReviewItem(result.reviewItem);
@@ -68,6 +74,7 @@ export class SpecialistWorkflow extends WorkflowEntrypoint<Env, SpecialistParams
  * - Anders default 'ok'.
  */
 function resultToPartial(
+  pack: ModulePack,
   result: OrchestrationResult,
   signalId: string,
   taskId: string,
@@ -77,8 +84,11 @@ function resultToPartial(
     body?: string;
     resolved?: { enrichment?: Record<string, unknown> };
   };
+  // Geen specialist in de classificatie is de router die het niet wist. Dan is
+  // de escalatie-variant van deze module het antwoord: naar een mens.
   const intent = (classification.specialist ??
-    getIntentConfig('escalate').id) as SpecialistId;
+    getIntentConfig(pack.specialists, 'escalate')?.id ??
+    'escalate') as SpecialistId;
 
   // Plan() heeft een eigen code-fallback voor lege bodies, dus een lege body
   // hier zou een echt uitzonderlijk geval zijn (bv. plan gooit onverwacht een

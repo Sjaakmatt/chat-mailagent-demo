@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
-import { evaluateApproval } from '@factumai/agent-core';
+import { actionTypeBySlug, evaluateApproval } from '@factumai/agent-core';
 import type { ActionExecuteParams, Env } from '../env.js';
 import { createPlatformStore } from '../store.js';
 import { executeAction, readCurrentState } from '../actions/execute.js';
@@ -67,6 +67,10 @@ export class ActionExecuteWorkflow extends WorkflowEntrypoint<Env, ActionExecute
 
       const oordeel = evaluateApproval({
         action,
+        // Het type komt uit de registry en niet uit het voorstel: een voorstel
+        // dat blijft liggen terwijl zijn actietype uit de registratie verdwijnt,
+        // hoort niet alsnog uitgevoerd te worden.
+        def: actionTypeBySlug(action.type),
         actueel,
         approverRole,
         now: new Date(),

@@ -11,7 +11,8 @@
  */
 
 import { ClipboardList, Inbox, MessagesSquare, ThumbsUp } from "lucide-react";
-import { KLANTENSERVICE_MODULE, categoryLabelIn } from "@factumai/agent-core";
+import { categoryLabelIn } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import {
   triageOf,
   type CardBadge,
@@ -180,7 +181,6 @@ export const klantenserviceModule: WorkbenchModule = {
   label: KLANTENSERVICE_MODULE.label,
   description: KLANTENSERVICE_MODULE.description,
   icon: Inbox,
-  order: 10,
   kinds: KLANTENSERVICE_MODULE.kinds,
   categories: KLANTENSERVICE_MODULE.categories,
   detailHref,

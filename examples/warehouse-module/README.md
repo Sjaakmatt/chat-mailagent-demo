@@ -61,9 +61,10 @@ fundament biedt, en géén kernbestand.
    ```
 
 4. **Specialist.** Wil je de `missing_parts`-intent? Kopieer
-   `specialists/missing-parts.ts` naar `packages/agent-core/src/specialists/`,
-   registreer 'm in `CORE_INTENTS`, en zet de bijbehorende categorie in de
-   taxonomie.
+   `specialists/missing-parts.ts` naar de specialisten van het modulepakket dat
+   'm gebruikt (`packages/agent-core/src/modules/<module>/specialists/`),
+   registreer 'm daar in de lijst, en zet de bijbehorende categorie in de
+   taxonomie van datzelfde pakket.
 
 5. **Auditbron.** Schrijf een `DomainAuditSource` (zie `ui/lib/audit-sources.ts`
    voor de interface) die `aios_shipment_tasks` uitleest, en registreer 'm in

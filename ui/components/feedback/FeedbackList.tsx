@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { CATEGORY_SLUGS } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import { EVAL_LABELS, type EvalLabel, type FeedbackItem } from "@/lib/visitor-feedback";
 import { cn, timeAgoNL } from "@/lib/utils";
 
@@ -172,7 +172,7 @@ export function FeedbackList({
                   className="flex-1 min-w-0 text-sm border border-line rounded-lg px-3 py-2 bg-surface"
                 >
                   <option value="">Had moeten zijn…</option>
-                  {CATEGORY_SLUGS.map((slug) => (
+                  {KLANTENSERVICE_MODULE.categories.map(({ slug }) => (
                     <option key={slug} value={slug}>
                       {slug}
                     </option>

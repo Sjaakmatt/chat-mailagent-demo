@@ -8,31 +8,35 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { KLANTENSERVICE_SPECIALISTS, escalateConfig } from './index.js';
 import {
-  CORE_INTENTS,
-  INTENT_REGISTRY,
   IntentConfigSchema,
-  escalateConfig,
-  getIntentConfig,
-  knownSpecialistIds,
-} from './index.js';
-import { deriveTriage, orchestrate } from '../orchestrate/index.js';
+  getIntentConfig as lookup,
+  knownSpecialistIds as ids,
+} from '../../../specialists/index.js';
+import { deriveTriage, orchestrate } from '../../../orchestrate/index.js';
 import type {
   Classification,
   OrchestrationSteps,
   Plan,
-} from '../orchestrate/index.js';
-import type { Signal } from '../contracts/index.js';
+} from '../../../orchestrate/index.js';
+import type { Signal } from '../../../contracts/index.js';
+import { klantenservicePack } from '../pack.js';
 
-describe('CORE_INTENTS', () => {
+/** De lookups van deze module, zodat de tests niet elke keer de lijst noemen. */
+const getIntentConfig = (id: string) => lookup(KLANTENSERVICE_SPECIALISTS, id);
+const knownSpecialistIds = () => ids(KLANTENSERVICE_SPECIALISTS);
+const byId = (id: string) => KLANTENSERVICE_SPECIALISTS.find((c) => c.id === id)!;
+
+describe('KLANTENSERVICE_SPECIALISTS', () => {
   it('voldoet elk aan het IntentConfig-schema', () => {
-    for (const cfg of CORE_INTENTS) {
+    for (const cfg of KLANTENSERVICE_SPECIALISTS) {
       expect(() => IntentConfigSchema.parse(cfg)).not.toThrow();
     }
   });
 
   it('heeft unieke IDs', () => {
-    const ids = CORE_INTENTS.map((c) => c.id);
+    const ids = KLANTENSERVICE_SPECIALISTS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -49,12 +53,12 @@ describe('CORE_INTENTS', () => {
   });
 
   it('markeert klacht en gdpr altijd als needsHitl', () => {
-    expect(INTENT_REGISTRY.get('complaint')!.needsHitl).toBe(true);
-    expect(INTENT_REGISTRY.get('gdpr')!.needsHitl).toBe(true);
+    expect(byId('complaint').needsHitl).toBe(true);
+    expect(byId('gdpr').needsHitl).toBe(true);
   });
 
   it('markeert de technische intent als vision-vereist', () => {
-    expect(INTENT_REGISTRY.get('technical')!.needsVision).toBe(true);
+    expect(byId('technical').needsVision).toBe(true);
   });
 
   it('escalate heeft lege tool-scope + lege memory-scope', () => {
@@ -65,13 +69,13 @@ describe('CORE_INTENTS', () => {
 
 describe('getIntentConfig', () => {
   it('geeft de exacte config terug voor een bekende SpecialistId', () => {
-    expect(getIntentConfig('simple_reply').id).toBe('simple_reply');
-    expect(getIntentConfig('order_change').id).toBe('order_change');
+    expect(getIntentConfig('simple_reply')?.id).toBe('simple_reply');
+    expect(getIntentConfig('order_change')?.id).toBe('order_change');
   });
 
   it('valt terug op escalate bij een onbekende ID (geen throw)', () => {
-    expect(getIntentConfig('nonexistent_intent').id).toBe('escalate');
-    expect(getIntentConfig('' as string).id).toBe('escalate');
+    expect(getIntentConfig('nonexistent_intent')?.id).toBe('escalate');
+    expect(getIntentConfig('')?.id).toBe('escalate');
   });
 });
 
@@ -126,7 +130,7 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       extracted: {},
       specialist: 'simple_reply',
     });
-    await orchestrate(makeSignal(), { steps });
+    await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
     expect(planCalls).toHaveLength(1);
     expect(planCalls[0].intentConfig?.id).toBe('simple_reply');
   });
@@ -138,7 +142,7 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       needsRag: false,
       extracted: {},
     });
-    await orchestrate(makeSignal(), { steps });
+    await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
     expect(planCalls[0].intentConfig).toBeUndefined();
   });
 
@@ -150,7 +154,7 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       extracted: {},
       specialist: 'weird_intent_that_does_not_exist',
     });
-    await orchestrate(makeSignal(), { steps });
+    await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
     expect(planCalls[0].intentConfig?.id).toBe('escalate');
   });
 
@@ -162,7 +166,7 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       extracted: {},
       specialist: 'order_change',
     });
-    const { reviewItem } = await orchestrate(makeSignal(), { steps });
+    const { reviewItem } = await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
     expect(reviewItem.proposed.classification).toMatchObject({
       specialist: 'order_change',
     });
@@ -194,7 +198,7 @@ describe('deriveTriage() met intentConfig', () => {
   });
 
   it('needsHitl (bv. complaint) → nooit simple, altijd minstens review', () => {
-    const complaint = INTENT_REGISTRY.get('complaint')!;
+    const complaint = byId('complaint');
     const triage = deriveTriage(
       highConfidenceClassification,
       undefined,
@@ -207,7 +211,7 @@ describe('deriveTriage() met intentConfig', () => {
   });
 
   it('adjustedConfidence onder intent-drempel → tier=review', () => {
-    const orderChange = INTENT_REGISTRY.get('order_change')!;
+    const orderChange = byId('order_change');
     // order_change heeft threshold 0.85; simuleer 0.8
     const cls: Classification = {
       category: 'wijziging',
@@ -222,7 +226,7 @@ describe('deriveTriage() met intentConfig', () => {
   });
 
   it('simple_reply met hoge confidence + geen ungrounded → tier=simple', () => {
-    const simple = INTENT_REGISTRY.get('simple_reply')!;
+    const simple = byId('simple_reply');
     const triage = deriveTriage(
       highConfidenceClassification,
       undefined,

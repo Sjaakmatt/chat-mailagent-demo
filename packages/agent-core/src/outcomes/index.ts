@@ -59,29 +59,28 @@ export interface IdentificationPolicy {
   /**
    * Volstaat het afzenderadres dat het kanaal zelf aanlevert?
    *
-   * Bij mail: ja. Het adres komt van het mailsysteem en niet van een
-   * formulierveld, en elk uitgaand antwoord gaat langs een mens — een verkeerde
-   * match wordt daar gezien voordat er iets de deur uitgaat.
-   *
-   * Bij chat: nee. De bezoeker is anoniem, typt zelf wat hij wil, en het
-   * antwoord gaat direct naar buiten. Daar hoort de identificatiestap uit
-   * bouwbriefing §4 (mailadres + ordernummer) vóór.
+   * Hangt af van hoe betrouwbaar dat adres is en van wat er misgaat bij een
+   * verkeerde match. Het pakket vult 'm in per kanaal; zie
+   * `modules/klantenservice/outcomes.ts` voor de afweging bij mail en chat.
    */
   senderAddressSuffices: boolean;
-  /** Moet er een ordernummer bij, ook als het adres bekend is? */
+  /** Moet er een referentie (ordernummer, dossier) bij, ook bij een bekend adres? */
   requiresOrderReference: boolean;
 }
 
-export const IDENTIFICATION: Readonly<Record<string, IdentificationPolicy>> =
-  Object.freeze({
-    mail: { senderAddressSuffices: true, requiresOrderReference: false },
-    chat: { senderAddressSuffices: false, requiresOrderReference: true },
-  });
-
-/** Onbekend kanaal → de strengste variant. Nooit stilzwijgend soepeler worden. */
-export function identificationPolicy(channel: ChannelId): IdentificationPolicy {
+/**
+ * Het beleid van dit kanaal, of de strengste variant als de module er geen
+ * noemt.
+ *
+ * Onbekend kanaal wordt nooit stilzwijgend soepeler: dat zou betekenen dat een
+ * nieuw kanaal zonder afspraak meteen op de losse manier identificeert.
+ */
+export function identificationPolicy(
+  policies: Readonly<Partial<Record<ChannelId, IdentificationPolicy>>>,
+  channel: ChannelId,
+): IdentificationPolicy {
   return (
-    IDENTIFICATION[channel] ?? {
+    policies[channel] ?? {
       senderAddressSuffices: false,
       requiresOrderReference: true,
     }
@@ -95,9 +94,18 @@ export interface IdentityInput {
   orderReference?: string | null;
 }
 
-/** Toetst de identiteit aan het beleid van dit kanaal. */
-export function isIdentified(channel: ChannelId, input: IdentityInput): boolean {
-  const policy = identificationPolicy(channel);
+/**
+ * Toetst de identiteit aan het beleid van dit kanaal.
+ *
+ * Het beleid komt van het modulepakket (`pack.outcomes.identification`) en niet
+ * uit een globale tabel: wat "geïdentificeerd" betekent verschilt per proces.
+ */
+export function isIdentified(
+  policies: Readonly<Partial<Record<ChannelId, IdentificationPolicy>>>,
+  channel: ChannelId,
+  input: IdentityInput,
+): boolean {
+  const policy = identificationPolicy(policies, channel);
   const hasAddress = Boolean(input.senderAddress?.trim());
   const hasOrder = Boolean(input.orderReference?.trim());
 
@@ -186,44 +194,6 @@ export function routingFor(outcome: Outcome): OutcomeRouting {
 export function mayRespondWithoutHuman(channel: ChannelId, outcome: Outcome): boolean {
   if (channel === 'mail') return false;
   return routingFor(outcome).mayAutoRespond;
-}
-
-// ---------------------------------------------------------------------------
-// Terugval als de router geen uitkomst noemt
-// ---------------------------------------------------------------------------
-
-/**
- * Leidt een uitkomst af uit de specialist en de geëxtraheerde velden, voor het
- * geval de router er zelf geen noemt (oude prompt, kapotte JSON).
- *
- * Bewust conservatief: alles waar een mens iets mee moet, wordt `taak`. Alleen
- * `simple_reply` mag `kennis` of `systeem` worden, en `systeem` uitsluitend als
- * er een ordernummer in het bericht stond — anders valt er niets op te zoeken
- * en is het een kennisvraag.
- */
-export function outcomeFromClassification(input: {
-  specialist?: string;
-  extracted?: Record<string, unknown>;
-}): Outcome {
-  const orderRef = input.extracted?.orderNumber;
-  const hasOrder = typeof orderRef === 'string' && orderRef.trim().length > 0;
-
-  switch (input.specialist) {
-    case 'simple_reply':
-      return hasOrder ? 'systeem' : 'kennis';
-    case 'escalate':
-      // De router kon niet classificeren. Dat is precies `onbekend`:
-      // doorvragen of overdragen, géén ticket.
-      return 'onbekend';
-    case 'order_change':
-    case 'complaint':
-    case 'technical':
-    case 'gdpr':
-      return 'taak';
-    default:
-      // Onbekende of ontbrekende specialist: naar een mens, niet gokken.
-      return 'taak';
-  }
 }
 
 /** De vier geldige waarden — voor validatie van LLM-output. */

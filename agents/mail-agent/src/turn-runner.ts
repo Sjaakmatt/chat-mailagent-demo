@@ -9,6 +9,7 @@ import {
 import type { Env } from './env.js';
 import { createPlatformStore } from './store.js';
 import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from './steps.js';
+import { resolveModule } from './modules.js';
 import { finishChatTurn } from './chat/turn.js';
 import { createTicket } from './chat/tickets.js';
 
@@ -95,10 +96,23 @@ export async function runSignalTurn(
   // inhoud al in de payload en komt het signaal ongewijzigd terug.
   const signal = await hydrateSignal(env, input);
 
+  // Welke module dit signaal behandelt. Geen match is een expliciete uitkomst:
+  // het signaal gaat terug naar NEW en blijft staan, want door de poort van een
+  // willekeurig ander proces sturen levert een net geformuleerd "daar ga ik
+  // niet over" op iets waar wél iemand naar had moeten kijken.
+  const pack = resolveModule(signal);
+  if (!pack) {
+    await store.markSignal(input.id, 'NEW').catch(() => {});
+    throw new Error(
+      `geen module claimt signaal ${signal.id} (${signal.domain}/${signal.type})`,
+    );
+  }
+
   const startedAt = Date.now();
   const timings: StepTiming[] = [];
   const result = await orchestrate(signal, {
-    steps: buildOrchestrationSteps(env, llm),
+    pack,
+    steps: buildOrchestrationSteps(env, llm, pack),
     onProgress: opts.onProgress,
     onTiming: (t) => timings.push(t),
   });
@@ -189,6 +203,7 @@ export async function runSignalTurn(
     try {
       const origineel = (signal.payload ?? {}) as { from?: unknown };
       const ticket = await createTicket(env, {
+        pack,
         organizationId: signal.organizationId,
         conversationId: null,
         reviewItemId: result.reviewItem.id,
@@ -229,7 +244,7 @@ export async function runSignalTurn(
     const payload = (signal.payload ?? {}) as { conversationId?: string };
     if (payload.conversationId) {
       try {
-        const turn = await finishChatTurn(env, result.reviewItem, result.outcome, {
+        const turn = await finishChatTurn(env, pack, result.reviewItem, result.outcome, {
           outOfDomain: Boolean(outOfDomain),
           conversationId: payload.conversationId,
           category: result.classification.category,

@@ -1,15 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import {
   finalizeOutcome,
-  isIdentified,
-  identificationPolicy,
+  isIdentified as toets,
+  identificationPolicy as beleidVoor,
   routingFor,
   mayRespondWithoutHuman,
-  outcomeFromClassification,
   isOutcome,
   OUTCOME_ROUTING,
   type Outcome,
 } from './index.js';
+// De degradatie en de routering zijn generiek; het identificatiebeleid en de
+// terugval-uitkomst komen van een module. Klantenservice is de startset.
+import { KLANTENSERVICE_OUTCOMES } from '../modules/klantenservice/outcomes.js';
+
+const IDENTIFICATIE = KLANTENSERVICE_OUTCOMES.identification;
+const isIdentified = (channel: string, input: Parameters<typeof toets>[2]) =>
+  toets(IDENTIFICATIE, channel, input);
+const identificationPolicy = (channel: string) => beleidVoor(IDENTIFICATIE, channel);
+const outcomeFromClassification = KLANTENSERVICE_OUTCOMES.fallbackOutcome;
 
 describe('degradatie van systeem naar taak', () => {
   it('houdt systeem overeind bij identificatie én een systeemantwoord', () => {
