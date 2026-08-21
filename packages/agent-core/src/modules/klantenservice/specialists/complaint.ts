@@ -35,9 +35,12 @@ export const complaintConfig: IntentConfig = {
     '  "consumentenprogramma") → escalatie-flag opnemen in de review.',
     'Deze mail wordt NOOIT autonoom verstuurd — de reviewer beslist.',
   ].join('\n'),
+  // Een klacht over een beschadigd artikel kan een creditnota opleveren, en
+  // die hangt aan de factuurregel.
   toolScope: [
-    'erp.get_order',
-    'bc.get_order',
+    'order.get',
+    'order.tracking',
+    'invoice.get',
   ],
   memoryScope: ['GLOBAL', 'CLIENT', 'PROCESS'],
   memoryProcessTag: 'complaint',

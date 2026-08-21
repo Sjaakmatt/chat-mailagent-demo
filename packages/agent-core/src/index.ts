@@ -25,6 +25,7 @@ export * from './taxonomy/index.js';
 export * from './channels/index.js';
 export * from './envelope/index.js';
 export * from './triggers/index.js';
+export * from './facts/index.js';
 export * from './webhooks/index.js';
 export * from './modules/index.js';
 export * from './modules/contract.js';

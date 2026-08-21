@@ -10,6 +10,7 @@
     "./envelope": "./dist/envelope/index.js",
     "./webhooks": "./dist/webhooks/index.js",
     "./triggers": "./dist/triggers/index.js",
+    "./facts": "./dist/facts/index.js",
     "./llm": "./dist/llm/index.js",
     "./embeddings": "./dist/embeddings/index.js",
     "./grounding": "./dist/grounding/index.js",

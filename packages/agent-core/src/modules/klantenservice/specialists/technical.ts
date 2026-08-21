@@ -34,10 +34,11 @@ export const technicalConfig: IntentConfig = {
     '  overdreven vriendelijk. Nederlands.',
     'Nooit autonoom versturen zonder menselijke controle.',
   ].join('\n'),
+  // De catalogus erbij: bij "past dit op onze omgeving?" zijn de
+  // specificaties van het artikel het antwoord, niet de order.
   toolScope: [
-    'erp.get_order',
-    'erp.get_sku',
-    // Toekomst: catalog-lookup, warranty-check
+    'catalog.list',
+    'order.get',
   ],
   memoryScope: ['GLOBAL', 'CLIENT', 'PROCESS'],
   memoryProcessTag: 'technical',

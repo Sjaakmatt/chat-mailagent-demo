@@ -28,12 +28,18 @@
 import { readFileSync } from 'node:fs';
 import {
   FakeLlmClient,
+  ToolCallRecorder,
+  collectFacts,
   evaluateDomainGate,
+  getIntentConfig,
   packById,
   runRoute,
+  validateGrounding,
   type Classification,
+  type FactRunResult,
   type LlmCompleteInput,
   type OrchestrationSteps,
+  type PlanClaim,
   type Signal,
 } from '@factumai/agent-core';
 // Uit de agent-Worker en niet nagebouwd: de parser is het stuk dat de mapping
@@ -41,6 +47,9 @@ import {
 // echte doen wegvallen uit de dekking, en dat is precies het bestand dat je
 // bewaakt wil hebben.
 import { parseClassification } from '../agents/mail-agent/src/steps.js';
+// Idem voor de envelop: de bronnen lezen die, dus draait de set op dezelfde
+// lezing als de Worker.
+import { mailEnvelope } from '../agents/mail-agent/src/hydrators/mail.js';
 
 const SET = 'tests/golden/klantenservice.jsonl';
 
@@ -65,11 +74,32 @@ interface GoldenLine {
     gate: { inDomain: boolean; reason: string };
     classify?: Record<string, unknown>;
   };
+  /**
+   * Optioneel: de feitenlaag en de grounding meemeten.
+   *
+   * Een regel met dit blok draait ook de bronnen van het pakket (met vaste
+   * antwoorden, geen netwerk) en laat de echte grounding-validatie los op het
+   * antwoord dat het model zou geven. Zo legt de set vast wat er gebeurt als een
+   * bron níét antwoordt: het cijfer hoort dan ongedekt te zijn, en niet stil in
+   * de tekst te blijven staan.
+   */
+  feiten?: {
+    /** Het antwoord per bron, op naam. Ontbreekt een bron, dan geeft hij niets. */
+    bronnen: Record<string, { ok: boolean; data?: unknown; error?: string }>;
+    /** Het concept zoals het model het zou opleveren. */
+    antwoord: { body: string; claims: PlanClaim[] };
+  };
   verwacht: {
     in_domain: boolean;
     category: string;
     specialist?: string;
     outcome?: string;
+    /** Hoeveel claims er dekking hebben. */
+    gedekt?: number;
+    /** De cijfers in de tekst die door geen enkele bron gedekt worden. */
+    ongegrond?: string[];
+    /** Welke bronnen er zijn aangeroepen, in volgorde. */
+    bronnen?: string[];
   };
 }
 
@@ -79,6 +109,9 @@ interface Uitkomst {
   category: string;
   specialist?: string;
   outcome?: string;
+  gedekt?: number;
+  ongegrond?: string[];
+  bronnen?: string[];
 }
 
 function leesSet(pad: string): GoldenLine[] {
@@ -164,19 +197,70 @@ function stappenVoor(line: GoldenLine): OrchestrationSteps {
 }
 
 async function draai(line: GoldenLine): Promise<Uitkomst> {
-  const classification: Classification = await runRoute(signalVan(line), {
+  const signal = signalVan(line);
+  const classification: Classification = await runRoute(signal, {
     pack: PACK,
     steps: stappenVoor(line),
   });
   if (classification.outOfDomain) {
     return { in_domain: false, category: classification.category };
   }
-  return {
+
+  const uit: Uitkomst = {
     in_domain: true,
     category: classification.category,
     specialist: classification.specialist,
     outcome: classification.outcome,
   };
+
+  if (line.feiten) Object.assign(uit, await meetGrounding(line, signal, classification));
+  return uit;
+}
+
+/**
+ * De feitenlaag en de grounding, met vaste bronantwoorden.
+ *
+ * Wat hier draait is de échte `collectFacts` en de échte `validateGrounding`;
+ * alleen het netwerk is vervangen. Daardoor legt de set twee dingen vast die
+ * niemand anders bewaakt: dat de `toolScope` bepaalt wélke bronnen draaien, en
+ * dat een cijfer zonder dekking als ongegrond terugkomt in plaats van
+ * stilzwijgend te blijven staan.
+ */
+async function meetGrounding(
+  line: GoldenLine,
+  signal: Signal,
+  classification: Classification,
+): Promise<Pick<Uitkomst, 'gedekt' | 'ongegrond' | 'bronnen'>> {
+  const bronnen: string[] = [];
+  const recorder = new ToolCallRecorder();
+  const specialist = classification.specialist
+    ? getIntentConfig(PACK.specialists, classification.specialist)
+    : undefined;
+
+  await collectFacts({
+    pack: PACK,
+    specialist: specialist ?? { id: 'simple_reply', toolScope: [] },
+    ctx: {
+      envelope: mailEnvelope(signal),
+      extracted: classification.extracted ?? {},
+      resolved: {},
+    },
+    async run({ name }): Promise<FactRunResult> {
+      bronnen.push(name);
+      // Een bron die de regel niet noemt, geeft niets terug. Geen fout: dat is
+      // wat een geslaagde lookup zonder treffer ook doet.
+      return line.feiten?.bronnen[name] ?? { ok: true, data: [] };
+    },
+    recorder,
+    allowedCategories: ['operationeel', 'commercieel'],
+  });
+
+  const { grounding, ungrounded } = validateGrounding(
+    line.feiten!.antwoord.body,
+    line.feiten!.antwoord.claims,
+    recorder,
+  );
+  return { gedekt: grounding.length, ongegrond: ungrounded, bronnen };
 }
 
 /** Eén veld dat afwijkt. Gestructureerd, zodat de tabel niet hoeft te parsen. */
@@ -203,6 +287,19 @@ function afwijkingen(verwacht: GoldenLine['verwacht'], echt: Uitkomst): Afwijkin
   vergelijk('category', verwacht.category, echt.category);
   vergelijk('specialist', verwacht.specialist, echt.specialist);
   vergelijk('outcome', verwacht.outcome, echt.outcome);
+  // Lijsten vergelijken we op hun tekstvorm: de volgorde telt mee, want die
+  // is bij bronnen betekenisvol.
+  vergelijk('gedekt', verwacht.gedekt, echt.gedekt);
+  vergelijk(
+    'ongegrond',
+    verwacht.ongegrond && JSON.stringify(verwacht.ongegrond),
+    echt.ongegrond && JSON.stringify(echt.ongegrond),
+  );
+  vergelijk(
+    'bronnen',
+    verwacht.bronnen && JSON.stringify(verwacht.bronnen),
+    echt.bronnen && JSON.stringify(echt.bronnen),
+  );
   return uit;
 }
 

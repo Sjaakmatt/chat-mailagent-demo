@@ -36,6 +36,7 @@ import {
 import { DATA_CATEGORIES, type DataCategory } from '@factumai/agent-core';
 import {
   channelForDomain,
+  collectFacts,
   identificationLevel,
   proposableActionTypes,
   PRECONDITION_FIELDS,
@@ -51,6 +52,7 @@ import {
   mcpBearer,
   type McpEndpoint,
 } from '@factumai/agent-core/mcp';
+import { factRunner } from './facts.js';
 import { createAnthropicLlmClient } from '@factumai/agent-core/llm-anthropic';
 import { sendViaResend } from './resend.js';
 
@@ -116,178 +118,18 @@ function storeCtx(env: Env) {
  * testcases met ordernummers werken zonder externe systemen. Later vervangt de
  * WooCommerce/ERP-MCP deze lookup (zie `plan`). Geeft de ruwe JSON terug.
  */
-/**
- * Hoeveel artikelen er hooguit als feit meegaan. Bij een kleine catalogus is de
- * hele lijst meesturen simpeler en betrouwbaarder dan zoeken: geen zoekterm die
- * net misgaat, geen artikel dat de agent niet blijkt te kennen.
+/*
+ * Hier stonden tot fase 3 drie lookups tegen de demo-tabellen: de catalogus,
+ * de order met zijn tracking, en de factuur. Ze draaiden voor élke specialist,
+ * ongeacht wat die nodig had — de AVG-specialist kreeg de bestelgeschiedenis
+ * van de schrijver te zien, en een tweede module kon geen feiten ophalen zonder
+ * dit bestand te bewerken.
  *
- * Boven deze grens klopt die aanname niet meer en hoort hier een echte zoekstap
- * of een product-MCP. Dan valt de lijst af en zie je dat in het log.
+ * Ze zijn nu bronnen op het modulepakket
+ * (`packages/agent-core/src/modules/klantenservice/facts.ts`) en draaien via
+ * `collectFacts`, gefilterd op de `toolScope` van de gekozen specialist. Wat
+ * hier over is, is de aanroep.
  */
-const CATALOG_FACT_LIMIT = 40;
-
-/**
- * De catalogus als geverifieerde feiten.
- *
- * Zonder dit had de agent wél beleidsregels die zeggen "werk vanaf de opgehaalde
- * artikelgegevens", maar geen artikelgegevens — en dan slaat de terugvalregel
- * uit het output-contract aan ("geen feiten → zeg dat een collega het oppakt").
- * Het resultaat is een vaag verkooppraatje op een concrete productvraag.
- *
- * Compact gehouden: naam, prijs, beschikbaarheid, doorlooptijd en één zin. De
- * volledige omschrijving hoort op de productpagina, niet in elke prompt.
- */
-type CatalogRow = {
-  sku: string;
-  product_name: string;
-  category: string | null;
-  lead_time_days: number | null;
-  data: Record<string, unknown> | null;
-};
-
-async function lookupCatalogFromDb(
-  env: Env,
-): Promise<{ lijst: Array<Record<string, unknown>>; ruwe: CatalogRow[] }> {
-  const client = new SupabaseClient(
-    new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
-    { projectUrl: env.AIOS_SUPABASE_URL },
-  );
-  const url = client.tableUrl('demo_inventory');
-  url.searchParams.set('select', 'sku,product_name,category,lead_time_days,data');
-  url.searchParams.set('order', 'category.asc,product_name.asc');
-  // Eentje boven de grens vragen, zodat we kunnen zien dát er is afgekapt.
-  url.searchParams.set('limit', String(CATALOG_FACT_LIMIT + 1));
-  const rows = await client.request<CatalogRow[]>(storeCtx(env), url, { method: 'GET' });
-  if (!Array.isArray(rows)) return { lijst: [], ruwe: [] };
-
-  if (rows.length > CATALOG_FACT_LIMIT) {
-    console.warn(
-      `[catalogus] meer dan ${CATALOG_FACT_LIMIT} artikelen — de lijst gaat niet ` +
-        'meer volledig mee in de prompt. Bouw hier een zoekstap of een product-MCP.',
-    );
-  }
-
-  const gebruikt = rows.slice(0, CATALOG_FACT_LIMIT);
-  const lijst = gebruikt.map((r) => ({
-    sku: r.sku,
-    naam: r.product_name,
-    categorie: r.category,
-    prijs: r.data?.priceLabel ?? null,
-    prijsEenmalig: r.data?.priceOnce ?? null,
-    prijsPerMaand: r.data?.priceMonthly ?? null,
-    beschikbaarheid: r.data?.availabilityLabel ?? null,
-    doorlooptijdDagen: r.lead_time_days,
-    kort: r.data?.tagline ?? null,
-    heeftNodig: r.data?.requires ?? [],
-  }));
-  return { lijst, ruwe: gebruikt };
-}
-
-/**
- * De volledige gegevens van de artikelen die in de tekst worden genoemd.
- *
- * Waarom naast de lijst hierboven: die lijst maakt de agent bewust van het
- * assortiment, maar met een naam en een prijs kun je niet adviseren. Voor
- * "past dit op onze Exchange?" of "wat is het verschil tussen die twee?" heb je
- * de specificaties nodig. Alles van alles meesturen zou werken tot de catalogus
- * groeit; alleen wat genoemd wordt, blijft ook daarna kloppen.
- *
- * De match is bewust ruw — losse woorden van vier letters of meer uit de vraag,
- * naast productnaam en SKU. Een gemiste match kost een minder specifiek
- * antwoord, geen fout: de agent heeft de lijst nog steeds.
- */
-function selectMentioned(ruwe: CatalogRow[], tekst: string): Array<Record<string, unknown>> {
-  const laag = tekst.toLowerCase();
-  const treffers = ruwe.filter((r) => {
-    if (laag.includes(r.sku.toLowerCase())) return true;
-    const naam = r.product_name.toLowerCase();
-    if (laag.includes(naam)) return true;
-    // Deelwoorden: "mailagent" vindt "Mailagent", "kennisbank" vindt "Kennisbank".
-    return naam
-      .split(/[^a-z0-9]+/i)
-      .filter((w) => w.length >= 4)
-      .some((w) => laag.includes(w));
-  });
-  // Boven de drie wordt het een opsomming in plaats van een advies; dan is de
-  // vraag te breed en volstaat de lijst.
-  return treffers.slice(0, 3).map((r) => ({
-    sku: r.sku,
-    naam: r.product_name,
-    prijs: r.data?.priceLabel ?? null,
-    beschikbaarheid: r.data?.availabilityLabel ?? null,
-    specificaties: r.data?.specs ?? {},
-    kernpunten: r.data?.kernpunten ?? [],
-    heeftNodig: r.data?.requires ?? [],
-    meerInfo: r.data?.url ?? null,
-  }));
-}
-
-async function lookupOrderFromDb(
-  env: Env,
-  orderNumber: string,
-): Promise<{ order?: unknown; tracking?: unknown; customerEmail?: string | null }> {
-  const client = new SupabaseClient(
-    new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
-    { projectUrl: env.AIOS_SUPABASE_URL },
-  );
-  const orderUrl = client.tableUrl('demo_orders');
-  orderUrl.searchParams.set('order_number', `eq.${orderNumber}`);
-  // `customer_email` erbij: dat adres is wat het ordernummer van "iemand noemt
-  // een nummer" naar "het bronsysteem knoopt dit adres aan deze order" tilt —
-  // zie `identificationLevel` in agent-core.
-  orderUrl.searchParams.set('select', 'data,tracking_code,customer_email');
-  orderUrl.searchParams.set('limit', '1');
-  const orders = await client.request<
-    Array<{ data: unknown; tracking_code: string | null; customer_email: string | null }>
-  >(
-    storeCtx(env),
-    orderUrl,
-    { method: 'GET' },
-  );
-  const row = Array.isArray(orders) ? orders[0] : undefined;
-  if (!row) return {};
-
-  let tracking: unknown;
-  if (row.tracking_code) {
-    const tUrl = client.tableUrl('demo_order_tracking');
-    tUrl.searchParams.set('tracking_code', `eq.${row.tracking_code}`);
-    tUrl.searchParams.set('select', 'data');
-    tUrl.searchParams.set('limit', '1');
-    const tr = await client.request<Array<{ data: unknown }>>(storeCtx(env), tUrl, { method: 'GET' });
-    tracking = Array.isArray(tr) && tr[0] ? tr[0].data : undefined;
-  }
-  return { order: row.data, tracking, customerEmail: row.customer_email };
-}
-
-/**
- * De factuur bij een order, uit de demo-tabellen.
- *
- * Apart van de order en niet als veld erop: één order kan meer dan één factuur
- * hebben (deellevering, nalevering, correctie), en een creditnota hoort bij een
- * fáctuur. Zou dit uit de order komen, dan is "crediteer 89,95" niet te
- * herleiden naar wat er precies is gefactureerd — en dat is nu juist het veld
- * waar de onderbouwing aan hangt.
- *
- * Bij een echte klant vervangt de ERP-/CRM-MCP deze lookup.
- */
-async function lookupInvoiceFromDb(
-  env: Env,
-  orderNumber: string,
-): Promise<unknown | undefined> {
-  const client = new SupabaseClient(
-    new ServiceRoleCredentialStore(env.AIOS_SUPABASE_SERVICE_ROLE_KEY),
-    { projectUrl: env.AIOS_SUPABASE_URL },
-  );
-  const url = client.tableUrl('demo_invoices');
-  url.searchParams.set('order_number', `eq.${orderNumber}`);
-  url.searchParams.set('select', 'data');
-  url.searchParams.set('order', 'created_at.desc');
-  url.searchParams.set('limit', '1');
-  const rijen = await client.request<Array<{ data: unknown }>>(storeCtx(env), url, {
-    method: 'GET',
-  });
-  return Array.isArray(rijen) && rijen[0] ? rijen[0].data : undefined;
-}
 
 // ---------------------------------------------------------------------------
 // Categorie ⇄ specialist-mapping (Fase 1 multi-agent-brug)
@@ -986,7 +828,7 @@ export function buildOrchestrationSteps(
       return { enrichment };
     },
 
-    async plan({ signal, classification, resolved, memory, recorder, intentConfig }) {
+    async plan({ signal, envelope, classification, resolved, memory, recorder, intentConfig }) {
       const payload = signal.payload as {
         subject?: string;
         bodyText?: string;
@@ -1074,86 +916,35 @@ export function buildOrchestrationSteps(
         })),
       );
 
-      // Verzamel geverifieerde feiten uit de demo-tabellen en leg de
-      // lookups vast voor numerical grounding. Later wordt dit de WooCommerce/
-      // ERP-MCP — alleen deze lookup wisselt dan, de rest van plan blijft gelijk.
-      const facts: Array<{ id: string; text: string }> = [];
+      // De feiten waar déze specialist recht op heeft. Welke bronnen draaien,
+      // bepaalt zijn `toolScope`; wát ze opleveren staat op het modulepakket.
+      // Een bron die niet antwoordt levert geen feit en laat de run doorgaan —
+      // zonder feit kan het model geen cijfer onderbouwen, en dat is precies
+      // wat harde regel 4 vraagt.
+      const verzameld = await collectFacts({
+        pack,
+        specialist: intentConfig ?? { id: 'simple_reply', toolScope: [] },
+        ctx: {
+          envelope,
+          extracted: classification.extracted ?? {},
+          resolved: (resolved?.enrichment ?? {}) as Record<string, unknown>,
+        },
+        run: factRunner(env),
+        recorder,
+        allowedCategories: agentDataCategories(env),
+      });
+      const facts = verzameld.facts;
 
-      // Geen ordernummer betekent bijna altijd: dit gaat over het assortiment,
-      // niet over een lopende bestelling. Dan is de catalogus het feitenmateriaal.
-      // Fail-soft: mislukt de lookup, dan valt de agent terug op de beleidsregel
-      // in plaats van stil te vallen.
-      if (!orderNumber) {
-        try {
-          const { lijst, ruwe } = await lookupCatalogFromDb(env);
-          if (lijst.length > 0) {
-            recorder.record({ toolCallId: 'db.catalog', tool: 'db.demo_inventory' });
-            facts.push({
-              id: 'db.catalog',
-              text: `Assortiment (${lijst.length} artikelen): ${JSON.stringify(lijst)}`,
-            });
-
-            // Wordt er een specifiek artikel genoemd, dan gaan de specificaties
-            // er ook in. Zonder die stap kan de agent wel opsommen maar niet
-            // adviseren — en dan valt hij terug op algemeenheden.
-            const genoemd = selectMentioned(
-              ruwe,
-              `${payload.subject ?? ''} ${payload.bodyText ?? ''}`,
-            );
-            if (genoemd.length > 0) {
-              recorder.record({ toolCallId: 'db.product', tool: 'db.demo_inventory' });
-              facts.push({
-                id: 'db.product',
-                text: `Genoemde artikelen, volledig: ${JSON.stringify(genoemd)}`,
-              });
-            }
-          }
-        } catch (err) {
-          console.warn(
-            '[catalogus] ophalen mislukt:',
-            err instanceof Error ? err.message : String(err),
-          );
-        }
+      for (const mislukt of verzameld.failures) {
+        console.warn(`[feiten] ${mislukt.name}: ${mislukt.error}`);
       }
 
       // Het adres dat het bronsysteem bij de order teruggaf. Blijft null als er
       // geen order is gevonden — en dan blijft de identificatie `zwak`, wat
       // betekent dat er geen schrijfactie ontstaat. Dat is de bedoeling.
-      let sourceEmail: string | null = null;
-
-      if (orderNumber) {
-        const { order, tracking, customerEmail } = await lookupOrderFromDb(env, orderNumber);
-        sourceEmail = customerEmail ?? null;
-        if (order) {
-          recorder.record({ toolCallId: 'db.order', tool: 'db.demo_orders' });
-          facts.push({ id: 'db.order', text: `Order ${orderNumber}: ${JSON.stringify(order)}` });
-        }
-        if (tracking) {
-          recorder.record({ toolCallId: 'db.tracking', tool: 'db.demo_order_tracking' });
-          facts.push({ id: 'db.tracking', text: `Tracking ${orderNumber}: ${JSON.stringify(tracking)}` });
-        }
-
-        // De factuur erbij, want zonder factuurnummer en factuurregels kan een
-        // creditnota niet onderbouwd worden — en een creditnota zonder dekking
-        // per veld komt niet door de poort.
-        try {
-          const invoice = await lookupInvoiceFromDb(env, orderNumber);
-          if (invoice) {
-            recorder.record({ toolCallId: 'db.invoice', tool: 'db.demo_invoices' });
-            facts.push({
-              id: 'db.invoice',
-              text: `Factuur bij order ${orderNumber}: ${JSON.stringify(invoice)}`,
-            });
-          }
-        } catch (err) {
-          // Fail-soft: geen factuur betekent geen creditnota-voorstel, niet een
-          // gestrande mail.
-          console.warn(
-            '[factuur] ophalen mislukt:',
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      }
+      // Uit het pakket en niet uit dit bestand: wélk veld van wélke bron het
+      // adres draagt, weet alleen de module.
+      const sourceEmail = pack.outcomes.sourceEmail?.(verzameld.results) ?? null;
 
       // De system-prompt bestaat uit drie lagen die IN VOLGORDE aan de LLM
       // meegaan (Anthropic voegt ze aaneen met blank-line-scheiding):

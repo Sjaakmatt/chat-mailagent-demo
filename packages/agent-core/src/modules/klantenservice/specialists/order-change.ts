@@ -36,10 +36,12 @@ export const orderChangeConfig: IntentConfig = {
     '   cockpit — nooit autonoom.',
     'Toon: zakelijk-behulpzaam, meelevend zonder overdrijven. Nederlands.',
   ].join('\n'),
+  // Mét de factuur: een creditnota is niet te onderbouwen zonder de
+  // factuurregel waar het bedrag op staat.
   toolScope: [
-    'erp.get_order', // WooCommerce voor klant-perspectief
-    'bc.get_order', // via mcp-erp met microsoft-bc adapter — interne status
-    'shipping.get_tracking',
+    'order.get',
+    'order.tracking',
+    'invoice.get',
   ],
   memoryScope: ['GLOBAL', 'CLIENT', 'PROCESS'],
   memoryProcessTag: 'order_change',

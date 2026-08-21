@@ -81,6 +81,7 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 | Welke schrijfoperaties de agent mag voorstellen | `packages/agent-core/src/modules/<module>/actions.ts` |
 | Andere naam/kleuren/navigatie  | `ui/lib/brand.ts` + `ui/app/globals.css`         |
 | Een extra intent/specialist    | `packages/agent-core/src/modules/<module>/specialists/` |
+| Waar de feiten vandaan komen   | `packages/agent-core/src/modules/<module>/facts.ts` — `toolScope` op de specialist bepaalt wie ze krijgt |
 | Een side effect na goedkeuring | `agents/mail-agent/src/domain/index.ts`          |
 | Eigen events in de auditlog    | `ui/lib/audit-sources.ts`                        |
 | Wie wat mag zien/goedkeuren    | `aios_role_grants` — zie `docs/RECHTEN.md`; nooit een tweede rechtenmodel |
