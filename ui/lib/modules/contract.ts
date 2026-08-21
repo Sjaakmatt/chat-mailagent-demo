@@ -58,11 +58,6 @@ export interface WorkbenchModule {
   description: string;
   icon: LucideIcon;
   /**
-   * Volgorde van de tabs. Laag = links. Bewust expliciet en niet alfabetisch:
-   * de volgorde is een keuze van de klant, niet van het alfabet.
-   */
-  order: number;
-  /**
    * De `kind`-waarden die deze module produceert. Gebruikt om items van vóór de
    * `module`-kolom alsnog in de juiste tab te krijgen.
    */

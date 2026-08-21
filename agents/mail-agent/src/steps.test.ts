@@ -6,13 +6,16 @@ import {
   parsePlan,
   pickModelForIntent,
 } from './steps.js';
-import {
-  categoryToSpecialist,
-  simpleReplyConfig,
-  orderChangeConfig,
-  technicalConfig,
-  escalateConfig,
-} from '@factumai/agent-core';
+import { categoryToSpecialist, packById } from '@factumai/agent-core';
+
+// De agent draait altijd binnen één module; deze tests toetsen het gedrag van
+// de klantenservice-lus, dus die halen we uit de registry.
+const pack = packById('klantenservice')!;
+const specialist = (id: string) => pack.specialists.find((c) => c.id === id)!;
+const simpleReplyConfig = specialist('simple_reply');
+const orderChangeConfig = specialist('order_change');
+const technicalConfig = specialist('technical');
+const escalateConfig = specialist('escalate');
 import type { Env } from './env.js';
 
 describe('extractJson', () => {
@@ -31,6 +34,7 @@ describe('parseClassification', () => {
   it('normaliseert een volledige respons + leidt specialist af uit categorie', () => {
     // Onbekende categorie "order_status" → mapping-fallback = escalate.
     const c = parseClassification(
+      pack,
       '{"category":"order_status","confidence":0.9,"needsRag":true,"extracted":{"orderNumber":"SO-42"}}',
     );
     expect(c).toEqual({
@@ -49,27 +53,29 @@ describe('parseClassification', () => {
 
   it('neemt de uitkomst over als de router die noemt', () => {
     const c = parseClassification(
+      pack,
       '{"category":"levertijd_status","outcome":"systeem","extracted":{"orderNumber":"DEMO-1001"}}',
     );
     expect(c.outcome).toBe('systeem');
   });
 
   it('negeert een onbekende uitkomst en valt terug op de afleiding', () => {
-    const c = parseClassification('{"category":"klacht","outcome":"onzin"}');
+    const c = parseClassification(pack, '{"category":"klacht","outcome":"onzin"}');
     expect(c.outcome).toBe('taak');
   });
 
   it('mapt de categorieën uit de taxonomie naar de juiste specialist', () => {
-    expect(parseClassification('{"category":"levertijd_status"}').specialist).toBe('simple_reply');
-    expect(parseClassification('{"category":"retour_ruilen"}').specialist).toBe('order_change');
-    expect(parseClassification('{"category":"klacht"}').specialist).toBe('complaint');
-    expect(parseClassification('{"category":"technisch_probleem"}').specialist).toBe('technical');
-    expect(parseClassification('{"category":"gdpr_verzoek"}').specialist).toBe('gdpr');
-    expect(parseClassification('{"category":"overig"}').specialist).toBe('escalate');
+    expect(parseClassification(pack, '{"category":"levertijd_status"}').specialist).toBe('simple_reply');
+    expect(parseClassification(pack, '{"category":"retour_ruilen"}').specialist).toBe('order_change');
+    expect(parseClassification(pack, '{"category":"klacht"}').specialist).toBe('complaint');
+    expect(parseClassification(pack, '{"category":"technisch_probleem"}').specialist).toBe('technical');
+    expect(parseClassification(pack, '{"category":"gdpr_verzoek"}').specialist).toBe('gdpr');
+    expect(parseClassification(pack, '{"category":"overig"}').specialist).toBe('escalate');
   });
 
   it('respecteert een expliciete specialist uit de LLM (overrulet mapping)', () => {
     const c = parseClassification(
+      pack,
       '{"category":"overig","specialist":"order_change","confidence":0.7,"extracted":{}}',
     );
     expect(c.specialist).toBe('order_change');
@@ -77,6 +83,7 @@ describe('parseClassification', () => {
 
   it('negeert een onbekende specialist-waarde en valt terug op de mapping', () => {
     const c = parseClassification(
+      pack,
       '{"category":"levertijd_status","specialist":"nonexistent","confidence":0.7,"extracted":{}}',
     );
     expect(c.specialist).toBe('simple_reply');
@@ -84,13 +91,14 @@ describe('parseClassification', () => {
 
   it('herkent het escalate-signaal', () => {
     const c = parseClassification(
+      pack,
       '{"category":"klacht","confidence":0.8,"escalate":true,"extracted":{}}',
     );
     expect(c.escalate).toBe(true);
   });
 
   it('vult defaults bij ontbrekende velden', () => {
-    const c = parseClassification('{"category":"x"}');
+    const c = parseClassification(pack, '{"category":"x"}');
     expect(c.confidence).toBe(0.5);
     expect(c.needsRag).toBe(false);
     expect(c.extracted).toEqual({});
@@ -103,6 +111,7 @@ describe('parseClassification', () => {
 
   it('parseert een compound-mail met tasks[]', () => {
     const c = parseClassification(
+      pack,
       JSON.stringify({
         category: 'overig',
         confidence: 0.8,
@@ -123,6 +132,7 @@ describe('parseClassification', () => {
 
   it('valt terug op single als compound=true maar tasks < 2', () => {
     const c = parseClassification(
+      pack,
       JSON.stringify({
         category: 'overig',
         compound: true,
@@ -135,6 +145,7 @@ describe('parseClassification', () => {
 
   it('normaliseert een onbekende task-intent via categoryToSpecialist', () => {
     const c = parseClassification(
+      pack,
       JSON.stringify({
         category: 'overig',
         compound: true,
@@ -144,19 +155,19 @@ describe('parseClassification', () => {
         ],
       }),
     );
-    // 'nonsense_intent' onbekend → categoryToSpecialist('technisch_probleem') = 'technical'
+    // 'nonsense_intent' onbekend → categoryToSpecialist(pack.taxonomy, 'technisch_probleem') = 'technical'
     expect(c.tasks?.[0].intent).toBe('technical');
   });
 });
 
 describe('categoryToSpecialist', () => {
   it('mapt bekende categorieën', () => {
-    expect(categoryToSpecialist('gdpr_verzoek')).toBe('gdpr');
-    expect(categoryToSpecialist('technisch_probleem')).toBe('technical');
-    expect(categoryToSpecialist('facturatie')).toBe('simple_reply');
+    expect(categoryToSpecialist(pack.taxonomy, 'gdpr_verzoek')).toBe('gdpr');
+    expect(categoryToSpecialist(pack.taxonomy, 'technisch_probleem')).toBe('technical');
+    expect(categoryToSpecialist(pack.taxonomy, 'facturatie')).toBe('simple_reply');
   });
   it('valt terug op escalate voor onbekende categorieën', () => {
-    expect(categoryToSpecialist('total_nonsense')).toBe('escalate');
+    expect(categoryToSpecialist(pack.taxonomy, 'total_nonsense')).toBe('escalate');
   });
 });
 

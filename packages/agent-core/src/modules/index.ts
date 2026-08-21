@@ -149,4 +149,8 @@ export function categoryKeyMatches(
   return parsed.module === null || parsed.module === module;
 }
 
-export { KLANTENSERVICE_MODULE } from './klantenservice.js';
+// Bewust géén re-export van een concrete module. De kern kent er geen bij naam;
+// wie de descriptor van één module nodig heeft (zijn eigen registratie in de
+// cockpit, een scherm van dat proces) importeert 'm via het subpad
+// `@factumai/agent-core/modules/klantenservice`. Wie een pakket bij id zoekt,
+// gebruikt `packById` uit de registry.

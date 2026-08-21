@@ -22,7 +22,7 @@ import {
   routingFor,
   CONFIRMATION,
   identityPrompt,
-  DOMAIN,
+  type ModulePack,
   type OutcomeDecision,
   type ReviewItem,
 } from '@factumai/agent-core';
@@ -45,6 +45,7 @@ export interface ChatTurnResult {
  */
 export async function finishChatTurn(
   env: Env,
+  pack: ModulePack,
   item: ReviewItem,
   outcome: OutcomeDecision | undefined,
   opts: { outOfDomain?: boolean; conversationId: string; category?: string | null },
@@ -67,7 +68,7 @@ export async function finishChatTurn(
   // Buiten het domein: de vaste tekst staat al als body op het item, want de
   // lus is daar gestopt. Niets van de bezoeker komt hierin terug.
   if (opts.outOfDomain) {
-    const text = drafted || DOMAIN.rejectionText;
+    const text = drafted || pack.gate.rejectionText;
     await push(text);
     return { reply: text, reason: 'buiten domein — vaste afwijzingstekst' };
   }
@@ -103,6 +104,7 @@ export async function finishChatTurn(
     const toegepastBeleid = (proposed.policy ?? {}) as { handoverReason?: string };
 
     const ticket = await createTicket(env, {
+      pack,
       organizationId: item.organizationId,
       conversationId: opts.conversationId,
       reviewItemId: item.id,

@@ -1,5 +1,5 @@
 import {
-  KLANTENSERVICE_MODULE,
+  DEFAULT_MODULE,
   SupabaseClient,
   ServiceRoleCredentialStore,
   type TenantContext,
@@ -178,10 +178,10 @@ function reviewItemToRow(item: ReviewItem): ReviewItemRow {
     organization_id: item.organizationId,
     signal_id: item.signalId ?? null,
     kind: item.kind,
-    // Deze Worker draait de klantenservice-module. Expliciet meeschrijven, want
-    // de werkbak tabt erop en de rollen hangen eraan; terugvallen op `kind` is
-    // alleen bedoeld voor historie.
-    module: item.module ?? KLANTENSERVICE_MODULE.id,
+    // De orchestratie zet de module op het item; deze terugval is er voor
+    // schrijvers die 'm (nog) niet vullen. De werkbak tabt erop en de rollen
+    // hangen eraan, dus leeg laten is geen optie.
+    module: item.module ?? DEFAULT_MODULE,
     summary: item.summary,
     proposed: item.proposed,
     confidence: item.confidence ?? null,

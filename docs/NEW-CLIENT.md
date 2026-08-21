@@ -147,8 +147,8 @@ ui/wrangler.jsonc` geeft niets meer terug.
 
 ## Stap 4 — taxonomie
 
-Open `packages/agent-core/src/taxonomy/index.ts` en vervang de startset door de
-categorieën van deze klant. Dit is de belangrijkste inhoudelijke stap: de
+Open `packages/agent-core/src/modules/klantenservice/taxonomy.ts` en vervang de
+startset door de categorieën van deze klant. Dit is de belangrijkste inhoudelijke stap: de
 classifier kiest hieruit en het beleid matcht erop.
 
 Vuistregel: een categorie verdient een eigen slug als er ánder beleid of een
@@ -156,7 +156,7 @@ andere specialist bij hoort. Anders hoort 'ie bij `overig`. Meestal kom je uit
 op 8 à 12.
 
 **Vul de `hint` in, altijd.** Die regel gaat mee de classify-prompt in
-(`CATEGORY_GUIDE`) en is werkende configuratie, geen documentatie. Zonder hint
+(`categoryGuide`) en is werkende configuratie, geen documentatie. Zonder hint
 raadt het model de betekenis uit de naam, en dan valt een bericht in de
 categorie die er het meest naar klínkt in plaats van waar het hoort — waarna het
 beleid van díé categorie draait en de agent iets vraagt wat niemand wilde vragen.
@@ -183,8 +183,8 @@ en een hint draagt.
 
 ## Stap 4b — domeingrens
 
-Open `packages/agent-core/src/domain-gate/index.ts` en beschrijf waar deze klant
-over gaat. Dit is de poort vóór de router: valt een bericht erbuiten, dan stopt
+Open `packages/agent-core/src/modules/klantenservice/gate.ts` en beschrijf waar
+deze klant over gaat. Dit is de poort vóór de router: valt een bericht erbuiten, dan stopt
 de run — geen specialist, geen tool-call, geen gegenereerde tekst. De klant
 krijgt een **vaste** afwijzingstekst uit dezelfde config.
 
@@ -531,8 +531,8 @@ voor deze klant hebt aangepast. Hoe vaak dat gebeurt, hangt af van wáár je het
 maatwerk hebt gezet.
 
 **Op een extensiepunt — verwacht, en prima.**
-`taxonomy/index.ts`, `ui/lib/brand.ts`, `globals.css`, de wrangler-configs,
-`domain/index.ts`, `audit-sources.ts`, `demo/scenarios.ts`. Deze bestanden zijn
+`modules/<module>/taxonomy.ts` en `gate.ts`, `ui/lib/brand.ts`, `globals.css`,
+de wrangler-configs, `domain/index.ts`, `audit-sources.ts`, `demo/scenarios.ts`. Deze bestanden zijn
 bedoeld om per klant af te wijken. Het fundament raakt ze zelden, en als het
 gebeurt is het conflict klein en leesbaar. Vuistregel bij het oplossen: **de
 klant-versie wint**, en je neemt alleen over wat je bewust wilt.

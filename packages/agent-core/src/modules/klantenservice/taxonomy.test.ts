@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CATEGORIES,
-  CATEGORY_SLUGS,
-  CATEGORY_LABELS,
-  CATEGORY_GUIDE,
+  categoryGuide,
+  categorySlugs,
   categoryToSpecialist,
   categoryLabel,
-} from './index.js';
-import { knownSpecialistIds } from '../specialists/index.js';
+} from '../../taxonomy/index.js';
+import { knownSpecialistIds } from '../../specialists/index.js';
+import { KLANTENSERVICE_TAXONOMY as CATEGORIES } from './taxonomy.js';
+import { KLANTENSERVICE_SPECIALISTS } from './specialists/index.js';
+
+const CATEGORY_SLUGS = categorySlugs(CATEGORIES);
+const CATEGORY_GUIDE = categoryGuide(CATEGORIES);
+const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map((c) => [c.slug, c.label]));
 
 describe('categorie-taxonomie', () => {
   it('heeft unieke slugs', () => {
@@ -15,7 +19,7 @@ describe('categorie-taxonomie', () => {
   });
 
   it('verwijst alleen naar bestaande specialisten', () => {
-    const known = new Set(knownSpecialistIds());
+    const known = new Set(knownSpecialistIds(KLANTENSERVICE_SPECIALISTS));
     for (const c of CATEGORIES) {
       expect(known, `categorie '${c.slug}' wijst naar onbekende specialist`).toContain(
         c.specialist,
@@ -52,12 +56,12 @@ describe('categorie-taxonomie', () => {
   });
 
   it('valt terug op escalate bij een onbekende categorie', () => {
-    expect(categoryToSpecialist('bestaat_niet')).toBe('escalate');
-    expect(categoryToSpecialist('')).toBe('escalate');
+    expect(categoryToSpecialist(CATEGORIES, 'bestaat_niet')).toBe('escalate');
+    expect(categoryToSpecialist(CATEGORIES, '')).toBe('escalate');
   });
 
   it('geeft de slug terug als er geen label is', () => {
-    expect(categoryLabel('bestaat_niet')).toBe('bestaat_niet');
-    expect(categoryLabel(null)).toBeNull();
+    expect(categoryLabel(CATEGORIES, 'bestaat_niet')).toBe('bestaat_niet');
+    expect(categoryLabel(CATEGORIES, null)).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import type { IntentConfig } from './types.js';
+import type { IntentConfig } from '../../../specialists/index.js';
 
 /**
  * complaint — klachtenafhandeling, inclusief juridisch-gevoelige mails.

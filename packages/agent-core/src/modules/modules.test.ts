@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MODULE,
-  KLANTENSERVICE_MODULE,
   categoryKey,
   categoryKeyMatches,
   categoryLabelIn,
@@ -9,7 +8,8 @@ import {
   parseCategoryKey,
   type ModuleDescriptor,
 } from './index.js';
-import { CATEGORIES } from '../taxonomy/index.js';
+import { KLANTENSERVICE_TAXONOMY as CATEGORIES } from './klantenservice/taxonomy.js';
+import { KLANTENSERVICE_MODULE } from './klantenservice/descriptor.js';
 
 const SALES: ModuleDescriptor = {
   id: 'sales',
@@ -30,9 +30,9 @@ describe('modulecontract', () => {
   });
 
   it('laat de klantenservice-module de taxonomie van de klant dragen', () => {
-    // De categorieën komen uit taxonomy/ — het bestand dat je per klant
-    // aanpast. Loopt dat uit de pas, dan classificeert de agent op slugs die de
-    // cockpit niet kent.
+    // De categorieën komen uit de taxonomie van het pakket — het bestand dat je
+    // per klant aanpast. Loopt dat uit de pas, dan classificeert de agent op
+    // slugs die de cockpit niet kent.
     expect(KLANTENSERVICE_MODULE.categories).toHaveLength(CATEGORIES.length);
     expect(KLANTENSERVICE_MODULE.categories.map((c) => c.slug)).toEqual(
       CATEGORIES.map((c) => c.slug),

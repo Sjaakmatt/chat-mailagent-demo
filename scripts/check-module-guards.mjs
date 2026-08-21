@@ -29,7 +29,8 @@ import { join } from "node:path";
 
 const APP = "ui/app/(dashboard)";
 const MODULES_DIR = "ui/lib/modules";
-const REGISTRY = join(MODULES_DIR, "registry.ts");
+const REGISTRY = join(MODULES_DIR, "registry.generated.ts");
+const CLIENT_MODULES_DIR = "ui/lib/client-modules";
 const GUARD = "requireModulePage";
 /**
  * De áánroep, niet de naam.
@@ -49,12 +50,13 @@ const GUARD_CALL = `${GUARD}(`;
  * juist dat vergeten levert een scherm zonder guard op, het geval dat dit
  * script hoort te vangen.
  *
- * Waarom `registry.ts` niet gewoon geïmporteerd wordt: die trekt de
+ * Waarom het register niet gewoon geïmporteerd wordt: dat trekt de
  * module-registraties mee, en die trekken via `collectSources` de database-laag
- * en de Cloudflare-runtime de node-process in. Dat is een zware afhankelijkheid
- * voor wat een grep is. In plaats daarvan lezen we welke bestanden de registry
- * registreert, en vissen uit díe bestanden de paden — één laag diep, want een
- * moduleregistratie noemt zijn eigen schermen en die van niemand anders.
+ * en de Cloudflare-runtime het node-proces in. Dat is een zware afhankelijkheid
+ * voor wat een grep is. In plaats daarvan lezen we welke bestanden het
+ * gegenereerde register importeert, en vissen uit díe bestanden de paden — één
+ * laag diep, want een moduleregistratie noemt zijn eigen schermen en die van
+ * niemand anders.
  */
 function moduleRouteSegments() {
   const segments = new Set();
@@ -72,14 +74,22 @@ function moduleRouteSegments() {
   return [...segments].sort();
 }
 
-/** De bestanden die `registry.ts` als module importeert. */
+/**
+ * De bestanden die het gegenereerde register als module importeert.
+ *
+ * Twee vormen, precies zoals de generator ze schrijft: `./naam` voor een module
+ * uit het fundament en `../client-modules/naam` voor een module van deze klant.
+ */
 function registeredModuleFiles() {
   const bron = readFileSync(REGISTRY, "utf8");
   const files = [];
-  for (const match of bron.matchAll(/from\s+["']\.\/([A-Za-z0-9_-]+)["']/g)) {
+  for (const match of bron.matchAll(
+    /from\s+["'](\.\/|\.\.\/client-modules\/)([A-Za-z0-9_-]+)["']/g,
+  )) {
     // `contract` bevat alleen types en registreert niets.
-    if (match[1] === "contract") continue;
-    files.push(join(MODULES_DIR, `${match[1]}.ts`));
+    if (match[2] === "contract") continue;
+    const map = match[1] === "./" ? MODULES_DIR : CLIENT_MODULES_DIR;
+    files.push(join(map, `${match[2]}.ts`));
   }
   return files;
 }

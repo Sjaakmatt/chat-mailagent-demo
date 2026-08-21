@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CATEGORY_SLUGS, KLANTENSERVICE_MODULE } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import { cockpitEnv, makeClient } from "@/lib/db";
 import { requireModule } from "@/lib/auth/access";
 import { labelFeedback, EVAL_LABELS, type EvalLabel, type TriageStatus } from "@/lib/visitor-feedback";
@@ -61,7 +61,10 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  if (label === "routing" && !CATEGORY_SLUGS.includes(expected as string)) {
+  // De categorieën van déze module: feedback op een routing hoort te
+  // verwijzen naar een categorie waarin dit proces ook echt classificeert.
+  const slugs = KLANTENSERVICE_MODULE.categories.map((c) => c.slug);
+  if (label === "routing" && !slugs.includes(expected as string)) {
     return NextResponse.json(
       { error: `"${expected}" is geen bestaande categorie` },
       { status: 400 },

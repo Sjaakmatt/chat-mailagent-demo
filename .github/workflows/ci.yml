@@ -31,6 +31,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # De twee moduleregisters zijn een projectie van client.manifest.yaml.
+      # Loopt er eentje achter, dan draait de agent op een andere set modules dan
+      # de werkbak toont — en dat is precies het soort verschil dat pas opvalt
+      # als een voorstel in de verkeerde tab belandt.
+      - name: Moduleregisters
+        run: node scripts/generate-registry.mjs --check
+
       - name: Typecheck
         run: pnpm -r typecheck
 

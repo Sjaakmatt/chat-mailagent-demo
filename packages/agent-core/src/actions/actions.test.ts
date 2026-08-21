@@ -1,14 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   ACTION_STATUSES,
-  ACTION_TYPES,
   applyActionEdits,
   canTransitionAction,
   checkFieldBacking,
   evaluateApproval,
   filterPrecondition,
   PRECONDITION_FIELDS,
-  getActionType,
   hasPhoto,
   identificationLevel,
   identificationSuffices,
@@ -22,6 +20,22 @@ import {
   ungroundedFields,
   type ProposedAction,
 } from './index.js';
+// De actietypen zelf horen bij een module. Klantenservice is de startset waar
+// elke klant van vertrekt, dus de poort-tests draaien erop.
+import { KLANTENSERVICE_ACTIONS as ACTION_TYPES } from '../modules/klantenservice/actions.js';
+
+const getActionType = (slug: string) => ACTION_TYPES.find((t) => t.slug === slug);
+
+/**
+ * De goedkeurpoort, met het actietype van het voorstel erbij gezocht.
+ *
+ * Zoals de productiecode het ook doet: de typen staan op het modulepakket, dus
+ * de aanroeper zoekt ze op. Een voorstel met een type dat niemand meer kent,
+ * levert `undefined` op — en dat hoort de poort te weigeren.
+ */
+const beoordeel = (
+  input: Omit<Parameters<typeof evaluateApproval>[0], 'def'>,
+) => evaluateApproval({ ...input, def: getActionType(input.action.type) });
 
 const nu = new Date('2026-08-16T09:00:00.000Z');
 
@@ -115,6 +129,7 @@ describe('typeregistratie', () => {
 describe('mayProposeAction', () => {
   it('laat een toegestaan type door', () => {
     const r = mayProposeAction({
+      types: ACTION_TYPES,
       type: 'werkticket_aanmaken',
       channel: 'chat',
       identification: 'zwak',
@@ -123,7 +138,12 @@ describe('mayProposeAction', () => {
   });
 
   it('weigert een onbekend type', () => {
-    const r = mayProposeAction({ type: 'raket_lanceren', channel: 'mail', identification: 'bevestigd' });
+    const r = mayProposeAction({
+      types: ACTION_TYPES,
+      type: 'raket_lanceren',
+      channel: 'mail',
+      identification: 'bevestigd',
+    });
     expect(r).toMatchObject({ ok: false });
   });
 
@@ -131,6 +151,7 @@ describe('mayProposeAction', () => {
   // uitstaat ontstaat daar niet, ook niet met een bevestigde bezoeker.
   it('weigert op een uitgeschakeld kanaal, ook bij de sterkste identificatie', () => {
     const r = mayProposeAction({
+      types: ACTION_TYPES,
       type: 'adres_wijzigen',
       channel: 'chat',
       identification: 'bevestigd',
@@ -141,6 +162,7 @@ describe('mayProposeAction', () => {
 
   it('weigert bij te zwakke identificatie', () => {
     const r = mayProposeAction({
+      types: ACTION_TYPES,
       type: 'adres_wijzigen',
       channel: 'mail',
       identification: 'zwak',
@@ -242,7 +264,7 @@ describe('isExpired', () => {
 
 describe('evaluateApproval — de poort vóór uitvoeren', () => {
   it('laat een schoon voorstel door', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel(),
       actueel: {},
       approverRole: 'reviewer',
@@ -254,7 +276,7 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
   // De kern van de hele wijziging: veranderd = niet uitvoeren, terug in de
   // wachtrij, met de afwijking zichtbaar.
   it('weigert en verloopt als de situatie is veranderd', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel({
         type: 'adres_wijzigen',
         precondition: { orderNumber: 'DEMO-1', status: 'pending' },
@@ -271,7 +293,7 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
   });
 
   it('weigert een voorstel dat over de datum is', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel({ expiresAt: '2026-08-16T08:59:00.000Z' }),
       actueel: {},
       approverRole: 'reviewer',
@@ -281,7 +303,7 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
   });
 
   it('weigert een bedrag boven de drempel bij een medewerker', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel({ type: 'creditnota_voorstellen', payload: { amount: 340 } }),
       actueel: {},
       approverRole: 'reviewer',
@@ -292,7 +314,7 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
   });
 
   it('laat datzelfde bedrag door bij een beheerder', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel({ type: 'creditnota_voorstellen', payload: { amount: 340 } }),
       actueel: {},
       approverRole: 'admin',
@@ -302,7 +324,7 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
   });
 
   it('laat een viewer niets goedkeuren', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel(),
       actueel: {},
       approverRole: 'viewer',
@@ -312,7 +334,7 @@ describe('evaluateApproval — de poort vóór uitvoeren', () => {
   });
 
   it('keurt niets twee keer goed', () => {
-    const r = evaluateApproval({
+    const r = beoordeel({
       action: voorstel({ status: 'uitgevoerd' }),
       actueel: {},
       approverRole: 'admin',
@@ -408,7 +430,8 @@ describe('buildProposedActions', () => {
   };
 
   it('bouwt een geldig voorstel met vervaldatum uit de registratie', () => {
-    const { actions, rejected } = buildProposedActions({ ...basis, planned: [creditnota] });
+    const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES, ...basis, planned: [creditnota] });
     expect(rejected).toEqual([]);
     expect(actions).toHaveLength(1);
     expect(actions[0].status).toBe('voorgesteld');
@@ -418,8 +441,10 @@ describe('buildProposedActions', () => {
   });
 
   it('geeft dezelfde run dezelfde sleutels, zodat een herhaalde step niet dubbel voorstelt', () => {
-    const eerste = buildProposedActions({ ...basis, planned: [creditnota] });
-    const tweede = buildProposedActions({ ...basis, planned: [creditnota] });
+    const eerste = buildProposedActions({
+      types: ACTION_TYPES, ...basis, planned: [creditnota] });
+    const tweede = buildProposedActions({
+      types: ACTION_TYPES, ...basis, planned: [creditnota] });
     expect(tweede.actions[0].id).toBe(eerste.actions[0].id);
     expect(tweede.actions[0].idempotencyKey).toBe(eerste.actions[0].idempotencyKey);
   });
@@ -428,6 +453,7 @@ describe('buildProposedActions', () => {
     // Het bedrag half doorlaten is niet een halve fout — het is dezelfde fout
     // met een geruststellender scherm eromheen.
     const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES,
       ...basis,
       planned: [{ ...creditnota, evidence: [{ field: 'invoiceNumber', toolCallId: 'tc-1' }] }],
     });
@@ -437,6 +463,7 @@ describe('buildProposedActions', () => {
 
   it('weigert een type dat op dit kanaal uitstaat, met de reden erbij', () => {
     const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES,
       ...basis,
       channel: 'chat',
       planned: [creditnota],
@@ -447,6 +474,7 @@ describe('buildProposedActions', () => {
 
   it('weigert bij te zwakke identificatie', () => {
     const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES,
       ...basis,
       identification: 'zwak',
       planned: [creditnota],
@@ -457,6 +485,7 @@ describe('buildProposedActions', () => {
 
   it('weigert een voorstel zonder impact-tekst', () => {
     const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES,
       ...basis,
       planned: [{ ...creditnota, impact: '   ' }],
     });
@@ -468,6 +497,7 @@ describe('buildProposedActions', () => {
     // Eén kapot voorstel mag de rest niet meeslepen: dan zou een agent die
     // vier dingen ziet en er één fout doet, helemaal niets meer opleveren.
     const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES,
       ...basis,
       planned: [creditnota, { ...creditnota, type: 'bestaat_niet' }],
     });
@@ -502,6 +532,7 @@ describe('payloadvelden', () => {
 describe('proposableActionTypes', () => {
   it('laat bij mail met gematcht en een foto de creditnota zien maar niet de retour', () => {
     const slugs = proposableActionTypes({
+      types: ACTION_TYPES,
       channel: 'mail',
       identification: 'gematcht',
       attachments: [{ name: 'schade.jpg', contentType: 'image/jpeg' }],
@@ -514,6 +545,7 @@ describe('proposableActionTypes', () => {
 
   it('houdt bij chat alleen over wat daar mag', () => {
     const slugs = proposableActionTypes({
+      types: ACTION_TYPES,
       channel: 'chat',
       identification: 'zwak',
     }).map((t) => t.slug);
@@ -524,7 +556,8 @@ describe('proposableActionTypes', () => {
     // Een type noemen dat daarna wordt geweigerd is niet neutraal: het model
     // schrijft er meestal een antwoord bij waarin het de klant dat bedrag
     // toezegt. Dan staat er een belofte die niemand nakomt.
-    const slugs = proposableActionTypes({ channel: 'mail', identification: 'gematcht' }).map(
+    const slugs = proposableActionTypes({
+      types: ACTION_TYPES, channel: 'mail', identification: 'gematcht' }).map(
       (t) => t.slug,
     );
     expect(slugs).not.toContain('creditnota_voorstellen');
@@ -533,6 +566,7 @@ describe('proposableActionTypes', () => {
   it('is een hulpmiddel voor de prompt, geen vervanging van de poort', () => {
     // Wat hier niet in staat, moet alsnog stuklopen op buildProposedActions.
     const uit = buildProposedActions({
+      types: ACTION_TYPES,
       planned: [
         {
           type: 'creditnota_voorstellen',
@@ -603,6 +637,7 @@ describe('dekking per veldherkomst', () => {
     // bedoeld is om de machinerie op te beproeven, ketste af op zijn eigen
     // omschrijving.
     const { actions, rejected } = buildProposedActions({
+      types: ACTION_TYPES,
       planned: [
         {
           type: 'werkticket_aanmaken',
@@ -642,6 +677,7 @@ describe('preconditie beperken tot wat toetsbaar is', () => {
 
   it('filtert het voorstel al bij het bouwen, niet pas bij goedkeuren', () => {
     const { actions } = buildProposedActions({
+      types: ACTION_TYPES,
       planned: [
         {
           type: 'adres_wijzigen',
@@ -683,6 +719,7 @@ describe('geen defect goedkeuren zonder foto', () => {
   };
   const basis = {
     planned: [creditnota],
+    types: ACTION_TYPES,
     channel: 'mail' as const,
     identification: 'gematcht' as const,
     organizationId: 'org-demo',
@@ -720,6 +757,7 @@ describe('geen defect goedkeuren zonder foto', () => {
 
   it('raakt typen zonder foto-eis niet', () => {
     const { actions } = buildProposedActions({
+      types: ACTION_TYPES,
       ...basis,
       planned: [
         {

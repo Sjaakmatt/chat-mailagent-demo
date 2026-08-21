@@ -18,7 +18,6 @@
  */
 
 import {
-  KLANTENSERVICE_MODULE,
   categoryKeyMatches,
   categoryLabelIn,
   klantInzichtSource,
@@ -30,6 +29,7 @@ import {
   type AssistantSource,
   type Ticket,
 } from "@factumai/agent-core";
+import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import type { CockpitDbClient } from "@/lib/tenant-query";
 import {
   getDecisionLog,

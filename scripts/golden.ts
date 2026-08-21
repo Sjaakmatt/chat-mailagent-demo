@@ -29,6 +29,7 @@ import { readFileSync } from 'node:fs';
 import {
   FakeLlmClient,
   evaluateDomainGate,
+  packById,
   runRoute,
   type Classification,
   type LlmCompleteInput,
@@ -42,6 +43,19 @@ import {
 import { parseClassification } from '../agents/mail-agent/src/steps.js';
 
 const SET = 'tests/golden/klantenservice.jsonl';
+
+/**
+ * Het pakket waarvan deze set het gedrag vastlegt.
+ *
+ * Uit de registry en niet rechtstreeks geïmporteerd: dan draait de set op de
+ * module zoals hij daadwerkelijk geregistreerd staat, en valt het op als een
+ * klant hem uit `client.manifest.yaml` haalt.
+ */
+const PACK = packById('klantenservice');
+if (!PACK) {
+  console.error(`De module "klantenservice" staat niet in de registry — geen set om te draaien.`);
+  process.exit(2);
+}
 
 interface GoldenLine {
   id: string;
@@ -121,6 +135,7 @@ function stappenVoor(line: GoldenLine): OrchestrationSteps {
       return evaluateDomainGate(
         { subject: payload.subject, body: payload.bodyText ?? '' },
         llm,
+        PACK.gate,
       );
     },
     async classify(signal) {
@@ -135,7 +150,7 @@ function stappenVoor(line: GoldenLine): OrchestrationSteps {
           },
         ],
       });
-      return parseClassification(out);
+      return parseClassification(PACK, out);
     },
     // De golden set stopt na de router: alles daarna (resolve, plan, ground)
     // raakt MCP's en modellen, en dat is een andere meting.
@@ -150,6 +165,7 @@ function stappenVoor(line: GoldenLine): OrchestrationSteps {
 
 async function draai(line: GoldenLine): Promise<Uitkomst> {
   const classification: Classification = await runRoute(signalVan(line), {
+    pack: PACK,
     steps: stappenVoor(line),
   });
   if (classification.outOfDomain) {

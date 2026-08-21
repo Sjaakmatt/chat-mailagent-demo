@@ -1,4 +1,4 @@
-import type { IntentConfig } from './types.js';
+import type { IntentConfig } from '../../../specialists/index.js';
 
 /**
  * technical — constructievragen, defect-diagnose, installatie-hulp.

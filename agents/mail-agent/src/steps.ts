@@ -1,23 +1,23 @@
 import {
   buildFewShotBlock,
+  categoryGuide,
   categoryKeyMatches,
   categoryToSpecialist,
   categoryLabel,
   evaluateDomainGate,
   isOutcome,
-  outcomeFromClassification,
   renderPrompt,
-  CATEGORY_GUIDE,
-  KLANTENSERVICE_MODULE,
   getIntentConfig,
   knownSpecialistIds,
+  packById,
   type OrchestrationSteps,
   type Classification,
   type IntentConfig,
   type Plan,
   type ReviewItem,
+  type CategoryDef,
   type MemoryEntry,
-  type ModuleId,
+  type ModulePack,
   type Signal,
   type LlmClient,
   type SpecialistId,
@@ -334,14 +334,18 @@ export function extractJson(text: string): unknown {
  * uitgefilterd. `id` wordt genormaliseerd naar "t{index}" als de LLM
  * niks bruikbaars geeft.
  */
-function parseTask(raw: unknown, index: number): TaskDescriptor | null {
+function parseTask(
+  pack: ModulePack,
+  raw: unknown,
+  index: number,
+): TaskDescriptor | null {
   if (!raw || typeof raw !== 'object') return null;
   const t = raw as Record<string, unknown>;
   const intentRaw = typeof t.intent === 'string' ? t.intent : '';
   const intent =
-    intentRaw && knownSpecialistIds().includes(intentRaw as SpecialistId)
+    intentRaw && knownSpecialistIds(pack.specialists).includes(intentRaw as SpecialistId)
       ? (intentRaw as SpecialistId)
-      : categoryToSpecialist(typeof t.category === 'string' ? t.category : '');
+      : categoryToSpecialist(pack.taxonomy, typeof t.category === 'string' ? t.category : '');
   const subject = typeof t.subject === 'string' ? t.subject : '';
   const briefing = typeof t.briefing === 'string' ? t.briefing : undefined;
   const refsRaw = t.refs && typeof t.refs === 'object' ? (t.refs as Record<string, unknown>) : {};
@@ -362,28 +366,28 @@ function parseTask(raw: unknown, index: number): TaskDescriptor | null {
 /**
  * Parset + normaliseert de classificatie-respons (defensief).
  *
- * Multi-agent Fase 1: als de LLM een `specialist` teruggeeft dat een bekende
- * SpecialistId is, gebruiken we die direct. Anders vallen we terug op de
- * `categoryToSpecialist`-mapping — dat maakt oude prompts (zonder specialist-
- * veld) en oude tests backwards-compatible.
+ * Als de LLM een `specialist` teruggeeft die dit pakket kent, gebruiken we die
+ * direct. Anders vallen we terug op de categorie-naar-specialist-mapping van
+ * de módule — dat maakt oude prompts (zonder specialist-veld) backwards-
+ * compatible, en houdt de keuze binnen het proces dat dit signaal behandelt.
  *
  * Fase 3: parses optioneel een `tasks[]`-lijst en `compound`-flag. Compound
  * wordt alleen echt aangenomen als de LLM `compound=true` zegt EN `tasks`
  * length ≥ 2 heeft — één van beide zonder de ander wordt als niet-compound
  * behandeld (defensief tegen half-ingevulde outputs).
  */
-export function parseClassification(text: string): Classification {
+export function parseClassification(pack: ModulePack, text: string): Classification {
   const o = extractJson(text) as Record<string, unknown>;
   const category = typeof o.category === 'string' ? o.category : 'overig';
   const rawSpecialist = typeof o.specialist === 'string' ? o.specialist : undefined;
   const validSpecialist =
-    rawSpecialist && knownSpecialistIds().includes(rawSpecialist as SpecialistId)
+    rawSpecialist && knownSpecialistIds(pack.specialists).includes(rawSpecialist as SpecialistId)
       ? (rawSpecialist as SpecialistId)
-      : categoryToSpecialist(category);
+      : categoryToSpecialist(pack.taxonomy, category);
 
   const rawTasks = Array.isArray(o.tasks) ? o.tasks : [];
   const tasks = rawTasks
-    .map((t, i) => parseTask(t, i))
+    .map((t, i) => parseTask(pack, t, i))
     .filter((t): t is TaskDescriptor => t !== null);
   const compound = o.compound === true && tasks.length >= 2;
 
@@ -391,7 +395,7 @@ export function parseClassification(text: string): Classification {
   // dan leiden we 'm conservatief af uit de specialist.
   const outcome = isOutcome(o.outcome)
     ? o.outcome
-    : outcomeFromClassification({
+    : pack.outcomes.fallbackOutcome({
         specialist: validSpecialist,
         extracted:
           o.extracted && typeof o.extracted === 'object'
@@ -535,7 +539,7 @@ async function loadPolicyRules(env: Env): Promise<PolicyRuleRow[]> {
  */
 function selectPolicyRule(
   rules: PolicyRuleRow[],
-  module: ModuleId,
+  module: string,
   category: string,
 ): PolicyRuleRow | undefined {
   return rules.find(
@@ -841,7 +845,18 @@ function toMemoryEntry(env: Env, m: MatchedMemory): MemoryEntry {
   };
 }
 
-export function buildOrchestrationSteps(env: Env, llm: LlmClient): OrchestrationSteps {
+/**
+ * De concrete stappen voor één module.
+ *
+ * `pack` is geen optie: de poort, de categoriegids, de specialistenlijst en het
+ * uitkomstbeleid komen er allemaal uit. Wélke module dit signaal krijgt, is
+ * eerder beslist — zie `modules.ts`.
+ */
+export function buildOrchestrationSteps(
+  env: Env,
+  llm: LlmClient,
+  pack: ModulePack,
+): OrchestrationSteps {
   const ragEnabled = env.AIOS_RAG_ENABLED === 'true' && Boolean(env.VOYAGE_API_KEY);
   const rag = ragEnabled ? createRag(env) : undefined;
 
@@ -869,6 +884,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
           context: conversationBlock(payload),
         },
         llm,
+        pack.gate,
       );
     },
     async classify(signal) {
@@ -902,7 +918,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               'category MOET exact één van deze waarden zijn (kies de best passende, ' +
               'anders "overig"). Let op de afbakening achter de dubbele punt — die is ' +
               'leidend, niet wat de naam suggereert:\n' +
-              `${CATEGORY_GUIDE}\n` +
+              `${categoryGuide(pack.taxonomy)}\n` +
               'Het LAATSTE bericht van de klant bepaalt de categorie. Eerdere beurten zijn ' +
               'context om verwijzingen op te lossen ("en die andere dan?"), geen onderwerp: ' +
               'een losse begroeting blijft een begroeting, ook als er eerder iets anders speelde. ' +
@@ -924,7 +940,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
               ' relevant is voor DEZE taak (bv. order-nummer, aantal, klant-toon). ' +
               ' Noem geen dingen uit andere taken>, ' +
               '"refs":{"order_hint":<hint uit tekst>|null,...}}. ' +
-              `intent MOET één van: ${knownSpecialistIds().join(', ')}. ` +
+              `intent MOET één van: ${knownSpecialistIds(pack.specialists).join(', ')}. ` +
               'De briefing is de ENIGE informatie die de specialist krijgt over ' +
               'zijn deel — schrijf hem alsof je een intern briefje aan een collega ' +
               'geeft die niets van de rest weet.',
@@ -937,7 +953,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
           },
         ],
       });
-      const c = parseClassification(out);
+      const c = parseClassification(pack, out);
       // Tenant met RAG aan → altijd retrieven (few-shot referentie).
       return { ...c, needsRag: ragEnabled || c.needsRag };
     },
@@ -981,7 +997,11 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
       // compat / nog geen router-shape) → val terug op het escalate-config,
       // dat een neutrale system-prompt levert die de oude flow niet stoort.
       const activeIntent: IntentConfig =
-        intentConfig ?? getIntentConfig(classification.specialist ?? 'escalate');
+        intentConfig ??
+        getIntentConfig(pack.specialists, classification.specialist ?? 'escalate') ??
+        // Een pakket zonder specialisten komt de registry-controle niet door;
+        // dit is de terugval voor het geval dat toch gebeurt.
+        pack.specialists[pack.specialists.length - 1]!;
 
       // Compound sub-task: de router laat parent-`category="overig"` staan als
       // mapping-artefact (echte intent-keuze zit in de per-task specialist).
@@ -1005,7 +1025,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
         try {
           const rule = selectPolicyRule(
             await loadPolicyRules(env),
-            KLANTENSERVICE_MODULE.id,
+            pack.descriptor.id,
             classification.category,
           );
           if (rule) {
@@ -1178,6 +1198,7 @@ export function buildOrchestrationSteps(env: Env, llm: LlmClient): Orchestration
       const mogelijk = isCompoundTask
         ? []
         : proposableActionTypes({
+            types: pack.actions,
             channel: kanaal,
             identification: identificationLevel({
               senderAddress: typeof payload.from === 'string' ? payload.from : null,
@@ -1419,6 +1440,10 @@ export async function deliverMailReply(
     classification?: { category?: string };
     resolved?: { enrichment?: { messageId?: string; toEmail?: string } };
   };
+  // Het label op de mail is het categorie-label van de módule die dit voorstel
+  // maakte. Kent de cockpit die module niet (meer), dan blijft de slug staan —
+  // een mail met een ruwe slug is beter dan een mail zonder categorie.
+  const taxonomie = packById(item.module)?.taxonomy ?? [];
   const body = proposed.body ?? '';
   const messageId = proposed.resolved?.enrichment?.messageId;
   const toEmail = proposed.resolved?.enrichment?.toEmail;
@@ -1428,7 +1453,7 @@ export async function deliverMailReply(
   // cockpit komt het hier terecht.
   if (proposed.noReply === true) {
     if (messageId) {
-      await tidyUpMailbox(env, mail, ctx, messageId, proposed.classification?.category);
+      await tidyUpMailbox(env, mail, ctx, messageId, taxonomie, proposed.classification?.category);
     }
     return { ref: messageId ?? undefined };
   }
@@ -1446,7 +1471,7 @@ export async function deliverMailReply(
     }
     // Outlook netjes houden: labelen + (optioneel) verplaatsen. Best-effort —
     // mag het geslaagde antwoord nooit alsnog laten falen.
-    await tidyUpMailbox(env, mail, ctx, messageId, proposed.classification?.category);
+    await tidyUpMailbox(env, mail, ctx, messageId, taxonomie, proposed.classification?.category);
     return { ref: messageId };
   }
   if (toEmail) {
@@ -1472,13 +1497,14 @@ async function tidyUpMailbox(
   mail: { url: string; apiKey?: string },
   ctx: TenantContext,
   messageId: string,
+  taxonomy: readonly CategoryDef[],
   category?: string,
 ): Promise<void> {
   // 1) Labelen. MAIL_DONE_LABEL leeg → expliciet niet labelen.
   const marker = env.MAIL_DONE_LABEL ?? 'AIOS afgehandeld';
   if (marker.trim()) {
     const labels = [marker.trim()];
-    const catLabel = categoryLabel(category) ?? undefined;
+    const catLabel = categoryLabel(taxonomy, category) ?? undefined;
     if (catLabel) labels.push(catLabel);
     try {
       const res = await callMcp(mail, ctx, 'mail_set_labels', { messageId, labels });

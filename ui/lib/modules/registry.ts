@@ -1,29 +1,35 @@
 /**
  * Het register van modules in de werkbak.
  *
- * Dit bestand is het **enige** in de cockpit dat een module bij naam kent. Al
- * het andere — de werkbak, de kaart, de beleidseditor, de auditlog — praat met
- * de registry en niet met een module. Dat is de eigenschap die telt: gaat de
- * werkbak later naar een eigen repo, dan verhuizen de moduleregistraties mee
- * met hun automatisering en blijft dit bestand als lijst achter.
+ * De werkbak, de kaart, de beleidseditor en de auditlog praten met de registry
+ * en niet met een module. Dat is de eigenschap die telt: gaat de werkbak later
+ * naar een eigen repo, dan verhuizen de moduleregistraties mee met hun
+ * automatisering en blijft dit bestand als lijst achter.
  *
- * Een module toevoegen is twee regels: importeren en in `MODULES` zetten.
+ * Een module toevoegen is één regel in het `modules:`-blok van
+ * `client.manifest.yaml`, gevolgd door `pnpm modules:generate`. Zie
+ * `docs/MODULES.md`.
  */
 
 import { categoryKey, type ModuleId } from "@factumai/agent-core";
 import type { ReviewItemRow } from "@/lib/review";
 import type { ModuleCategoryOption, WorkbenchModule } from "./contract";
-import { klantenserviceModule } from "./klantenservice";
+import { GENERATED_MODULES } from "./registry.generated";
 
 /**
  * De geregistreerde modules, in tabvolgorde.
  *
- * Vandaag één. Sales, administratie en operations komen hier straks bij te
- * staan, en de schil merkt daar niets van.
+ * De lijst zelf komt uit `registry.generated.ts`, geschreven door
+ * `scripts/generate-registry.mjs` uit het `modules:`-blok van
+ * `client.manifest.yaml`. Dit bestand kent dus geen enkele module bij naam
+ * meer, en de volgorde staat op één plek in plaats van verspreid over de
+ * modules.
+ *
+ * Waarom gegenereerd: dit was hét bestand dat elke klant aanpaste, en dus het
+ * bestand waarop elke fundament-update semantisch botst zonder dat git iets
+ * meldt. Een conflict los je nu op door `pnpm modules:generate` te draaien.
  */
-export const MODULES: readonly WorkbenchModule[] = Object.freeze(
-  [klantenserviceModule].sort((a, b) => a.order - b.order),
-);
+export const MODULES: readonly WorkbenchModule[] = GENERATED_MODULES;
 
 /** De module met dit id, of null als hij niet geregistreerd is. */
 export function moduleById(id: string | null | undefined): WorkbenchModule | null {

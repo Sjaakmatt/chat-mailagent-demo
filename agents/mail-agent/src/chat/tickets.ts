@@ -14,13 +14,18 @@ import {
   ticketReadiness,
   confirmationText,
   categoryLabel,
-  KLANTENSERVICE_MODULE,
   CONFIRMATION,
+  type ModulePack,
   type TicketIdentity,
 } from '@factumai/agent-core';
 import type { Env } from '../env.js';
 
 export interface CreateTicketInput {
+  /**
+   * Het pakket van de module die dit ticket maakt. Levert het id (de reeks
+   * loopt per module) en de taxonomie voor het onderwerp in de bevestiging.
+   */
+  pack: ModulePack;
   organizationId: string;
   conversationId?: string | null;
   reviewItemId?: string | null;
@@ -80,7 +85,7 @@ export async function createTicket(
       p_org: input.organizationId,
       p_prefix: prefix,
       p_period: period,
-      p_module: KLANTENSERVICE_MODULE.id,
+      p_module: input.pack.descriptor.id,
     }),
   });
   const number = Array.isArray(numbers) ? numbers[0] : numbers;
@@ -94,7 +99,7 @@ export async function createTicket(
     body: JSON.stringify({
       id,
       organization_id: input.organizationId,
-      module: KLANTENSERVICE_MODULE.id,
+      module: input.pack.descriptor.id,
       number,
       conversation_id: input.conversationId ?? null,
       review_item_id: input.reviewItemId ?? null,
@@ -111,7 +116,7 @@ export async function createTicket(
   // gegevens die we al hebben — het categorielabel en het ordernummer — en niet
   // uit een model, dus er kan geen belofte in sluipen. Zonder deze regel leest
   // de bevestiging als een bonnetje: een nummer zonder onderwerp.
-  const onderwerp = categoryLabel(input.category)?.toLowerCase();
+  const onderwerp = categoryLabel(input.pack.taxonomy, input.category)?.toLowerCase();
   const order = readiness.state === 'complete' ? readiness.orderReference : null;
   const aanhef = onderwerp
     ? `Je vraag over ${onderwerp}${order ? ` bij ${order}` : ''} zet ik door.\n\n`

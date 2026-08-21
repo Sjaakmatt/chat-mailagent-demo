@@ -1,71 +1,55 @@
 /**
- * Intent-registry barrel — de centrale plek waar de plan-stap opzoekt "welke
- * config hoort bij deze specialist?".
+ * Het specialisten-contract — wat een specialist is, niet wíe de specialisten
+ * zijn.
  *
- * Kern-specialisten zijn code (importeerbaar/typebaar/testbaar). Nieuwe
- * experimentele specialisten kunnen later via een data-driven laag toegevoegd
- * worden zonder deploy (zie discovery-flow in migratie 0018 / Fase B); die
- * worden dan opgezocht via een dynamische registry-provider die uit de
- * database leest, niet uit dit bestand.
+ * Kern-specialisten zijn code (importeerbaar/typebaar/testbaar). Ze horen bij
+ * een **module**: `modules/klantenservice/specialists/` bevat de zes van de
+ * mailagent, en administratie brengt straks zijn eigen zes mee. Tot fase 1
+ * stond hier één bevroren `CORE_INTENTS`, en dat was precies de aanname die een
+ * tweede domein onmogelijk maakte.
+ *
+ * Wat hier overblijft: het type, en de lookups die de lus nodig heeft. Die
+ * nemen de lijst als parameter — de kern kiest niet wélke specialisten er zijn,
+ * hij zoekt er eentje in de lijst die het pakket meelevert.
+ *
+ * Experimentele specialisten kunnen later data-driven worden toegevoegd zonder
+ * deploy (zie discovery-flow in migratie 0018); die komen dan uit een
+ * registry-provider die uit de database leest, en gaan door dezelfde lookups.
  */
 
 import type { SpecialistId } from '../contracts/index.js';
 import type { IntentConfig } from './types.js';
-import { simpleReplyConfig } from './simple-reply.js';
-import { orderChangeConfig } from './order-change.js';
-import { complaintConfig } from './complaint.js';
-import { technicalConfig } from './technical.js';
-import { gdprConfig } from './gdpr.js';
-import { escalateConfig } from './escalate.js';
 
 export * from './types.js';
 
 /**
- * De 5 kern-specialisten + escalate-fallback. Volgorde is de default-
- * volgorde waarin de router ze in z'n prompt-lijst opsomt.
+ * Zoekt de config bij een `SpecialistId` binnen één module.
  *
- * Klant-specifieke intents horen hier niet: die voeg je toe in de klant-repo
- * (extra config-bestand + registratie hieronder), of data-driven via de
- * experimentele-specialisten-tabel. Zie `examples/warehouse-module/specialists/`
- * voor een werkend voorbeeld.
+ * Gooit nooit. Een onbekend id valt terug op de laatste specialist in de lijst,
+ * en dat is per afspraak de escalatie-variant: bij twijfel een mens, niet een
+ * willekeurige andere specialist. Een lege lijst geeft `undefined` — dan is er
+ * geen pakket geladen en hoort de aanroeper dat te merken, niet te maskeren.
  */
-export const CORE_INTENTS: readonly IntentConfig[] = Object.freeze([
-  simpleReplyConfig,
-  orderChangeConfig,
-  complaintConfig,
-  technicalConfig,
-  gdprConfig,
-  escalateConfig,
-]);
-
-/**
- * Lookup-map voor snelle O(1) resolutie op basis van SpecialistId.
- * `escalate` is de veilige fallback: als een router een onbekende
- * specialist teruggeeft, gebruikt de orchestrator deze config.
- */
-export const INTENT_REGISTRY: ReadonlyMap<SpecialistId, IntentConfig> = new Map(
-  CORE_INTENTS.map((c) => [c.id, c]),
-);
-
-/**
- * Resolvet een `SpecialistId` naar de bijbehorende `IntentConfig`. Onbekende
- * IDs → `escalate` (nooit throwen — de agent moet blijven werken, de mail
- * gaat gewoon naar de menselijke queue).
- */
-export function getIntentConfig(id: SpecialistId): IntentConfig {
-  return INTENT_REGISTRY.get(id) ?? escalateConfig;
+export function getIntentConfig(
+  specialists: readonly IntentConfig[],
+  id: SpecialistId,
+): IntentConfig | undefined {
+  return (
+    specialists.find((c) => c.id === id) ?? specialists[specialists.length - 1]
+  );
 }
 
-/** Lijst van bekende specialist-IDs; handig voor router-prompt-samenstelling. */
-export function knownSpecialistIds(): SpecialistId[] {
-  return CORE_INTENTS.map((c) => c.id);
+/** De bekende specialist-ids van deze module; voedt de router-prompt. */
+export function knownSpecialistIds(
+  specialists: readonly IntentConfig[],
+): SpecialistId[] {
+  return specialists.map((c) => c.id);
 }
 
-export {
-  simpleReplyConfig,
-  orderChangeConfig,
-  complaintConfig,
-  technicalConfig,
-  gdprConfig,
-  escalateConfig,
-};
+/** Is dit een specialist die deze module kent? */
+export function isKnownSpecialist(
+  specialists: readonly IntentConfig[],
+  id: string,
+): id is SpecialistId {
+  return specialists.some((c) => c.id === id);
+}
