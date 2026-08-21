@@ -253,6 +253,17 @@ npx wrangler secret put FACTUMAI_MCP_MAIL_URL
 # en de overige MCP-URL's + auth die deze klant gebruikt
 ```
 
+Alleen nodig als deze klant die ingang gebruikt (zie
+[`docs/TRIGGERS.md`](./TRIGGERS.md)):
+
+```bash
+npx wrangler secret put WEBHOOK_SECRET_<BRON>   # per bron die naar /hooks/<bron> post
+npx wrangler secret put UPLOAD_SECRET           # voor POST /upload
+```
+
+Beide zijn fail-closed: zonder secret geeft de route 404. Een vergeten geheim
+houdt de deur dus dicht in plaats van open.
+
 Voor de cockpit hetzelfde, plus `SUPABASE_ANON_KEY` — zonder die key blijft de
 werkbak fail-closed op slot.
 

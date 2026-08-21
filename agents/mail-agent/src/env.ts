@@ -29,6 +29,17 @@ export interface Env {
   [webhookSecret: `WEBHOOK_SECRET_${string}`]: string | undefined;
 
   /**
+   * Gedeeld geheim voor `POST /upload`, waarmee de cockpit (of een scan-
+   * postbus) meldt dat er een document in Storage staat.
+   *
+   * Dezelfde HMAC als de webhooks: `sha256(<timestamp>.<body>)`. Ongezet is de
+   * route 404 — een vergeten secret hoort de deur dicht te houden.
+   *
+   * Zet 'm met `wrangler secret put UPLOAD_SECRET`. Nooit als `var`.
+   */
+  UPLOAD_SECRET?: string;
+
+  /**
    * Klantnaam zoals de agent 'm in mails naar eindklanten mag noemen. Vult de
    * `{{client}}`-placeholder in de specialist-prompts. Zet 'm als `var` in
    * wrangler.jsonc — geen secret.
