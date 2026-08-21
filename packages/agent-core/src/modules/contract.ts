@@ -37,6 +37,7 @@ import type { ModelConfig } from '../llm/index.js';
 import type { IdentificationPolicy, Outcome } from '../outcomes/index.js';
 import type { IntentConfig } from '../specialists/index.js';
 import type { CategoryDef } from '../taxonomy/index.js';
+import type { ModuleTriggers } from '../triggers/index.js';
 import type { ModuleDescriptor } from './index.js';
 
 /**
@@ -182,6 +183,17 @@ export interface ModulePack {
 
   /** Welk geheugen dit domein raadpleegt. */
   memory: MemoryPolicy;
+
+  /**
+   * Waar dit domein zijn signalen vandaan haalt naast mail en chat: geplande
+   * automatiseringen en polls.
+   *
+   * Optioneel, want een module die alleen op binnenkomende berichten werkt
+   * heeft ze niet. Zodra een domein begint bij een openstaande post of een
+   * voorraadstand, staat het hier — en niet in de cron, die alleen leest wie er
+   * aan de beurt is.
+   */
+  triggers?: ModuleTriggers;
 
   /**
    * Modeloverride per tier. Weglaten = de tenant-brede keuze uit config.

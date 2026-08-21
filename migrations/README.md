@@ -32,6 +32,7 @@ niets. Fail-closed dus, ook als er ooit per ongeluk een publieke key uitlekt.
 | `0031_role_grants`          | rol → (module, datacategorieën) — één rechtenmodel   |
 | `0032_allowed_emails_modules` | afdelingen per gebruiker, begrensd door de afname |
 | `0035_module_columns`       | `module` op elke werk-/kennistabel + indexen; ticketreeks per module; `applies_to` als `module:slug` |
+| `0036_trigger_layer`        | `last_run_at` op automatiseringen + `aios_poll_cursors` — de agent begint niet meer alleen bij een mail |
 
 ## Waarom de gaten in de nummering
 

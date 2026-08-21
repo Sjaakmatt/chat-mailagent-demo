@@ -85,6 +85,7 @@ Voeg klantspecifieke code toe via deze naden, niet door de kern te bewerken:
 | Eigen events in de auditlog    | `ui/lib/audit-sources.ts`                        |
 | Wie wat mag zien/goedkeuren    | `aios_role_grants` — zie `docs/RECHTEN.md`; nooit een tweede rechtenmodel |
 | Wat de assistent mag inzien    | `collectSources` op de module — zie `docs/ASSISTENT.md`; elke bewering herleidbaar |
+| Een ingang die niet bij mail begint (klok, poll) | `packages/agent-core/src/modules/<module>/triggers.ts` — zie `docs/TRIGGERS.md` |
 | Een tweede kanaal (chat)       | `packages/agent-core/src/channels/` + `agents/mail-agent/src/channels.ts` |
 | Andere demo-mails              | `ui/lib/demo/scenarios.ts` + `migrations/0005_*` |
 

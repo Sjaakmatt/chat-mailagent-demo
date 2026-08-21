@@ -750,11 +750,15 @@ async function snapshotAttachments(
  * `mail_get_message` en verrijken we de payload met subject/bodyText/from.
  * Best-effort verrijken we ook met thread-context en bijlagen (naar Storage).
  * Lukt iets niet, dan slaan we dat deel over — de lus crasht nooit op hydratatie.
+ *
+ * De domeincheck stond hier tot fase 2 ook in. Die is verhuisd naar de
+ * hydrator-registry (`hydrators/index.ts`): die kiest wélke hydrator draait, en
+ * dan hoeft deze functie niet meer te controleren of hij aan de beurt is.
  */
-export async function hydrateSignal(env: Env, signal: Signal): Promise<Signal> {
+export async function hydrateMailSignal(env: Env, signal: Signal): Promise<Signal> {
   const payload = (signal.payload ?? {}) as Record<string, unknown>;
   const messageId = typeof payload.messageId === 'string' ? payload.messageId : undefined;
-  if (signal.domain !== 'mail' || !messageId) return signal;
+  if (!messageId) return signal;
 
   const mail = mailEndpoint(env);
   if (!mail) return signal;

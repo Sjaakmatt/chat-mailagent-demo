@@ -11,7 +11,7 @@ vi.mock('@factumai/agent-core/mcp', async (importOriginal) => ({
   callMcp: (...a: unknown[]) => callMcp(...a),
 }));
 
-import { hydrateSignal } from './steps.js';
+import { hydrateMailSignal as hydrateSignal } from './steps.js';
 import type { Env } from './env.js';
 
 const env = { FACTUMAI_MCP_MAIL_URL: 'http://mail/mcp', FACTUMAI_MCP_API_KEY: 'k' } as unknown as Env;

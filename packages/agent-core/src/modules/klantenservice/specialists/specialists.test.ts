@@ -22,6 +22,7 @@ import type {
 } from '../../../orchestrate/index.js';
 import type { Signal } from '../../../contracts/index.js';
 import { klantenservicePack } from '../pack.js';
+import { baseEnvelope } from '../../../envelope/index.js';
 
 /** De lookups van deze module, zodat de tests niet elke keer de lijst noemen. */
 const getIntentConfig = (id: string) => lookup(KLANTENSERVICE_SPECIALISTS, id);
@@ -130,7 +131,11 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       extracted: {},
       specialist: 'simple_reply',
     });
-    await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
+    await orchestrate(makeSignal(), {
+      pack: klantenservicePack,
+      envelope: baseEnvelope(makeSignal()),
+      steps,
+    });
     expect(planCalls).toHaveLength(1);
     expect(planCalls[0].intentConfig?.id).toBe('simple_reply');
   });
@@ -142,7 +147,11 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       needsRag: false,
       extracted: {},
     });
-    await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
+    await orchestrate(makeSignal(), {
+      pack: klantenservicePack,
+      envelope: baseEnvelope(makeSignal()),
+      steps,
+    });
     expect(planCalls[0].intentConfig).toBeUndefined();
   });
 
@@ -154,7 +163,11 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       extracted: {},
       specialist: 'weird_intent_that_does_not_exist',
     });
-    await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
+    await orchestrate(makeSignal(), {
+      pack: klantenservicePack,
+      envelope: baseEnvelope(makeSignal()),
+      steps,
+    });
     expect(planCalls[0].intentConfig?.id).toBe('escalate');
   });
 
@@ -166,7 +179,11 @@ describe('orchestrate() — intentConfig doorgeven aan plan', () => {
       extracted: {},
       specialist: 'order_change',
     });
-    const { reviewItem } = await orchestrate(makeSignal(), { pack: klantenservicePack, steps });
+    const { reviewItem } = await orchestrate(makeSignal(), {
+      pack: klantenservicePack,
+      envelope: baseEnvelope(makeSignal()),
+      steps,
+    });
     expect(reviewItem.proposed.classification).toMatchObject({
       specialist: 'order_change',
     });

@@ -55,6 +55,7 @@ export interface ModulePack {
   review: ReviewPolicy;              // welke vorm een voorstel krijgt
   memory: MemoryPolicy;              // welke procestags dit domein gebruikt
   models?: Partial<ModelConfig>;     // optionele modeloverride per tier
+  triggers?: ModuleTriggers;         // eigen ingangen: de klok en periodieke bronnen
 }
 ```
 
@@ -62,6 +63,11 @@ De drie beleidsobjecten zijn bewust minimaal: er staat alleen in wat de kern
 écht uitleest. `ReviewPolicy` heeft alleen `defaultKind` — de `kinds` staan al
 op de descriptor, en twee lijsten die uit elkaar kunnen lopen zijn erger dan
 één lijst op een iets andere plek.
+
+`triggers` is optioneel en gaat over de vraag die vóór de lus ligt: waar komen
+de signalen van deze module vandaan als er niemand mailt. Een dagelijkse taak op
+de eigen database, een bron die periodiek bevraagd wordt. Zie
+[`docs/TRIGGERS.md`](./TRIGGERS.md).
 
 ### Routering
 
@@ -103,7 +109,7 @@ packages/agent-core/src/modules/
   registry.ts             resolveModule(), packById(), actionTypeBySlug(), assertRegistry()
   registry.generated.ts   ← gegenereerd uit client.manifest.yaml
   klantenservice/
-    pack.ts  descriptor.ts  gate.ts  taxonomy.ts  actions.ts  outcomes.ts
+    pack.ts  descriptor.ts  gate.ts  taxonomy.ts  actions.ts  outcomes.ts  triggers.ts
     specialists/{simple-reply,order-change,complaint,technical,gdpr,escalate}.ts
 ```
 

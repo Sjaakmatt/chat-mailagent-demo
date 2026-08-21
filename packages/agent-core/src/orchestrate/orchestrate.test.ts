@@ -10,6 +10,26 @@ import type { Signal } from '../contracts/index.js';
 // de startset waar elke klant van vertrekt, dus de gedragstests van de lus
 // draaien erop.
 import { klantenservicePack as pack } from '../modules/klantenservice/pack.js';
+import { baseEnvelope, type SignalEnvelope } from '../envelope/index.js';
+
+/**
+ * De envelop zoals de mail-hydrator 'm zou opleveren.
+ *
+ * De hydrators zelf leven in de agent-Worker (ze praten met MCP's); hier bouwen
+ * we 'm met de hand, zodat de lus-tests toetsen wat de kern met een envelop
+ * doet en niet hoe hij ontstaat.
+ */
+function envelopeVan(sig: Signal): SignalEnvelope {
+  const p = (sig.payload ?? {}) as Record<string, unknown>;
+  return {
+    ...baseEnvelope(sig),
+    subject: typeof p.subject === 'string' ? p.subject : undefined,
+    body: typeof p.bodyText === 'string' ? p.bodyText : '',
+    participants:
+      typeof p.from === 'string' ? [{ address: p.from, role: 'afzender' as const }] : [],
+    attachments: Array.isArray(p.attachments) ? (p.attachments as never[]) : [],
+  };
+}
 
 const signal: Signal = {
   id: 'sig-1',
@@ -33,6 +53,8 @@ const signalMetFoto: Signal = {
     attachments: [{ name: 'schade.jpg', contentType: 'image/jpeg' }],
   },
 };
+
+const envelope = envelopeVan(signal);
 
 function steps(overrides: Partial<OrchestrationSteps> = {}): OrchestrationSteps {
   return {
@@ -61,6 +83,7 @@ describe('orchestrate', () => {
   it('produceert altijd een ReviewItem(PENDING) — nooit een side effect', async () => {
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps(),
       now: () => '2026-06-23T10:00:01.000Z',
       newId: () => 'ri-1',
@@ -76,6 +99,7 @@ describe('orchestrate', () => {
   it('koppelt grounding-refs en houdt het vertrouwen hoog bij gegronde claims', async () => {
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps() });
     expect(res.ungrounded).toEqual([]);
     expect(res.reviewItem.grounding).toEqual([
@@ -87,6 +111,7 @@ describe('orchestrate', () => {
   it('verlaagt vertrouwen + zet guardrail-vlag bij niet-gegronde getallen', async () => {
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
         plan: async () => ({
           kind: 'draft_email',
@@ -106,6 +131,7 @@ describe('orchestrate', () => {
     let retrieveCalled = false;
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
         retrieve: async () => {
           retrieveCalled = true;
@@ -120,6 +146,7 @@ describe('orchestrate', () => {
     let retrieveCalled = false;
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
         classify: async () => ({
           category: 'order_status',
@@ -147,6 +174,7 @@ describe('runRoute + runSpecialize split', () => {
     let resolveCalled = false;
     const cls = await runRoute(signal, {
       pack,
+      envelope,
       steps: steps({
         resolve: async () => {
           resolveCalled = true;
@@ -179,6 +207,7 @@ describe('runRoute + runSpecialize split', () => {
     };
     const res = await runSpecialize(signal, givenClassification, {
       pack,
+      envelope,
       steps: steps({
         classify: async () => {
           classifyCalled = true;
@@ -198,6 +227,7 @@ describe('runRoute + runSpecialize split', () => {
     const s = steps();
     const composedRes = await orchestrate(signal, {
       pack,
+      envelope,
       steps: s,
       now: () => '2026-06-23T10:00:01.000Z',
       newId: () => 'ri-same',
@@ -206,9 +236,11 @@ describe('runRoute + runSpecialize split', () => {
     const s2 = steps();
     const cls = await runRoute(signal, {
       pack,
+      envelope,
       steps: s2 });
     const splitRes = await runSpecialize(signal, cls, {
       pack,
+      envelope,
       steps: s2,
       now: () => '2026-06-23T10:00:01.000Z',
       newId: () => 'ri-same',
@@ -276,6 +308,7 @@ describe('domeingrens in de orchestratie', () => {
     const { calls, steps } = spyingSteps(false);
     await orchestrate(signal, {
       pack,
+      envelope,
       steps });
     expect(calls).not.toContain('resolve');
     expect(calls).not.toContain('retrieve');
@@ -286,6 +319,7 @@ describe('domeingrens in de orchestratie', () => {
     const { calls, steps } = spyingSteps(false);
     await orchestrate(signal, {
       pack,
+      envelope,
       steps });
     expect(calls).toContain('gate');
   });
@@ -298,6 +332,7 @@ describe('domeingrens in de orchestratie', () => {
     const gezien: string[] = [];
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: {
         async gate(s) {
           gezien.push(`gate:${s.id}`);
@@ -323,6 +358,7 @@ describe('domeingrens in de orchestratie', () => {
     const { steps } = spyingSteps(false);
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps, rejectionText: 'Daar ga ik niet over.' });
     expect(res.reviewItem.proposed.body).toBe('Daar ga ik niet over.');
   });
@@ -335,6 +371,7 @@ describe('domeingrens in de orchestratie', () => {
     };
     const res = await orchestrate(gevaarlijk, {
       pack,
+      envelope: envelopeVan(gevaarlijk),
       steps, rejectionText: 'Nee.' });
     expect(res.reviewItem.proposed.body).toBe('Nee.');
     expect(String(res.reviewItem.proposed.body)).not.toContain('12345');
@@ -344,6 +381,7 @@ describe('domeingrens in de orchestratie', () => {
     const { steps } = spyingSteps(false);
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps });
     expect(res.reviewItem.status).toBe('PENDING');
     expect(res.reviewItem.grounding).toBeNull();
@@ -354,6 +392,7 @@ describe('domeingrens in de orchestratie', () => {
     const { steps } = spyingSteps(false);
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps });
     expect(res.reviewItem.proposed.outOfDomain).toEqual({ reason: 'algemene kennisvraag' });
     expect(res.reviewItem.proposed.triage).toEqual({ tier: 'simple', reason: 'buiten domein' });
@@ -364,6 +403,7 @@ describe('domeingrens in de orchestratie', () => {
     const { calls, steps } = spyingSteps(true);
     await orchestrate(signal, {
       pack,
+      envelope,
       steps });
     // Gate en classify starten tegelijk, dus hun onderlinge volgorde ligt niet
     // vast. Wat wél vastligt: allebei gedraaid, en pas daarna de rest.
@@ -376,6 +416,7 @@ describe('domeingrens in de orchestratie', () => {
     const { gate: _weg, ...zonderPoort } = steps;
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: zonderPoort });
     expect(calls).toEqual(['classify', 'resolve', 'plan']);
   });
@@ -386,6 +427,7 @@ describe('meten en melden', () => {
     const gemeten: Array<{ step: string; ms: number }> = [];
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
         classify: async () => ({
           category: 'order_status',
@@ -412,6 +454,7 @@ describe('meten en melden', () => {
     const gemeten: string[] = [];
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps(),
       onTiming: (t) => gemeten.push(t.step),
     });
@@ -425,6 +468,7 @@ describe('meten en melden', () => {
     await expect(
       orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
           plan: async () => {
             throw new Error('model down');
@@ -439,6 +483,7 @@ describe('meten en melden', () => {
   it('laat een kapotte meting de run niet raken', async () => {
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps(),
       onTiming: () => {
         throw new Error('log kapot');
@@ -453,6 +498,7 @@ describe('meten en melden', () => {
     const fasen: string[] = [];
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
         classify: async () => ({
           category: 'order_wijziging',
@@ -472,6 +518,7 @@ describe('meten en melden', () => {
     const fasen: string[] = [];
     await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps({
         classify: async () => ({
           category: 'levertijd_status',
@@ -521,6 +568,7 @@ describe('orchestrate — schrijfoperaties klaarzetten', () => {
   it('zet de actie klaar als het bronsysteem adres en order aan elkaar knoopt', async () => {
     const res = await orchestrate(signalMetFoto, {
       pack,
+      envelope: envelopeVan(signalMetFoto),
       steps: planMetActie() });
 
     expect(res.identification).toBe('gematcht');
@@ -538,6 +586,7 @@ describe('orchestrate — schrijfoperaties klaarzetten', () => {
     // ander adres. Het concept-antwoord komt er nog steeds, de schrijfactie niet.
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps: planMetActie({ sourceEmail: 'iemand.anders@example.com' }),
     });
 
@@ -551,6 +600,7 @@ describe('orchestrate — schrijfoperaties klaarzetten', () => {
   it('houdt de actie tegen als een payload-veld geen dekking heeft', async () => {
     const res = await orchestrate(signalMetFoto, {
       pack,
+      envelope: envelopeVan(signalMetFoto),
       steps: steps({
         plan: async ({ recorder }) => {
           recorder.record({ toolCallId: 'tc-inv', tool: 'erp.get_invoice' });
@@ -576,6 +626,7 @@ describe('orchestrate — schrijfoperaties klaarzetten', () => {
   it('doet niets bijzonders als de plan-stap geen acties voorstelt', async () => {
     const res = await orchestrate(signal, {
       pack,
+      envelope,
       steps: steps() });
     expect(res.actions).toEqual([]);
     expect(res.rejectedActions).toEqual([]);

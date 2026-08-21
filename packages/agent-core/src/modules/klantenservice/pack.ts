@@ -19,6 +19,7 @@ import { KLANTENSERVICE_TAXONOMY } from './taxonomy.js';
 import { KLANTENSERVICE_SPECIALISTS } from './specialists/index.js';
 import { KLANTENSERVICE_ACTIONS } from './actions.js';
 import { KLANTENSERVICE_OUTCOMES } from './outcomes.js';
+import { KLANTENSERVICE_TRIGGERS } from './triggers.js';
 
 export const klantenservicePack: ModulePack = {
   descriptor: KLANTENSERVICE_MODULE,
@@ -30,6 +31,10 @@ export const klantenservicePack: ModulePack = {
   claims: [
     { domain: 'mail', type: 'mail.received' },
     { domain: 'chat', type: 'chat.message' },
+    // De eigen geplande taken van dit proces. Eén claim per automatisering en
+    // niet het hele schedule-domein: zodra administratie zijn eigen taken
+    // heeft, zou een brede claim die van de ene module bij de andere afleveren.
+    { domain: 'schedule', type: 'schedule.ticket_opvolging' },
   ],
 
   gate: KLANTENSERVICE_GATE,
@@ -55,6 +60,8 @@ export const klantenservicePack: ModulePack = {
     // gelijk met de specialisten die een `memoryProcessTag` zetten.
     processTags: ['order_change', 'complaint', 'technical', 'gdpr'],
   },
+
+  triggers: KLANTENSERVICE_TRIGGERS,
 };
 
 export { KLANTENSERVICE_MODULE };
