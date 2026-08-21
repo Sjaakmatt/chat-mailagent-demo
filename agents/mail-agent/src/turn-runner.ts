@@ -8,7 +8,8 @@ import {
 } from '@factumai/agent-core';
 import type { Env } from './env.js';
 import { createPlatformStore } from './store.js';
-import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from './steps.js';
+import { buildOrchestrationSteps, buildLlmClient } from './steps.js';
+import { prepareSignal } from './hydrators/index.js';
 import { resolveModule } from './modules.js';
 import { finishChatTurn } from './chat/turn.js';
 import { createTicket } from './chat/tickets.js';
@@ -93,8 +94,9 @@ export async function runSignalTurn(
 
   async function voerUit(): Promise<TurnResult> {
   // Bij mail haalt dit onderwerp en tekst op uit de mailbox; bij chat zit de
-  // inhoud al in de payload en komt het signaal ongewijzigd terug.
-  const signal = await hydrateSignal(env, input);
+  // inhoud al in de payload en komt het signaal ongewijzigd terug. De envelop
+  // is wat de kern ervan leest.
+  const { signal, envelope } = await prepareSignal(env, input);
 
   // Welke module dit signaal behandelt. Geen match is een expliciete uitkomst:
   // het signaal gaat terug naar NEW en blijft staan, want door de poort van een
@@ -112,6 +114,7 @@ export async function runSignalTurn(
   const timings: StepTiming[] = [];
   const result = await orchestrate(signal, {
     pack,
+    envelope,
     steps: buildOrchestrationSteps(env, llm, pack),
     onProgress: opts.onProgress,
     onTiming: (t) => timings.push(t),

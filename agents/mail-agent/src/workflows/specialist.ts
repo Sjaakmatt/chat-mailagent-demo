@@ -10,7 +10,8 @@ import {
 } from '@factumai/agent-core';
 import type { Env, SpecialistParams } from '../env.js';
 import { createPlatformStore } from '../store.js';
-import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from '../steps.js';
+import { buildOrchestrationSteps, buildLlmClient } from '../steps.js';
+import { prepareSignal } from '../hydrators/index.js';
 import { requirePack } from '../modules.js';
 
 /**
@@ -41,12 +42,13 @@ export class SpecialistWorkflow extends WorkflowEntrypoint<Env, SpecialistParams
 
     await step.do('specialize', async () => {
       const raw = await store.loadSignal(signalId);
-      const signal = await hydrateSignal(this.env, raw);
+      const { signal, envelope } = await prepareSignal(this.env, raw);
       // De router heeft de module al bepaald; hier zonder pakket aankomen is
       // een bug en geen scenario.
       const pack = requirePack(signal);
       const result = await runSpecialize(signal, classification, {
         pack,
+        envelope,
         steps: buildOrchestrationSteps(this.env, llm, pack),
       });
 

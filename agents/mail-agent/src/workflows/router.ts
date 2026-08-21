@@ -7,7 +7,8 @@ import {
 } from '@factumai/agent-core';
 import type { Env, PlatformStore, RouterParams } from '../env.js';
 import { createPlatformStore } from '../store.js';
-import { buildOrchestrationSteps, buildLlmClient, hydrateSignal } from '../steps.js';
+import { buildOrchestrationSteps, buildLlmClient } from '../steps.js';
+import { prepareSignal } from '../hydrators/index.js';
 import { resolveModule } from '../modules.js';
 
 /**
@@ -47,7 +48,7 @@ export class RouterWorkflow extends WorkflowEntrypoint<Env, RouterParams> {
 
     await step.do('route-and-dispatch', async () => {
       const raw = await store.loadSignal(signalId);
-      const signal = await hydrateSignal(this.env, raw);
+      const { signal, envelope } = await prepareSignal(this.env, raw);
 
       // Wie behandelt dit? Geen match is een expliciete uitkomst en geen
       // terugval: een signaal door de poort van een willekeurig ander proces
@@ -64,6 +65,7 @@ export class RouterWorkflow extends WorkflowEntrypoint<Env, RouterParams> {
 
       const classification = await runRoute(signal, {
         pack,
+        envelope,
         steps: buildOrchestrationSteps(this.env, llm, pack),
       });
 
