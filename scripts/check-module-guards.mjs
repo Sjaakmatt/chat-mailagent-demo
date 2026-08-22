@@ -24,7 +24,7 @@
  * Een vals alarm los je op door de guard te zetten.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const APP = "ui/app/(dashboard)";
@@ -89,7 +89,10 @@ function registeredModuleFiles() {
     // `contract` bevat alleen types en registreert niets.
     if (match[2] === "contract") continue;
     const map = match[1] === "./" ? MODULES_DIR : CLIENT_MODULES_DIR;
-    files.push(join(map, `${match[2]}.ts`));
+    // Eén bestand of een map met een `index.ts` — allebei geldig, en welke van
+    // de twee het is, hangt ervan af of de module eigen schermen meebrengt.
+    const los = join(map, `${match[2]}.ts`);
+    files.push(existsSync(los) ? los : join(map, match[2], "index.ts"));
   }
   return files;
 }

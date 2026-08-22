@@ -11,7 +11,6 @@ import type { CockpitEnv } from "@/lib/env";
 import { requireRole } from "@/lib/auth/require-role";
 import { accessFor } from "@/lib/auth/access";
 import { moduleForRow } from "@/lib/modules";
-import { mailProposed } from "@/lib/modules/klantenservice";
 
 export const dynamic = "force-dynamic";
 
@@ -76,8 +75,11 @@ export async function POST(
     return new NextResponse("Geen rechten op dit proces", { status: 403 });
   }
 
-  const existingProposed = mailProposed(existing);
-  const originalDraft = existingProposed.body ?? "";
+  // Wat er in de feedbacklus als "het oorspronkelijke concept" telt. Nog een
+  // mailveld, en dat blijft zo tot de feedbacklaag zelf module-agnostisch is;
+  // het staat in OPEN-PUNTEN.md.
+  const bestaand = (existing.proposed ?? {}) as Record<string, unknown>;
+  const originalDraft = typeof bestaand.body === "string" ? bestaand.body : "";
 
   try {
     if (action === "reject") {
@@ -90,13 +92,16 @@ export async function POST(
     }
 
     if (action === "edit") {
-      const editedBody = payload.body ?? originalDraft;
-      const finalSubject = payload.subject ?? existingProposed.subject ?? "";
-      const proposed = {
-        ...existingProposed,
-        subject: finalSubject,
-        body: editedBody,
-      };
+      // De module bepaalt hoe een bewerking terug in `proposed` landt. Deze
+      // route schreef `subject` en `body` — mailvelden — en zou een offerte met
+      // gewijzigde regels mangelen tot een mail met een onderwerp.
+      const proposed = mod.applyEdit(existing, {
+        ...(payload.subject !== undefined ? { subject: payload.subject } : {}),
+        ...(payload.body !== undefined ? { body: payload.body } : {}),
+      });
+      const editedBody =
+        typeof proposed.body === "string" ? proposed.body : originalDraft;
+      const finalSubject = typeof proposed.subject === "string" ? proposed.subject : "";
       await decideReviewItem(client, id, "EDITED", proposed, guard.email);
       // Audit: snapshot van de finale wijziging bij de beslissing.
       try {

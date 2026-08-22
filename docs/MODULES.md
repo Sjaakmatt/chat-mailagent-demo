@@ -240,10 +240,56 @@ afdelingen heen.
 
 ## Wat een module NIET levert
 
-**Geen React-componenten.** Een module levert een `ReviewCardViewModel` — titel,
-ondertitel, badges, link — en de schil tekent de kaart. Zou een module een eigen
-kaartcomponent meebrengen, dan importeert de schil module-code en is de werkbak
-nooit los te trekken van zijn modules. Nu is de afhankelijkheid één kant op.
+**Geen React voor de kaart.** Een module levert een `ReviewCardViewModel` —
+titel, ondertitel, badges, link — en de schil tekent de kaart. Zou een module
+een eigen kaartcomponent meebrengen, dan importeert de schil module-code voor
+iets wat bij elk proces hetzelfde blokje is.
+
+### Behalve het detailscherm — en waarom we die regel daar loslaten
+
+Tot fase 4 stond de regel absoluut: een module levert geen React, punt. Voor de
+kaart houdt dat stand. Voor het detail niet, en dat toegeven is beter dan de
+regel redden met een viewmodel dat het niet kan.
+
+Een klantmail met een concept-antwoord, een offerte met regels en marges, en een
+werkbon met onderdelen en uren zijn geen varianten van één schema. Ze delen
+alleen dát er een mens naar kijkt. Een gedeeld viewmodel dat alle drie dekt,
+wordt bij elke nieuwe module opgerekt tot het niets meer voorschrijft — en dan
+heb je de kosten van een abstractie zonder de opbrengst.
+
+Dus levert een module zijn eigen `DetailView`, en levert de schil de omlijsting:
+
+| Van de schil | Van de module |
+| --- | --- |
+| de route `/item/[id]` | wat er binnen het scherm staat |
+| de rij ophalen en de module bepalen | de eigen aanvullingen ophalen (tijdlijn, beslislog, bijlage-links) |
+| `requireModulePage` op de module van de rij | `applyEdit`: hoe een bewerking terug in `proposed` landt |
+| de assistent in de zijkant | het onderwerp dat hij meekrijgt (`AssistantSubject`) |
+
+`DetailView` mag `async` zijn. Welke aanvullingen een detailscherm nodig heeft,
+weet alleen de module; de schil haalt alleen de rij op.
+
+**Wat er níét mee verandert:** de kaart, de tabs, het beleid, de cijfers en de
+auditlog blijven van de schil. Als je merkt dat je dáár een component van een
+module nodig hebt, is dat geen tweede uitzondering maar een aanwijzing dat het
+viewmodel iets mist.
+
+### Eigen schermen
+
+Een module met eigen schermen (`navItems`) zet ze in
+`ui/lib/modules/<module>/screens/`. De route onder `ui/app/(dashboard)/` blijft
+bestaan — Next heeft hem nodig — maar bevat alleen de guard en de aanroep:
+
+```tsx
+export default async function TicketsPage({ searchParams }) {
+  const user = await requireModulePage(klantenserviceModule.id);
+  return <TicketsScreen searchParams={searchParams} user={user} />;
+}
+```
+
+De guard staat bewust in `page.tsx` en niet in het scherm: `check-module-guards`
+leest die bestanden, en een guard die een laag dieper verhuist, is een guard die
+een volgende keer stilletjes kan verdwijnen.
 
 ## Wat de schil ermee doet
 

@@ -17,7 +17,7 @@
  * het is beter dat hier te zeggen dan een tijdlijn te tonen die volledig lijkt.
  */
 
-import { CLAIMED, CLOSED, CREATED } from "./klantenservice-audit-actions";
+import { CLAIMED, CLOSED, CREATED } from "./audit-actions";
 import type { AuditEntry, AuditQuery } from "@/lib/db";
 import { CTX } from "@/lib/db";
 import type { CockpitDbClient } from "@/lib/tenant-query";

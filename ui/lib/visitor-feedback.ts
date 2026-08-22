@@ -139,6 +139,28 @@ export async function listFeedback(
  * 'm uit de werklijst — een chagrijnige bezoeker is geen testcase, en dat is
  * ook informatie.
  */
+/**
+ * Uit welk proces deze feedback komt.
+ *
+ * Zelfde reden als bij een ticket: een route-handler die alleen de rechten
+ * toetst, hoeft de hele rij niet op te halen, en `module` is een kolom van de
+ * cockpit-tabel en geen eigenschap van het feedbackitem zelf.
+ */
+export async function feedbackModule(
+  client: CockpitDbClient,
+  id: string,
+): Promise<string | null> {
+  const url = client.tableUrl("aios_message_feedback");
+  url.searchParams.set("id", `eq.${id}`);
+  url.searchParams.set("select", "module");
+  url.searchParams.set("limit", "1");
+  const rows = await client.request<Array<{ module: string | null }>>(CTX, url, {
+    method: "GET",
+  });
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  return row?.module ?? null;
+}
+
 export async function labelFeedback(
   client: CockpitDbClient,
   id: string,

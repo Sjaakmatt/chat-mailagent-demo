@@ -11,16 +11,23 @@
  * meebrengen, dan importeert de schil module-code en is de werkbak nooit los te
  * trekken. Nu levert een module een viewmodel, en blijft de kaart van de schil.
  *
+ * **Eén uitzondering, bewust: het detailscherm.** Zie `DetailView` hieronder.
+ * De viewmodel-regel houdt stand voor de kaart, waar elk item hetzelfde kleine
+ * blokje is. Voor het detail houdt hij geen stand, en dat toegeven is beter dan
+ * er een viewmodel omheen verzinnen dat elke module toch weer oprekt.
+ *
  * Een module toevoegen: één bestand in `ui/lib/modules/`, en één regel in
  * `registry.ts`. De schil hoeft niet te veranderen.
  */
 
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { AssistantSource, ModuleId } from "@factumai/agent-core";
 import type { CockpitDbClient } from "@/lib/tenant-query";
 import type { DomainAuditSource } from "@/lib/audit-sources";
 import type { ReviewCardViewModel, ReviewItemRow } from "@/lib/review";
 import type { NavItem } from "@/lib/brand";
+import type { AuthedAccess } from "@/lib/auth/access";
 
 /** Eén categorie waarin deze module classificeert. */
 export interface ModuleCategoryOption {
@@ -72,6 +79,45 @@ export interface WorkbenchModule {
   toCard(row: ReviewItemRow): ReviewCardViewModel;
   /** Waar de detailweergave van een item van deze module leeft. */
   detailHref(id: string): string;
+  /**
+   * Het detailscherm van een item van deze module.
+   *
+   * **Hier laten we de "een module levert geen React"-regel los**, met opzet en
+   * met reden. Voor de kaart klopt die regel: elk item is daar hetzelfde
+   * blokje met een titel, een ondertitel en wat badges, en een viewmodel dekt
+   * dat. Voor het detail klopt hij niet. Een klantmail met een concept-antwoord,
+   * een offerte met regels en marges, en een werkbon met onderdelen en uren zijn
+   * geen varianten van één viewmodel — ze delen alleen dat er een mens naar
+   * kijkt. Een gedeeld schema dat alle drie dekt, zou bij elke nieuwe module
+   * opnieuw worden opgerekt tot het niets meer voorschrijft.
+   *
+   * De schil levert wél de omlijsting: de route, de rechtencontrole, en de
+   * assistent in de zijkant. Wat daarbinnen staat is van de module.
+   *
+   * `user` gaat mee omdat een detailscherm meer toont aan wie meer mag — een
+   * bedrag, een marge, een intern beslislog. De grens zelf zit niet hier maar in
+   * `aios_role_grants`; dit is wat de module nodig heeft om ernaar te handelen.
+   *
+   * Mag `async` zijn: een detailscherm haalt zijn eigen aanvullingen op (de
+   * tijdlijn, het beslislog, ondertekende bijlage-links) en welke dat zijn,
+   * weet alleen de module. De schil haalt alleen de rij op.
+   */
+  DetailView(props: {
+    row: ReviewItemRow;
+    user: AuthedAccess;
+  }): ReactNode | Promise<ReactNode>;
+  /**
+   * Verwerkt een bewerking van een reviewer terug in `proposed`.
+   *
+   * Bestaat omdat de beslisroute anders zelf moet weten wat een bewerking ís.
+   * Die schreef `subject` en `body` — mailvelden — en zou een offerte met
+   * gewijzigde regels mangelen tot een mail met een onderwerp.
+   *
+   * Krijgt de patch zoals het detailscherm hem stuurt en geeft de nieuwe
+   * `proposed` terug. **Nooit muteren**: de oude waarde is wat er in de
+   * edit-historie belandt, en die moet de wijziging overleven.
+   */
+  applyEdit(row: ReviewItemRow, patch: Record<string, unknown>): Record<string, unknown>;
   /**
    * De bronnen die de assistent bij een item van deze module mag lezen.
    *

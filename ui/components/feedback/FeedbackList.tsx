@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import { EVAL_LABELS, type EvalLabel, type FeedbackItem } from "@/lib/visitor-feedback";
 import { cn, timeAgoNL } from "@/lib/utils";
 
@@ -21,9 +20,19 @@ type Role = "admin" | "reviewer" | "viewer";
 export function FeedbackList({
   items,
   role,
+  categories,
 }: {
   items: FeedbackItem[];
   role?: Role | null;
+  /**
+   * De categorieën waaruit "had moeten zijn" gekozen wordt.
+   *
+   * Als prop en niet uit een import: dit is een schil-component, en welke
+   * categorieën er bestaan is kennis van de module die het antwoord gaf. Tot
+   * fase 4 stond hier de klantenservice-taxonomie hardgecodeerd, en dan toont
+   * dit scherm bij een tweede module de verkeerde lijst.
+   */
+  categories: readonly { slug: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -172,7 +181,7 @@ export function FeedbackList({
                   className="flex-1 min-w-0 text-sm border border-line rounded-lg px-3 py-2 bg-surface"
                 >
                   <option value="">Had moeten zijn…</option>
-                  {KLANTENSERVICE_MODULE.categories.map(({ slug }) => (
+                  {categories.map(({ slug }) => (
                     <option key={slug} value={slug}>
                       {slug}
                     </option>
