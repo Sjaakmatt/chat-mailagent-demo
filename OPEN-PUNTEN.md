@@ -18,7 +18,9 @@ auditpagina toch aanraakt.
 **De auditlog gaat nog uit van mail.**
 Het icoon bij een kern-event is een envelop (`SourceIcon = domainSrc ? Package :
 Mail`), en de kopregels spreken over mail-beslissingen. Dat is schil-kennis van
-één module. Hoort bij fase 4, samen met `/item/[id]`.
+één module. Bij fase 4 bleef dit staan: de link loopt inmiddels via `detailHref`
+van de module, maar het icoon en de tekst nog niet. Kleine ingreep zodra er een
+tweede module is die er anders uit hoort te zien.
 
 **Niet elke schrijver vult `module` expliciet.**
 Opgelost voor de belangrijkste: de orchestratie zet `pack.descriptor.id` op elk
@@ -87,3 +89,25 @@ binnen één `collectFacts`-aanroep voorkomt dubbele calls bínnen één special
 maar twee specialisten in dezelfde run hebben elk hun eigen aanroep en dus hun
 eigen cache. Merkbaar zodra een bron traag of duur wordt; dan hoort de cache een
 niveau omhoog, naar de run.
+
+## Uit fase 4
+
+**De feedbacklus leest nog `proposed.body`.**
+`api/review/[id]` haalt het "oorspronkelijke concept" uit dat veld voordat het
+de module om een bewerking vraagt. Voor een module zonder body is dat leeg —
+niet fout, maar de feedbacklus leert er dan niets van. Dat hoort een vraag aan
+de module te worden, net als `applyEdit`.
+
+**Het detailscherm van klantenservice is één bestand van ~700 regels.**
+Verhuisd zoals hij was, met opzet: een verhuizing en een herschrijving in één
+commit maakt niet meer te zien wat er veranderde. Opknippen mag, zodra er een
+tweede detailscherm is om de knip aan te ijken.
+
+**`/mail/[id]` blijft als doorverwijzing bestaan.**
+Er staan links in de auditlog van elke bestaande klant en in mails die al
+verstuurd zijn. Weghalen kan pas als die sporen niet meer gevolgd hoeven te
+worden — en dat is geen technische afweging.
+
+**De demo-pagina en de policy-editor kennen nog één taxonomie.**
+`ui/app/(dashboard)/demo/` en `PolicyEditor` gaan uit van de categorieën van de
+actieve module. Bij één module klopt dat; bij twee hoort er een keuze bij.

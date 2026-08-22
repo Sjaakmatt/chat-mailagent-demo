@@ -6,6 +6,8 @@ import { CTX } from "./db";
 export interface TicketRow {
   id: string;
   organization_id: string;
+  /** Welk proces dit ticket draait. Staat er sinds migratie 0035. */
+  module: string | null;
   number: string;
   conversation_id: string | null;
   review_item_id: string | null;
@@ -54,6 +56,29 @@ export async function listTickets(
   url.searchParams.set("limit", String(opts.limit ?? 200));
   const rows = await client.request<TicketRow[]>(CTX, url, { method: "GET" });
   return (Array.isArray(rows) ? rows : []).map(rowToTicket);
+}
+
+/**
+ * Uit welk proces dit ticket komt.
+ *
+ * Bestaat apart van `getTicket` omdat een route-handler die alleen de rechten
+ * wil toetsen, geen heel ticket hoeft op te halen — en omdat `Ticket` een type
+ * uit agent-core is, waar `module` niet op hoort: dat is een kolom van de
+ * cockpit-tabel, geen eigenschap van een ticket.
+ */
+export async function ticketModule(
+  client: CockpitDbClient,
+  id: string,
+): Promise<string | null> {
+  const url = client.tableUrl("aios_tickets");
+  url.searchParams.set("id", `eq.${id}`);
+  url.searchParams.set("select", "module");
+  url.searchParams.set("limit", "1");
+  const rows = await client.request<Array<{ module: string | null }>>(CTX, url, {
+    method: "GET",
+  });
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  return row?.module ?? null;
 }
 
 export async function getTicket(

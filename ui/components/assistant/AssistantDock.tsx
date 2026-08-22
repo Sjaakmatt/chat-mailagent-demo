@@ -96,9 +96,29 @@ const OVER_DIT = [
   "Is dit eerder voorgekomen?",
 ];
 
-export function AssistantDock({ moduleId }: { moduleId: string }) {
+/** Eén module waarin de assistent kan praten. */
+export interface AssistantModule {
+  id: string;
+  label: string;
+}
+
+/**
+ * De assistent, rechtsonder in de schil.
+ *
+ * `modules` zijn de processen waar deze medewerker in mag én die een gesprek
+ * buiten een voorstel om ondersteunen. Tot fase 4 kreeg de dock er precies één,
+ * gekozen door de layout — en daarmee kon een medewerker met twee afdelingen
+ * niet over de tweede praten zonder eerst een voorstel te openen.
+ *
+ * Staat er een voorstel open, dan bepaalt de módule van dat voorstel het
+ * gesprek en is de keuze niet aan de medewerker: vragen over een
+ * administratie-item horen niet in de klantenservice-bronnen te worden
+ * beantwoord. De route toetst dat nog een keer.
+ */
+export function AssistantDock({ modules }: { modules: AssistantModule[] }) {
   const subject = useAssistantSubject();
   const [open, setOpen] = useState(false);
+  const [moduleId, setModuleId] = useState(modules[0]?.id ?? "");
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [draad, setDraad] = useState<Beurt[]>([]);
@@ -110,6 +130,13 @@ export function AssistantDock({ moduleId }: { moduleId: string }) {
   useEffect(() => {
     setDraad([]);
   }, [subject?.reviewItemId]);
+
+  // Wisselen van proces is ook een nieuw gesprek: de vorige beurten gingen over
+  // andere bronnen, en die als context meesturen levert antwoorden op die bij
+  // de verkeerde afdeling kloppen.
+  useEffect(() => {
+    setDraad([]);
+  }, [moduleId]);
 
   useEffect(() => {
     bodem.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -192,6 +219,25 @@ export function AssistantDock({ moduleId }: { moduleId: string }) {
             {subject ? subject.label : "de hele werkbak — leest mee, voert niets uit"}
           </p>
         </div>
+        {/* Alleen te kiezen zonder voorstel: mét voorstel bepaalt de module van
+            dát item waar het gesprek over gaat. En alleen bij meer dan één —
+            een keuzelijst met één optie is ruis. */}
+        {!subject && modules.length > 1 && (
+          <label className="flex-shrink-0">
+            <span className="sr-only">Proces</span>
+            <select
+              value={moduleId}
+              onChange={(e) => setModuleId(e.target.value)}
+              className="max-w-[7.5rem] text-[11px] rounded border border-brand-200 bg-white px-1.5 py-1 text-ink-muted"
+            >
+              {modules.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           onClick={() => setOpen(false)}

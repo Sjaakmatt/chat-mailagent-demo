@@ -43,10 +43,11 @@ export default async function DashboardLayout({
   // geen module-schermen. Dat is vervelend maar veilig, en de pagina's zelf
   // weigeren alsnog via `requireModulePage`.
   let moduleNav: { href: string; label: string; icon: React.ReactNode }[] = [];
-  // De module waarin de assistent praat als er geen voorstel openstaat: de
-  // eerste waar deze gebruiker in mag. De route toetst het nog een keer — dit
-  // bepaalt alleen of het venster er staat.
-  let assistantModule: string | null = null;
+  // De processen waarin de assistent kan praten als er geen voorstel
+  // openstaat: die waar deze gebruiker in mag én die een gesprek buiten een
+  // voorstel om ondersteunen. De route toetst het nog een keer — dit bepaalt
+  // alleen wat er te kiezen valt.
+  let assistantModules: { id: string; label: string }[] = [];
   if (user) {
     try {
       const { access } = await accessFor(user);
@@ -60,7 +61,9 @@ export default async function DashboardLayout({
       );
       // Geen generieke bronnen = geen gesprek buiten een voorstel om. Dan geen
       // venster tonen dat op elke vraag nee zegt.
-      assistantModule = mijn.find((m) => m.collectGeneralSources)?.id ?? null;
+      assistantModules = mijn
+        .filter((m) => m.collectGeneralSources)
+        .map((m) => ({ id: m.id, label: m.label }));
     } catch (err) {
       console.warn(
         "[dashboard-layout] modulenavigatie overgeslagen:",
@@ -103,8 +106,8 @@ export default async function DashboardLayout({
         </main>
         {/* In de schil en niet op een scherm: de assistent hoort overal
             bereikbaar te zijn, en het schuivende onderwerp regelt de rest. */}
-        {assistantAan && assistantModule && (
-          <AssistantDock moduleId={assistantModule} />
+        {assistantAan && assistantModules.length > 0 && (
+          <AssistantDock modules={assistantModules} />
         )}
       </div>
     </AssistantSubjectProvider>

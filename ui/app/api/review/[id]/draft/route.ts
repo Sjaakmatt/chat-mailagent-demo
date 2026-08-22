@@ -9,7 +9,6 @@ import { CTX } from "@/lib/db";
 import { requireRole } from "@/lib/auth/require-role";
 import { accessFor } from "@/lib/auth/access";
 import { moduleForRow } from "@/lib/modules";
-import { mailProposed } from "@/lib/modules/klantenservice";
 
 export const dynamic = "force-dynamic";
 
@@ -61,11 +60,17 @@ export async function POST(
     return new NextResponse("Geen rechten op dit proces", { status: 403 });
   }
 
-  const existingProposed = mailProposed(existing);
-  const prevSubject = existingProposed.subject ?? "";
-  const prevBody = existingProposed.body ?? "";
-  const subject = payload.subject ?? prevSubject;
-  const body = payload.body ?? prevBody;
+  // Zelfde reden als bij het beslissen: de module bepaalt hoe een bewerking
+  // terug in `proposed` landt, niet deze route.
+  const bestaand = (existing.proposed ?? {}) as Record<string, unknown>;
+  const prevSubject = typeof bestaand.subject === "string" ? bestaand.subject : "";
+  const prevBody = typeof bestaand.body === "string" ? bestaand.body : "";
+  const proposed = mod.applyEdit(existing, {
+    ...(payload.subject !== undefined ? { subject: payload.subject } : {}),
+    ...(payload.body !== undefined ? { body: payload.body } : {}),
+  });
+  const subject = typeof proposed.subject === "string" ? proposed.subject : prevSubject;
+  const body = typeof proposed.body === "string" ? proposed.body : prevBody;
 
   // Niets gewijzigd → geen save / geen edit-rij.
   if (subject === prevSubject && body === prevBody) {
@@ -79,9 +84,7 @@ export async function POST(
     url.searchParams.set("id", `eq.${id}`);
     await client.request<unknown>(CTX, url, {
       method: "PATCH",
-      body: JSON.stringify({
-        proposed: { ...(existing.proposed ?? {}), subject, body },
-      }),
+      body: JSON.stringify({ proposed }),
       prefer: "return=minimal",
     });
   } catch (err) {

@@ -45,7 +45,7 @@ import {
   type CockpitAction,
 } from "@/lib/actions";
 
-import { mailProposed } from "./klantenservice";
+import { detailHref, mailProposed } from "./index";
 import type { ReviewItemRow } from "@/lib/review";
 
 /** Hoeveel vergelijkbare zaken we meesturen. Meer is ruis, niet meer context. */
@@ -122,7 +122,7 @@ async function beslislogSource(
     id: `beslislog:${reviewItemId}`,
     kind: "beslislog",
     label: "Beslislog van deze run",
-    href: `/mail/${encodeURIComponent(reviewItemId)}`,
+    href: detailHref(reviewItemId),
     text: regels.join("\n"),
   });
 }
@@ -241,7 +241,7 @@ async function eerdereZakenSources(
       id: `eerder:${r.id}`,
       kind: "eerdere_zaak",
       label: `Eerder afgehandeld: ${r.summary.slice(0, 60)}`,
-      href: `/mail/${encodeURIComponent(r.id)}`,
+      href: detailHref(r.id),
       text: [
         `Samenvatting: ${r.summary}`,
         `Besluit: ${r.status}`,

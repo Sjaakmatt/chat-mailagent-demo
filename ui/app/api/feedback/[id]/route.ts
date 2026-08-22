@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { KLANTENSERVICE_MODULE } from "@factumai/agent-core/modules/klantenservice";
 import { cockpitEnv, makeClient } from "@/lib/db";
-import { requireModule } from "@/lib/auth/access";
-import { labelFeedback, EVAL_LABELS, type EvalLabel, type TriageStatus } from "@/lib/visitor-feedback";
+import { accessFor, requireAccess } from "@/lib/auth/access";
+import { moduleById } from "@/lib/modules";
+import {
+  feedbackModule,
+  labelFeedback,
+  EVAL_LABELS,
+  type EvalLabel,
+  type TriageStatus,
+} from "@/lib/visitor-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +29,26 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  // Rol én module: bezoekersfeedback gaat over antwoorden van klantenservice,
-  // en labelen stuurt de eval-set. Dat is geen werk voor een andere afdeling.
-  const guard = await requireModule(KLANTENSERVICE_MODULE.id, "reviewer");
+  // Rol én module: labelen stuurt de eval-set van het proces waar dit antwoord
+  // vandaan komt. Dat is geen werk voor een andere afdeling. Welk proces dat
+  // is, komt van de rij en stond hier tot fase 4 hardgecodeerd.
+  const guard = await requireAccess("reviewer");
   if (guard instanceof NextResponse) return guard;
 
   const { id } = await params;
+  const client = makeClient(cockpitEnv());
+
+  const mod = moduleById((await feedbackModule(client, id)) ?? "");
+  if (!mod) {
+    return NextResponse.json({ error: "Feedback niet gevonden" }, { status: 404 });
+  }
+  const me = await accessFor(guard);
+  if (!me.access.mayEnter(mod.id)) {
+    return NextResponse.json(
+      { error: "Forbidden", reason: "module" },
+      { status: 403 },
+    );
+  }
 
   let body: { status?: unknown; label?: unknown; expected?: unknown };
   try {
@@ -63,7 +83,7 @@ export async function PATCH(
   }
   // De categorieën van déze module: feedback op een routing hoort te
   // verwijzen naar een categorie waarin dit proces ook echt classificeert.
-  const slugs = KLANTENSERVICE_MODULE.categories.map((c) => c.slug);
+  const slugs = mod.categories.map((c) => c.slug);
   if (label === "routing" && !slugs.includes(expected as string)) {
     return NextResponse.json(
       { error: `"${expected}" is geen bestaande categorie` },
@@ -73,7 +93,7 @@ export async function PATCH(
 
   try {
     await labelFeedback(
-      makeClient(cockpitEnv()),
+      client,
       id,
       {
         status: status as TriageStatus,

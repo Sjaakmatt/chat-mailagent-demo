@@ -19,12 +19,13 @@ import {
   type ReviewCardViewModel,
   type ReviewItemRow,
 } from "@/lib/review";
-import type { WorkbenchModule } from "./contract";
+import type { WorkbenchModule } from "../contract";
 import {
   collectKlantenserviceGeneralSources,
   collectKlantenserviceSources,
-} from "./klantenservice-sources";
-import { klantenserviceAuditSource } from "./klantenservice-audit";
+} from "./sources";
+import { klantenserviceAuditSource } from "./audit";
+import { KlantenserviceDetail } from "./detail/DetailView";
 
 /**
  * De vorm van `proposed` bij een klantenservice-item.
@@ -133,7 +134,14 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 /** Waar de detailweergave van een klantenservice-item leeft. */
-const detailHref = (id: string) => `/mail/${encodeURIComponent(id)}`;
+/**
+ * Waar een item van deze module te bekijken is.
+ *
+ * `/item/<id>` sinds fase 4: de schil kent de route, de module levert wat
+ * erbinnen staat. `/mail/<id>` bestaat nog als doorverwijzing — er staan links
+ * in de auditlog en in verstuurde mails, en die blijven werken.
+ */
+export const detailHref = (id: string) => `/item/${encodeURIComponent(id)}`;
 
 /** Best-effort afzendernaam/-adres uit de gehydrateerde mail. */
 function customerFrom(proposed: MailProposedContent): string | null {
@@ -184,6 +192,24 @@ export const klantenserviceModule: WorkbenchModule = {
   kinds: KLANTENSERVICE_MODULE.kinds,
   categories: KLANTENSERVICE_MODULE.categories,
   detailHref,
+  DetailView: KlantenserviceDetail,
+  /**
+   * Een bewerking van de reviewer terug in `proposed`.
+   *
+   * Alleen onderwerp en tekst: dat is wat het formulier van deze module laat
+   * bewerken. Alles wat de patch verder noemt, negeren we — de beslisroute
+   * krijgt zijn body uit de browser, en een module die klakkeloos overneemt wat
+   * daar in staat, laat een reviewer velden zetten die hij niet te zien kreeg.
+   */
+  applyEdit(row, patch) {
+    const huidig = mailProposed(row);
+    return {
+      ...huidig,
+      subject:
+        typeof patch.subject === "string" ? patch.subject : (huidig.subject ?? ""),
+      body: typeof patch.body === "string" ? patch.body : (huidig.body ?? ""),
+    };
+  },
   collectSources: collectKlantenserviceSources,
   collectGeneralSources: collectKlantenserviceGeneralSources,
   toCard(row: ReviewItemRow): ReviewCardViewModel {
