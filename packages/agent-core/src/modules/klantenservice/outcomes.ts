@@ -8,6 +8,7 @@
  */
 
 import type { OutcomePolicy } from '../contract.js';
+import { sourceEmailFrom } from './facts.js';
 import type { Outcome } from '../../outcomes/index.js';
 
 export const KLANTENSERVICE_OUTCOMES: OutcomePolicy = {
@@ -56,4 +57,13 @@ export const KLANTENSERVICE_OUTCOMES: OutcomePolicy = {
         return 'taak';
     }
   },
+
+  /**
+   * Het adres dat het bronsysteem bij de order teruggaf.
+   *
+   * Komt uit de bron die de order ophaalde, en staat daarom in `facts.ts`:
+   * vervangt een klant de ordertabel door een ERP-MCP, dan verhuist dit veld
+   * mee zonder dat de lus het merkt.
+   */
+  sourceEmail: sourceEmailFrom,
 };

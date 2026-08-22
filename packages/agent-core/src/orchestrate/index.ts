@@ -229,6 +229,13 @@ export interface Plan {
 
 export interface PlanInput {
   signal: Signal;
+  /**
+   * Het signaal zoals de kern het leest. Staat naast `signal` en niet in de
+   * plaats ervan: de feitenbronnen en de prompt lezen de envelop, terwijl een
+   * stap die zijn eigen domein kent (de gespreksgeschiedenis van chat) nog bij
+   * de ruwe payload moet kunnen.
+   */
+  envelope: SignalEnvelope;
   classification: Classification;
   resolved: ResolvedEntities;
   memory: MemoryEntry[];
@@ -549,6 +556,7 @@ export async function runSpecialize(
   const plan = await meet(deps, 'plan', () =>
     steps.plan({
       signal,
+      envelope: deps.envelope,
       classification,
       resolved,
       memory,

@@ -19,6 +19,7 @@ import { KLANTENSERVICE_TAXONOMY } from './taxonomy.js';
 import { KLANTENSERVICE_SPECIALISTS } from './specialists/index.js';
 import { KLANTENSERVICE_ACTIONS } from './actions.js';
 import { KLANTENSERVICE_OUTCOMES } from './outcomes.js';
+import { KLANTENSERVICE_FACTS } from './facts.js';
 import { KLANTENSERVICE_TRIGGERS } from './triggers.js';
 
 export const klantenservicePack: ModulePack = {
@@ -41,10 +42,9 @@ export const klantenservicePack: ModulePack = {
   taxonomy: KLANTENSERVICE_TAXONOMY,
   specialists: KLANTENSERVICE_SPECIALISTS,
 
-  // Fase 3 vult dit. Vandaag komen de feiten uit vaste lookups in de
-  // agent-Worker; zodra ze hiervandaan komen, wordt `toolScope` op de
-  // specialisten ook echt gehandhaafd.
-  facts: [],
+  // De bronnen waaruit de cijfers komen, in de volgorde waarin ze draaien.
+  // Welke ervan een specialist krijgt, bepaalt zijn `toolScope`.
+  facts: KLANTENSERVICE_FACTS,
 
   actions: KLANTENSERVICE_ACTIONS,
   outcomes: KLANTENSERVICE_OUTCOMES,

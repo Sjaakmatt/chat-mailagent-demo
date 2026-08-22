@@ -35,10 +35,12 @@ export const gdprConfig: IntentConfig = {
     'in het verzoek zelf staan.',
     'Toon: neutraal-juridisch, correct Nederlands.',
   ].join('\n'),
-  toolScope: [
-    // Alleen registratie-tools — GEEN order/product-lookups (privacy-scope).
-    // Toekomst: 'tickets.create' om ticket op te voeren, 'audit.log' voor DPA.
-  ],
+  // Leeg, en dat is de hele bedoeling: een inzageverzoek beantwoorden vraagt
+  // niet om de bestelgeschiedenis van de schrijver. Tot fase 3 kreeg deze
+  // specialist die feiten tóch, omdat de lookups voor iedereen draaiden.
+  // Toekomst: 'tickets.create' om een verzoek op te voeren, 'audit.log' voor
+  // de verwerkingsregistratie — allebei registratie, geen inzage.
+  toolScope: [],
   memoryScope: ['GLOBAL', 'PROCESS'],
   memoryProcessTag: 'gdpr',
   modelTierHint: 'plan',

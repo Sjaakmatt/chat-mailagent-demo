@@ -17,9 +17,12 @@ Wat dan overblijft is de mechaniek eromheen, en die is van ons:
 | poort dicht | `category: buiten_domein`, run stopt vóór de router | `orchestrate/runRoute` |
 | categorie | specialist | `taxonomy/index.ts` |
 | specialist + geëxtraheerde velden | uitkomst | `outcomes/index.ts` |
+| specialist | welke feitenbronnen draaien | `facts/index.ts` + `modules/<module>/facts.ts` |
+| feiten + geciteerde claims | dekking en ongedekte cijfers | `grounding/index.ts` |
 
-Die drie verhuizen in fase 1 naar `modules/klantenservice/`. Dat hoort een
-verplaatsing te zijn en geen gedragswijziging, en deze set is wat dat bewijst.
+De eerste drie verhuisden in fase 1 naar `modules/klantenservice/`. Dat hoorde
+een verplaatsing te zijn en geen gedragswijziging, en deze set is wat dat
+bewijst.
 
 ## Eén regel
 
@@ -40,6 +43,36 @@ verplaatsing te zijn en geen gedragswijziging, en deze set is wat dat bewijst.
 maken. Een veld dat je in `verwacht` weglaat, wordt niet getoetst — bij een
 bericht buiten het domein is er geen specialist en geen uitkomst, en die
 afwezigheid is de uitkomst.
+
+## Een regel die ook de feiten meet
+
+Zet je er een `feiten`-blok bij, dan draait de regel óók de bronnen van het
+pakket en de grounding-validatie:
+
+```json
+{
+  "feiten": {
+    "bronnen": { "order.get": { "ok": false, "error": "bronsysteem antwoordde niet" } },
+    "antwoord": {
+      "body": "Je bestelling wordt op 14 november bezorgd, tracking 3STOTAL9911.",
+      "claims": [{ "value": "14 november", "toolCallId": "db.order" }]
+    }
+  },
+  "verwacht": { "bronnen": ["order.get"], "gedekt": 0, "ongegrond": ["14", "3STOTAL9911"] }
+}
+```
+
+`bronnen` in `feiten` is wat elke bron teruggeeft; een bron die er niet in staat,
+levert niets op. In `verwacht` is `bronnen` de lijst die daadwerkelijk is
+aangeroepen — dat is de toets op `toolScope` — en zijn `gedekt` en `ongegrond`
+wat de grounding ervan maakt.
+
+**Waarom dit erin zit.** `g42` is de regressietest onder harde regel 4: de bron
+antwoordt niet, het model schrijft toch een datum en een trackingcode, en die
+horen dan als ongedekt terug te komen. Gaat die regel ooit op groen met `gedekt`
+hoger dan nul, dan is er een weg ontstaan waarlangs een verzonnen cijfer in een
+klantmail belandt. `g43` is dezelfde situatie mét een bron die wél antwoordt, en
+laat zien dat de dekking dan gewoon klopt.
 
 ## Bijwerken
 

@@ -49,7 +49,7 @@ export interface ModulePack {
   gate: DomainConfig;                // waar dit domein wel en niet over gaat
   taxonomy: readonly CategoryDef[];  // slug, label, specialist, afbakening
   specialists: readonly IntentConfig[];
-  facts: readonly FactProvider[];    // feitenbronnen (fase 3 vult dit)
+  facts: readonly FactProvider[];    // waar de cijfers vandaan komen
   actions: readonly ActionTypeDef[]; // schrijfoperaties van dit domein
   outcomes: OutcomePolicy;           // identificatie per kanaal + terugval-uitkomst
   review: ReviewPolicy;              // welke vorm een voorstel krijgt
@@ -282,6 +282,38 @@ De **detailschermen** van klantenservice staan nog in de schil-mappen:
 liggen nog niet bij elkaar, en `api/review/[id]` behandelt elk item nog als een
 mail. Dat verhuizen is fase 4.
 
-De **feitenlaag** (`pack.facts`) staat in het contract maar is nog leeg: de
-feiten komen vandaag uit vaste lookups in de agent-Worker. Dat is fase 3, en
-dan wordt `toolScope` op de specialisten ook echt gehandhaafd.
+## De feitenlaag
+
+`pack.facts` is waar de cijfers vandaan komen. Elke bron is een object:
+
+```ts
+// packages/agent-core/src/modules/<module>/facts.ts
+export const ORDER_FACTS: FactProvider = {
+  name: 'order.get',                       // == wat in toolScope staat
+  description: 'De order bij het genoemde ordernummer.',
+  source: { kind: 'table', table: 'demo_orders' },   // of { kind: 'mcp', mcp, tool }
+  dataCategories: ['operationeel'],
+  input: (ctx) => (ctx.extracted.orderNumber ? { order_number: `eq.${…}` } : null),
+  toFacts: (data, ctx) => [{ id: 'db.order', text: `Order …: ${JSON.stringify(data)}` }],
+};
+```
+
+Vier dingen die de moeite van het onthouden waard zijn:
+
+- **`toolScope` bepaalt wat er draait.** Staat een bron niet in de scope van de
+  gekozen specialist, dan wordt hij niet aangeroepen — geen filter achteraf, de
+  call gebeurt niet. Een lege scope levert dus geen feiten op, en dat is voor
+  `escalate` en `gdpr` de bedoeling: een inzageverzoek beantwoorden vraagt niet
+  om de bestelgeschiedenis van de schrijver.
+- **`input` geeft `null` als de bron niet van toepassing is.** Dat is de normale
+  uitkomst, geen fout: een ordervraag zonder ordernummer heeft niets op te
+  halen.
+- **Bronnen draaien op volgorde**, in de volgorde waarin ze op het pakket staan.
+  Daardoor kan een bron leunen op wat een eerdere opleverde — de tracking hangt
+  aan de code die uit de order kwam. Via `ctx.results['order.get']`.
+- **Fail-soft.** Een bron die niet antwoordt levert geen feit en laat de run
+  doorgaan. Zonder feit kan het model geen cijfer onderbouwen, en dan valt dat
+  cijfer weg in de grounding. Dat is beter dan een mail die blijft staan.
+
+`source` is de enige plek die verandert als een klant van demo-tabel naar een
+echte MCP gaat. De rest van de bron, en de hele lus eromheen, blijft staan.
