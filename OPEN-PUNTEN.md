@@ -65,3 +65,25 @@ klantenservice op dezelfde mailstroom) is dit het eerste wat aandacht vraagt.
 `ui/app/(dashboard)/mail/[id]/`, `tickets/`, `gesprekken/` en `feedback/`
 importeren `KLANTENSERVICE_MODULE` via het subpad om hun guard te zetten. Dat is
 correct maar niet waar het hoort: fase 4 verhuist die schermen naar de module.
+
+## Uit fase 3
+
+**`steps.ts` leest nog één tabel: `aios_policy_rules`.**
+De feiten-SQL is weg — die zit nu in de bronnen op het modulepakket. Wat er nog
+staat is de beleidsregel-lookup, en die is bewust niet als `FactProvider`
+opgezet: een beleidsregel is geen feit dat het model mag citeren maar een
+richtlijn die de prompt stuurt. Zou hij als bron draaien, dan zou hij ook via
+`toolScope` gefilterd worden en dus per specialist kunnen wegvallen — precies
+wat je bij beleid niet wilt.
+
+**De demo-tabellen zijn nog steeds de bron.**
+`source: { kind: 'table' }` op alle vier de bronnen van klantenservice. Dat is
+waar deze data staat zolang er geen koppeling is; de naad om over te stappen
+ligt er (`kind: 'mcp'`), maar er is nog geen MCP om naartoe te wijzen.
+
+**De feiten worden per specialist opgehaald, niet per taak.**
+Bij een compound-mail draait de aggregator meerdere specialisten. De cache
+binnen één `collectFacts`-aanroep voorkomt dubbele calls bínnen één specialist,
+maar twee specialisten in dezelfde run hebben elk hun eigen aanroep en dus hun
+eigen cache. Merkbaar zodra een bron traag of duur wordt; dan hoort de cache een
+niveau omhoog, naar de run.

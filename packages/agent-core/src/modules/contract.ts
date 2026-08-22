@@ -37,6 +37,7 @@ import type { ModelConfig } from '../llm/index.js';
 import type { IdentificationPolicy, Outcome } from '../outcomes/index.js';
 import type { IntentConfig } from '../specialists/index.js';
 import type { CategoryDef } from '../taxonomy/index.js';
+import type { SignalEnvelope } from '../envelope/index.js';
 import type { ModuleTriggers } from '../triggers/index.js';
 import type { ModuleDescriptor } from './index.js';
 
@@ -61,24 +62,101 @@ export interface SignalClaim {
 /**
  * Waar deze module zijn feiten haalt.
  *
- * Leeg toegestaan: fase 3 vult dit en handhaaft dan de `toolScope` van de
- * specialisten. Vandaag staat `toolScope` netjes op elke specialist en wordt
- * hij nergens uitgelezen — de feiten komen uit vaste lookups in de agent. Dat
- * is precies wat hier straks verdwijnt.
+ * ## Waarom een bron een object is en geen functie
+ *
+ * Tot fase 3 haalde de agent zijn feiten op met drie vaste functies die
+ * rechtstreeks tegen de demo-tabellen praatten. Dat werkte, maar het betekende
+ * dat élke specialist dezelfde feiten kreeg — ook de AVG-specialist, die
+ * ordergegevens juist niet hoort te zien — en dat een tweede module geen feiten
+ * kon ophalen zonder een kernbestand te bewerken.
+ *
+ * Een bron als object lost allebei op: de kern kan hem filteren op de
+ * `toolScope` van de gekozen specialist zonder te weten wát hij ophaalt, en de
+ * module bepaalt zelf waar zijn gegevens vandaan komen.
  */
-export interface FactProvider {
-  /** De naam waarmee een specialist deze bron in zijn `toolScope` noemt. */
-  name: string;
+
+/** Een tool op een MCP. De env-sleutel, niet de URL: die staat in de secrets. */
+export interface FactSourceMcp {
+  kind: 'mcp';
   /** De env-sleutel van de MCP, bv. `FACTUMAI_MCP_ERP_URL`. */
   mcp: string;
   /** De tool op die MCP. */
   tool: string;
+}
+
+/**
+ * Een tabel in de klant-database.
+ *
+ * Bestaat omdat niet elke klant al een MCP heeft voor elk bronsysteem. De
+ * demo-tabellen zijn er het voorbeeld van: die dragen vandaag de hele
+ * feitenlaag. Wisselt een klant over op een echte MCP, dan verandert alleen dit
+ * veld — de rest van de bron blijft staan.
+ */
+export interface FactSourceTable {
+  kind: 'table';
+  table: string;
+}
+
+export type FactSource = FactSourceMcp | FactSourceTable;
+
+/** Wat een bron mag weten om te bepalen of en waarmee hij moet ophalen. */
+export interface FactContext {
+  /** Het signaal zoals de kern het leest. */
+  envelope: SignalEnvelope;
+  /** Wat de classifier eruit haalde, bv. `{ orderNumber: 'ORD-1' }`. */
+  extracted: Record<string, unknown>;
+  /** Wat de resolve-stap opleverde, bv. een contact-id. */
+  resolved: Record<string, unknown>;
+  /**
+   * Wat de eerdere bronnen van deze run opleverden, op naam.
+   *
+   * Hiermee kan een bron op een andere leunen: de tracking hangt aan de code
+   * die uit de order kwam. De bronnen draaien in de volgorde waarin ze op het
+   * pakket staan, dus een bron ziet alleen wat vóór hem stond.
+   */
+  results: Readonly<Record<string, unknown>>;
+}
+
+/** Eén geverifieerd feit, klaar om aan het model te geven. */
+export interface FactDraft {
+  /**
+   * De id waarmee het model dit feit citeert. Wordt de `toolCallId` in de
+   * grounding, dus stabiel houden: een claim verwijst hiernaar.
+   */
+  id: string;
+  text: string;
+}
+
+export interface FactProvider {
+  /** De naam waarmee een specialist deze bron in zijn `toolScope` noemt. */
+  name: string;
+  /** Eén regel: wat haalt dit op, en wanneer heeft het zin. */
+  description: string;
+  source: FactSource;
   /**
    * De datacategorieën die deze bron mag teruggeven. Gaat mee op de call: laat
    * je ze weg, dan krijg je alleen `operationeel` terug en verdwijnen velden
-   * stilzwijgend (`docs/RECHTEN.md`).
+   * stilzwijgend (`docs/RECHTEN.md`). Wat de agent zelf niet mag, valt er
+   * alsnog af — een bron kan zijn eigen grens niet oprekken.
    */
   dataCategories: readonly DataCategory[];
+  /**
+   * De invoer voor deze bron, of `null` als hij niet van toepassing is op dit
+   * signaal.
+   *
+   * `null` is de normale uitkomst en geen fout: een ordervraag zonder
+   * ordernummer heeft niets op te halen. Een bron die dan tóch iets ophaalt,
+   * levert feiten over de verkeerde zaak.
+   */
+  input(ctx: FactContext): Record<string, unknown> | null;
+  /**
+   * Zet de respons om in nul of meer feiten. **Puur en zonder model**: wat hier
+   * uitkomt is precies wat het model als waarheid krijgt, en het mag dus niet
+   * zelf al een interpretatie zijn.
+   *
+   * Nul feiten mag: een geslaagde lookup die niets vond, is geen feit.
+   */
+  toFacts(data: unknown, ctx: FactContext): FactDraft[];
 }
 
 /**
@@ -112,6 +190,19 @@ export interface OutcomePolicy {
     specialist?: SpecialistId;
     extracted?: Record<string, unknown>;
   }): Outcome;
+  /**
+   * Het adres dat een bronsysteem bij dit signaal bevestigde, uit de opgehaalde
+   * feiten.
+   *
+   * Dat adres is het verschil tussen "iemand noemt een nummer" en "de bron
+   * knoopt dit adres aan deze zaak", en daarmee tussen wel en geen
+   * schrijfactie. Wélk veld van wélke bron dat is, weet alleen de module: bij
+   * klantenservice is het `customer_email` op de order, bij administratie het
+   * adres van de crediteur.
+   *
+   * Weglaten mag; dan blijft de identificatie op wat het bericht zelf zegt.
+   */
+  sourceEmail?(results: Readonly<Record<string, unknown>>): string | null;
 }
 
 /**
@@ -169,7 +260,10 @@ export interface ModulePack {
   /** De specialisten van dit domein. Geen globale `CORE_INTENTS` meer. */
   specialists: readonly IntentConfig[];
 
-  /** Feitenbronnen. Leeg mag: fase 3 vult dit. */
+  /**
+   * Feitenbronnen, in de volgorde waarin ze draaien. Leeg mag — dan krijgt het
+   * model geen geverifieerde feiten en kan het dus ook geen cijfers noemen.
+   */
   facts: readonly FactProvider[];
 
   /** De schrijfoperaties die dit domein mag voorstellen. */

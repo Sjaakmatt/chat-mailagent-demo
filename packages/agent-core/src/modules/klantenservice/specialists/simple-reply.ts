@@ -28,10 +28,14 @@ export const simpleReplyConfig: IntentConfig = {
     '  en dat een collega contact opneemt.',
     '- Sluit af met een neutrale groetregel (geen overdreven vriendelijkheid).',
   ].join('\n'),
+  // De namen komen uit `facts.ts` van deze module. Wat hier niet staat, wordt
+  // voor deze specialist niet opgehaald — geen filter achteraf, de call
+  // gebeurt niet. De factuur staat er bewust niet bij: een statusvraag
+  // beantwoorden vraagt niet om bedragen.
   toolScope: [
-    'erp.get_order',
-    'erp.get_order_tracking',
-    'shipping.get_tracking',
+    'catalog.list',
+    'order.get',
+    'order.tracking',
   ],
   memoryScope: ['GLOBAL', 'CLIENT'],
   memoryProcessTag: undefined,
